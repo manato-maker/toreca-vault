@@ -52,4 +52,14 @@ document.querySelector('#restore-input').addEventListener('change',async e=>{try
 document.querySelector('#legacy-input').addEventListener('change',async e=>{try{const raw=await readFile(e.target);if(!raw)return;const result=importLegacy(JSON.parse(raw));if(!confirm(`${result.count}件を現在のデータに追加しますか？`))return;state=merge(state,result.state);render();toast(`${result.count}件を取り込みました`)}catch(err){alert(`インポート失敗: ${err.message}`)}finally{e.target.value=''}});
 addEventListener('hashchange',()=>{route=location.hash.slice(1)||'dashboard';subtype=route==='inventory'?'boxes':route==='ledger'?'purchases':route==='activity'?'openings':subtype;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
+async function syncPublishedMarket(){
+ try{
+  const response=await fetch('./market-update.json',{cache:'no-store'});if(!response.ok)return;
+  const update=await response.json(),prices=update.boxPrices||{},excluded=new Set(update.excludeInventoryIds||[]);
+  const before=JSON.stringify(state.boxes);
+  state.boxes=state.boxes.filter(x=>!excluded.has(x.id)).map(x=>Object.hasOwn(prices,x.product)?{...x,marketPrice:Number(prices[x.product].price),marketCheckedAt:update.checkedAt,marketSource:prices[x.product].source}:x);
+  if(before!==JSON.stringify(state.boxes)){save(state);render();toast(`BOX相場を${update.checkedAt}版へ更新しました`)}
+ }catch(err){console.warn('公開相場を読み込めません',err)}
+}
+syncPublishedMarket();
 if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.warn));
