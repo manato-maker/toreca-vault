@@ -1,0 +1,31 @@
+{
+  "version": "2026-09-13-box-v1",
+  "checkedAt": "2026-09-13",
+  "policy": "買取ミミ優先、AMTAF補完。公式パッケージ画像と商品名を照合し、状態が一致した価格のみ反映。",
+  "boxPrices": {
+    "スペシャルBOX ポケモンセンターフクオカ": {
+      "price": 10000,
+      "source": "買取ミミ 2026-09-13 / AMTAF 2026-09-12"
+    },
+    "スペシャルBOX ポケモンセンタートウホク": {
+      "price": 11500,
+      "source": "買取ミミ 2026-09-13 / AMTAF 2026-09-12"
+    },
+    "インフェルノX": {
+      "price": 15000,
+      "source": "AMTAF 2026-09-13"
+    },
+    "MEGAドリームex": {
+      "price": 10000,
+      "source": "AMTAF 2026-09-13"
+    }
+  },
+  "excludeInventoryIds": [
+    "sealed-aeon-storm-30pack-20260907",
+    "sealed-aeon-dragonball-fb11-20260907"
+  ],
+  "notes": [
+    "ストームエメラルダは9/13購入分が売却済み。9/26受取予定分は未受取のため現在庫0。",
+    "BRIGHTNESS OF HOPE［FB11］は9/28受取予定で、未受取のため現在庫に含めない。"
+  ]
+}
