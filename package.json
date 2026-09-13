@@ -1,1 +1,1 @@
-{"name":"toreca-vault","version":"1.1.0","private":true,"type":"module","scripts":{"test":"node --test","check":"node --check js/app.js && node --check js/schema.js && node --check js/storage.js && node --check js/calculations.js && node --check js/inventory.js"}}
+{"name":"toreca-vault","version":"1.2.0","private":true,"type":"module","scripts":{"test":"node --test","check":"node --check js/app.js && node --check js/schema.js && node --check js/storage.js && node --check js/calculations.js && node --check js/inventory.js"}}
