@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101722">
+  <meta name="description" content="トレーディングカードの抽選・購入・在庫・売却・資産を端末内で管理">
+  <title>Toreca Vault</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="メインナビゲーション">
+      <a class="brand" href="#dashboard"><span class="brand-mark">TV</span><span>Toreca Vault</span></a>
+      <nav id="desktop-nav"></nav>
+      <button class="quiet-button" data-action="open-settings">バックアップ・設定</button>
+    </aside>
+
+    <main id="app" tabindex="-1">
+      <header class="topbar">
+        <div><p class="eyebrow" id="today-label"></p><h1 id="page-title">資産ダッシュボード</h1></div>
+        <div class="top-actions"><button class="icon-button" data-action="open-settings" aria-label="バックアップ・設定">⚙</button><button class="primary-button compact" data-action="add-current">＋ 追加</button></div>
+      </header>
+      <section id="view" aria-live="polite"></section>
+    </main>
+
+    <nav class="bottom-nav" id="mobile-nav" aria-label="メインナビゲーション"></nav>
+  </div>
+
+  <dialog id="entry-dialog">
+    <form id="entry-form" method="dialog">
+      <header class="dialog-head"><div><p class="eyebrow" id="form-kicker">新規登録</p><h2 id="form-title">記録を追加</h2></div><button type="button" class="icon-button" data-action="close-dialog" aria-label="閉じる">×</button></header>
+      <div id="form-fields" class="form-grid"></div>
+      <footer class="dialog-actions"><button type="button" class="secondary-button" data-action="close-dialog">キャンセル</button><button class="primary-button" value="save">保存</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <section class="settings-panel">
+      <header class="dialog-head"><div><p class="eyebrow">データ管理</p><h2>バックアップ・復元</h2></div><button class="icon-button" data-action="close-settings" aria-label="閉じる">×</button></header>
+      <div class="setting-block"><h3>JSONバックアップ</h3><p>すべての記録と商品マスターを1ファイルに保存します。</p><button class="primary-button" data-action="export-json">JSONを書き出す</button></div>
+      <div class="setting-block"><h3>復元</h3><p>このアプリのバックアップJSONを読み込み、内容を確認して置き換えます。</p><label class="file-button">バックアップを選択<input id="restore-input" type="file" accept="application/json,.json"></label></div>
+      <div class="setting-block"><h3>旧アプリからインポート</h3><p>旧データを変換し、現在のデータに追加します。元ファイルは変更しません。</p><label class="file-button">旧JSONを選択<input id="legacy-input" type="file" accept="application/json,.json"></label></div>
+      <div id="import-status" class="notice" hidden></div>
+    </section>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
