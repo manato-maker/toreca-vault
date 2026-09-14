@@ -1,10 +1,11 @@
-const DATA_FILE_ID = '1Q9ZzWA-I7ggmufCAV-WUnDw2VFY8Pd3F';
+const DATA_FILE_ID = PropertiesService.getScriptProperties().getProperty('TV_DATA_FILE_ID');
 const TZ = 'Asia/Tokyo';
 const MAX_IDS = 3000;
 const RESULT_WORDS = /(当選|ご当選|落選|残念|抽選結果)/;
 const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘)/i;
 
 function installTorecaVaultAutomation() {
+  if (!DATA_FILE_ID) throw new Error('TV_DATA_FILE_ID が未設定です');
   removeTorecaVaultTriggers_();
   ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
