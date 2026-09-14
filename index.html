@@ -37,6 +37,18 @@
     </form>
   </dialog>
 
+  <dialog id="receipt-dialog">
+    <form id="receipt-form">
+      <header class="dialog-head"><div><p class="eyebrow">受取登録</p><h2>受取情報</h2></div><button type="button" class="icon-button" onclick="this.closest('dialog').close()" aria-label="閉じる">×</button></header>
+      <div class="form-grid">
+        <div class="field"><label for="receipt-date">受取日</label><input id="receipt-date" type="date" required></div>
+        <div class="field"><label for="receipt-shrink">シュリンク</label><select id="receipt-shrink"><option>未選択</option><option>シュリンクあり</option><option>シュリンクなし</option><option>対象外</option></select></div>
+        <div class="field full"><label for="receipt-photo">レシート写真</label><input id="receipt-photo" type="file" accept="image/*" capture="environment"><img id="receipt-preview" class="receipt-photo" alt="現在のレシート写真" hidden></div>
+      </div>
+      <footer class="dialog-actions"><button type="button" class="secondary-button" onclick="this.closest('dialog').close()">キャンセル</button><button class="primary-button">受取済みで保存</button></footer>
+    </form>
+  </dialog>
+
   <dialog id="settings-dialog">
     <section class="settings-panel">
       <header class="dialog-head"><div><p class="eyebrow">データ管理</p><h2>バックアップ・復元</h2></div><button class="icon-button" data-action="close-settings" aria-label="閉じる">×</button></header>
