@@ -4,7 +4,8 @@ import{assets,storeStats}from'./calculations.js';
 import{id,importLegacy}from'./schema.js';
 import{applyPurchase,applySale,applyOpening}from'./inventory.js';
 
-let state=load(),remoteRevision='',remoteSaveTimer=null,remoteSaving=false,receiptTargetId='';const initialHash=location.hash.slice(1).split('/');let route=initialHash[0]||'dashboard';let subtype=route==='inventory'&&['boxes','packs','cards'].includes(initialHash[1])?initialHash[1]:route==='ledger'&&initialHash[1]?initialHash[1]:'purchases';let calendarMonth=(new Date()).toISOString().slice(0,7);let selectedCalendarDate=(new Date()).toISOString().slice(0,10),reviewExpanded=false,pendingExpanded=false;
+const jstToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+let state=load(),remoteRevision='',remoteSaveTimer=null,remoteSaving=false,receiptTargetId='';const initialHash=location.hash.slice(1).split('/');let route=initialHash[0]||'dashboard';let subtype=route==='inventory'&&['boxes','packs','cards'].includes(initialHash[1])?initialHash[1]:route==='ledger'&&initialHash[1]?initialHash[1]:'purchases';let calendarMonth=jstToday().slice(0,7);let selectedCalendarDate=jstToday(),reviewExpanded=false,pendingExpanded=false;
 const yen=new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0});
 const dateFmt=new Intl.DateTimeFormat('ja-JP',{month:'short',day:'numeric',weekday:'short'});
 const nav=[['dashboard','⌂','資産'],['calendar','□','予定'],['ledger','¥','収支'],['activity','↗','履歴']];
@@ -20,7 +21,7 @@ const fields={
  products:[['name','商品名','text',1],['category','種別','select',['BOX','パック','カード']],['code','商品コード・型番','text'],['marketPrice','参考価格','number'],['buybackPrice','買取価格','number'],['updated','価格更新日','date'],['memo','メモ','textarea',1]]
 };
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const today=()=>new Date().toISOString().slice(0,10);
+const today=jstToday;
 function setSyncStatus(message,kind=''){const el=document.querySelector('#sync-status');if(!el)return;el.textContent=message;el.className=`notice ${kind}`.trim()}
 function fillSyncSettings(){const c=getSyncConfig(),url=document.querySelector('#sync-url'),token=document.querySelector('#sync-token');if(url)url.value=c.url||'';if(token)token.value=c.token||'';setSyncStatus(c.url?'接続設定済み':'未接続',c.url?'success':'')}
 async function pullAndApply(showToast=false){const remote=await pullRemote();if(!remote)return false;remoteRevision=remote.revision;state=saveLocal(remote.data,{touch:false});render();setSyncStatus(`同期済み ${new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`,'success');if(showToast)toast('最新データへ同期しました');return true}
