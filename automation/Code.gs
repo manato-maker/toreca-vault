@@ -227,13 +227,11 @@ function runTorecaVaultMarketSync() {
     root.automation.lastMarketReport = report;
     root.automation.marketNeedsReview = reviews.slice(-200);
 
-    if (report.updated) {
-      root.data.updatedAt = now.toISOString();
-      root.exportedAt = now.toISOString();
-      const out = JSON.stringify(root, null, 2);
-      JSON.parse(out);
-      file.setContent(out);
-    }
+    if (report.updated) root.data.updatedAt = now.toISOString();
+    root.exportedAt = now.toISOString();
+    const out = JSON.stringify(root, null, 2);
+    JSON.parse(out);
+    file.setContent(out);
     if (report.updated || report.review) {
       const address = Session.getActiveUser().getEmail();
       if (address) GmailApp.sendEmail(address, 'Toreca Vault カード相場更新',
@@ -253,24 +251,17 @@ function extractModel_(setText) {
 }
 
 function fetchCardrushBuyback_(product, model) {
-  const params = {
-    amount: '', associations: 'ocha_product', displayMode: 'リスト',
-    limit: '100', model_number: model, name: product, page: '1',
-    'sort[key]': 'amount', 'sort[order]': 'desc',
-    'to_json_option[except][]': 'created_at',
-    'to_json_option[include][ocha_product][methods][]': 'image_source',
-    'to_json_option[include][ocha_product][only][]': 'id'
-  };
-  const query = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
+  const query = [
+    'name=' + encodeURIComponent(product),
+    'model_number=' + encodeURIComponent(model),
+    'displayMode=' + encodeURIComponent('リスト'),
+    'limit=100'
+  ].join('&');
   const url = 'https://cardrush.media/pokemon/buying_prices?' + query;
   const response = UrlFetchApp.fetch(url, {
     muteHttpExceptions: true,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 TorecaVault/1.0',
-      'Accept': 'application/json,text/html;q=0.9,*/*;q=0.8',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer': 'https://cardrush.media/pokemon/buying_prices'
-    }
+    followRedirects: true,
+    headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124 Safari/537.36' }
   });
   if (response.getResponseCode() !== 200) throw new Error('HTTP ' + response.getResponseCode());
   const body = response.getContentText('UTF-8');
@@ -281,13 +272,17 @@ function fetchCardrushBuyback_(product, model) {
   if (exact.length === 1) return exact[0];
   if (exact.length > 1 && exact.every(x => x.price === exact[0].price)) return exact[0];
 
-  const text = body.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  const text = body.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/&yen;|&#165;/gi, '¥').replace(/&nbsp;/gi, ' ');
-  const pos = normalize_(text).indexOf(mn);
-  if (pos < 0 || !normalize_(text).includes(pn)) return null;
-  const around = text.slice(Math.max(0, pos - 500), pos + 1000);
-  const prices = [...around.matchAll(/[¥￥]\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
-  return prices.length === 1 ? { name: product, model, price: prices[0] } : null;
+  const compact = normalize_(text);
+  const modelPos = compact.indexOf(mn);
+  const namePos = compact.indexOf(pn);
+  if (modelPos < 0 || namePos < 0) return null;
+  const rawPos = Math.max(0, text.toUpperCase().indexOf(model.toUpperCase()));
+  const around = text.slice(Math.max(0, rawPos - 500), rawPos + 1200);
+  const prices = [...around.matchAll(/[¥￥]\\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
+  const unique = [...new Set(prices)];
+  return unique.length === 1 ? { name: product, model, price: unique[0] } : null;
 }
 
 function collectCardrush_(node, out) {
