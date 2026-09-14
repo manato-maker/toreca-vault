@@ -272,7 +272,7 @@ function fetchCardrushBuyback_(product, model) {
   if (exact.length === 1) return exact[0];
   if (exact.length > 1 && exact.every(x => x.price === exact[0].price)) return exact[0];
 
-  const text = body.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')
+  const text = body.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/&yen;|&#165;/gi, '¥').replace(/&nbsp;/gi, ' ');
   const compact = normalize_(text);
   const modelPos = compact.indexOf(mn);
@@ -280,7 +280,7 @@ function fetchCardrushBuyback_(product, model) {
   if (modelPos < 0 || namePos < 0) return null;
   const rawPos = Math.max(0, text.toUpperCase().indexOf(model.toUpperCase()));
   const around = text.slice(Math.max(0, rawPos - 500), rawPos + 1200);
-  const prices = [...around.matchAll(/[¥￥]\\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
+  const prices = [...around.matchAll(/[¥￥]\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
   const unique = [...new Set(prices)];
   return unique.length === 1 ? { name: product, model, price: unique[0] } : null;
 }
