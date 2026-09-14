@@ -206,7 +206,8 @@ function runTorecaVaultMarketSync() {
       const model = extractModel_(card.set);
       if (!model) { report.review++; reviews.push((card.product || '') + ': 型番を特定できません'); return; }
       try {
-        const result = findCardrushBuyback_(cardrushRows, card.product, model);
+        let result = findCardrushBuyback_(cardrushRows, card.product, model);
+        if (!result) result = fetchAltemaBuyback_(card.product, model);
         if (!result || !result.price) {
           report.review++;
           reviews.push((card.product || '') + ' ' + model + ': 完全一致なし');
@@ -216,9 +217,9 @@ function runTorecaVaultMarketSync() {
         if (old === result.price) { report.unchanged++; return; }
         card.buybackPrice = result.price;
         card.marketCheckedAt = date;
-        card.marketSource = 'カードラッシュ';
+        card.marketSource = result.source;
         const history = Array.isArray(card.marketHistory) ? card.marketHistory : [];
-        if (!history.some(x => x.date === date && Number(x.value) === result.price)) history.push({ date, value: result.price, source: 'カードラッシュ' });
+        if (!history.some(x => x.date === date && Number(x.value) === result.price)) history.push({ date, value: result.price, source: result.source });
         card.marketHistory = history.slice(-400);
         report.updated++;
       } catch (err) {
@@ -282,5 +283,30 @@ function findCardrushBuyback_(rows, product, model) {
     return prices.length ? prices[prices.length - 1] : 0;
   }).filter(Boolean);
   const unique = [...new Set(matches)];
-  return unique.length === 1 ? { name: product, model, price: unique[0] } : null;
+  return unique.length === 1 ? { name: product, model, price: unique[0], source: 'カードラッシュ' } : null;
+}
+
+function fetchAltemaBuyback_(product, model) {
+  const query = encodeURIComponent(product + ' ' + model);
+  const searchUrl = 'https://altema.jp/pokemoncard/?s=' + query;
+  const search = UrlFetchApp.fetch(searchUrl, { muteHttpExceptions: true, followRedirects: true });
+  if (search.getResponseCode() !== 200) return null;
+  const html = search.getContentText('UTF-8');
+  const links = [...html.matchAll(/href=["'](https:\/\/altema\.jp\/pokemoncard\/[^"'#?]+)["']/gi)]
+    .map(m => m[1]).filter((x, i, a) => a.indexOf(x) === i).slice(0, 8);
+  for (const url of links) {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (response.getResponseCode() !== 200) continue;
+    const text = response.getContentText('UTF-8')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&#165;|&yen;/gi, '円');
+    if (!normalize_(text).includes(normalize_(product)) || !normalize_(text).includes(normalize_(model))) continue;
+    const pos = Math.max(0, text.toUpperCase().indexOf(model.toUpperCase()));
+    const around = text.slice(Math.max(0, pos - 600), pos + 1800);
+    const prices = [...around.matchAll(/(?:買取価格|買取相場|買取)\s*[:：]?\s*([0-9,]+)円/g)]
+      .map(m => Number(m[1].replace(/,/g, ''))).filter(x => x > 0);
+    const unique = [...new Set(prices)];
+    if (unique.length === 1) return { name: product, model, price: unique[0], source: 'アルテマ' };
+  }
+  return null;
 }
