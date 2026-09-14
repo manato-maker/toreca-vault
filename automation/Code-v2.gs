@@ -178,7 +178,7 @@ function sendReport_(report, reviews) {
 
 function removeTorecaVaultTriggers_() {
   ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'runTorecaVaultLotterySync') ScriptApp.deleteTrigger(t);
+    if (['runTorecaVaultLotterySync','runTorecaVaultMarketSync'].includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   });
 }
 
@@ -195,11 +195,18 @@ function runTorecaVaultMarketSync() {
     const report = { updated: 0, unchanged: 0, review: 0, unsupported: 0, at: now.toISOString(), source: 'カードラッシュ買取表' };
     const reviews = [];
 
+    let cardrushRows = [];
+    try {
+      cardrushRows = fetchCardrushRows_();
+    } catch (err) {
+      report.fetchError = String(err);
+    }
+
     root.data.cards.forEach(card => {
       const model = extractModel_(card.set);
       if (!model) { report.review++; reviews.push((card.product || '') + ': 型番を特定できません'); return; }
       try {
-        const result = fetchCardrushBuyback_(card.product, model);
+        const result = findCardrushBuyback_(cardrushRows, card.product, model);
         if (!result || !result.price) {
           report.review++;
           reviews.push((card.product || '') + ' ' + model + ': 完全一致なし');
@@ -232,7 +239,7 @@ function runTorecaVaultMarketSync() {
     const out = JSON.stringify(root, null, 2);
     JSON.parse(out);
     file.setContent(out);
-    if (report.updated || report.review) {
+    if (report.updated) {
       const address = Session.getActiveUser().getEmail();
       if (address) GmailApp.sendEmail(address, 'Toreca Vault カード相場更新',
         ['更新 ' + report.updated + '件', '変更なし ' + report.unchanged + '件', '要確認 ' + report.review + '件',
@@ -250,46 +257,30 @@ function extractModel_(setText) {
   return m ? m[0].toUpperCase() : '';
 }
 
-function fetchCardrushBuyback_(product, model) {
-  const query = [
-    'name=' + encodeURIComponent(product),
-    'model_number=' + encodeURIComponent(model),
-    'displayMode=' + encodeURIComponent('リスト'),
-    'limit=100'
-  ].join('&');
-  const url = 'https://cardrush.media/pokemon/buying_prices?' + query;
-  const response = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true,
-    followRedirects: true,
-    headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124 Safari/537.36' }
-  });
-  if (response.getResponseCode() !== 200) throw new Error('HTTP ' + response.getResponseCode());
-  const body = response.getContentText('UTF-8');
-  const found = [];
-  try { collectCardrush_(JSON.parse(body), found); } catch (_) {}
-  const pn = normalize_(product), mn = normalize_(model);
-  const exact = found.filter(x => normalize_(x.name).includes(pn) && normalize_(x.model) === mn && x.price > 0);
-  if (exact.length === 1) return exact[0];
-  if (exact.length > 1 && exact.every(x => x.price === exact[0].price)) return exact[0];
+const CARDRUSH_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQT3Q9qDbZUpnP3_WH2I5qw8O-U_PqXVhhoIzH2o-tSzeDND9FTuoGKbZiNHTbrzTgKAUA2_SvXFh_2/pub?gid=1490875147&single=true&output=csv';
 
-  const text = body.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&yen;|&#165;/gi, '¥').replace(/&nbsp;/gi, ' ');
-  const compact = normalize_(text);
-  const modelPos = compact.indexOf(mn);
-  const namePos = compact.indexOf(pn);
-  if (modelPos < 0 || namePos < 0) return null;
-  const rawPos = Math.max(0, text.toUpperCase().indexOf(model.toUpperCase()));
-  const around = text.slice(Math.max(0, rawPos - 500), rawPos + 1200);
-  const prices = [...around.matchAll(/[¥￥]\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
-  const unique = [...new Set(prices)];
-  return unique.length === 1 ? { name: product, model, price: unique[0] } : null;
+function fetchCardrushRows_() {
+  const response = UrlFetchApp.fetch(CARDRUSH_CSV + '&v=' + Date.now(), {
+    muteHttpExceptions: true,
+    followRedirects: true
+  });
+  if (response.getResponseCode() !== 200) throw new Error('Cardrush CSV HTTP ' + response.getResponseCode());
+  return Utilities.parseCsv(response.getContentText('UTF-8'));
 }
 
-function collectCardrush_(node, out) {
-  if (!node || typeof node !== 'object') return;
-  const name = node.name || node.product_name || node.card_name || (node.ocha_product && node.ocha_product.name);
-  const model = node.model_number || node.model || (node.ocha_product && node.ocha_product.model_number);
-  const price = Number(String(node.amount || node.buying_price || node.price || '').replace(/[^0-9]/g, ''));
-  if (name && model && price) out.push({ name, model, price });
-  Object.keys(node).forEach(k => collectCardrush_(node[k], out));
+function findCardrushBuyback_(rows, product, model) {
+  const pn = normalize_(product);
+  const mn = normalize_(model);
+  const matches = rows.filter(row => {
+    const text = normalize_(row.join(' '));
+    return text.includes(pn) && text.includes(mn);
+  }).map(row => {
+    const prices = row.map(cell => {
+      const s = String(cell || '').normalize('NFKC').replace(/[,，円¥￥\s]/g, '');
+      return /^\d{2,7}$/.test(s) ? Number(s) : 0;
+    }).filter(x => x >= 10);
+    return prices.length ? prices[prices.length - 1] : 0;
+  }).filter(Boolean);
+  const unique = [...new Set(matches)];
+  return unique.length === 1 ? { name: product, model, price: unique[0] } : null;
 }
