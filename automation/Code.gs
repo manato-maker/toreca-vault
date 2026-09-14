@@ -9,6 +9,7 @@ function installTorecaVaultAutomation() {
   removeTorecaVaultTriggers_();
   ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('runTorecaVaultMarketSync').timeBased().atHour(13).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   PropertiesService.getScriptProperties().setProperty('TV_INSTALLED_AT', new Date().toISOString());
   return runTorecaVaultLotterySync();
 }
@@ -179,4 +180,121 @@ function removeTorecaVaultTriggers_() {
   ScriptApp.getProjectTriggers().forEach(t => {
     if (t.getHandlerFunction() === 'runTorecaVaultLotterySync') ScriptApp.deleteTrigger(t);
   });
+}
+
+
+function runTorecaVaultMarketSync() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { skipped: true, reason: 'locked' };
+  try {
+    const file = DriveApp.getFileById(DATA_FILE_ID);
+    const root = JSON.parse(file.getBlob().getDataAsString('UTF-8'));
+    validate_(root);
+    const now = new Date();
+    const date = Utilities.formatDate(now, TZ, 'yyyy-MM-dd');
+    const report = { updated: 0, unchanged: 0, review: 0, unsupported: 0, at: now.toISOString(), source: 'カードラッシュ買取表' };
+    const reviews = [];
+
+    root.data.cards.forEach(card => {
+      const model = extractModel_(card.set);
+      if (!model) { report.review++; reviews.push((card.product || '') + ': 型番を特定できません'); return; }
+      try {
+        const result = fetchCardrushBuyback_(card.product, model);
+        if (!result || !result.price) {
+          report.review++;
+          reviews.push((card.product || '') + ' ' + model + ': 完全一致なし');
+          return;
+        }
+        const old = Number(card.buybackPrice || 0);
+        if (old === result.price) { report.unchanged++; return; }
+        card.buybackPrice = result.price;
+        card.marketCheckedAt = date;
+        card.marketSource = 'カードラッシュ';
+        const history = Array.isArray(card.marketHistory) ? card.marketHistory : [];
+        if (!history.some(x => x.date === date && Number(x.value) === result.price)) history.push({ date, value: result.price, source: 'カードラッシュ' });
+        card.marketHistory = history.slice(-400);
+        report.updated++;
+      } catch (err) {
+        report.review++;
+        reviews.push((card.product || '') + ' ' + model + ': 取得失敗');
+      }
+    });
+
+    report.unsupported = root.data.boxes.filter(x => Number(x.quantity) > 0).length +
+      root.data.packs.filter(x => Number(x.quantity) > 0).length;
+    root.automation = root.automation || {};
+    root.automation.lastMarketRunAt = now.toISOString();
+    root.automation.lastMarketReport = report;
+    root.automation.marketNeedsReview = reviews.slice(-200);
+
+    if (report.updated) {
+      root.data.updatedAt = now.toISOString();
+      root.exportedAt = now.toISOString();
+      const out = JSON.stringify(root, null, 2);
+      JSON.parse(out);
+      file.setContent(out);
+    }
+    if (report.updated || report.review) {
+      const address = Session.getActiveUser().getEmail();
+      if (address) GmailApp.sendEmail(address, 'Toreca Vault カード相場更新',
+        ['更新 ' + report.updated + '件', '変更なし ' + report.unchanged + '件', '要確認 ' + report.review + '件',
+         'BOX・パック保留 ' + report.unsupported + '件'].concat(reviews.slice(0, 20)).join('\n'));
+    }
+    console.log(JSON.stringify(report));
+    return report;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function extractModel_(setText) {
+  const m = String(setText || '').normalize('NFKC').match(/\b\d{3}\/[A-Z0-9-]{3,}\b/i);
+  return m ? m[0].toUpperCase() : '';
+}
+
+function fetchCardrushBuyback_(product, model) {
+  const params = {
+    amount: '', associations: 'ocha_product', displayMode: 'リスト',
+    limit: '100', model_number: model, name: product, page: '1',
+    'sort[key]': 'amount', 'sort[order]': 'desc',
+    'to_json_option[except][]': 'created_at',
+    'to_json_option[include][ocha_product][methods][]': 'image_source',
+    'to_json_option[include][ocha_product][only][]': 'id'
+  };
+  const query = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
+  const url = 'https://cardrush.media/pokemon/buying_prices?' + query;
+  const response = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 TorecaVault/1.0',
+      'Accept': 'application/json,text/html;q=0.9,*/*;q=0.8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': 'https://cardrush.media/pokemon/buying_prices'
+    }
+  });
+  if (response.getResponseCode() !== 200) throw new Error('HTTP ' + response.getResponseCode());
+  const body = response.getContentText('UTF-8');
+  const found = [];
+  try { collectCardrush_(JSON.parse(body), found); } catch (_) {}
+  const pn = normalize_(product), mn = normalize_(model);
+  const exact = found.filter(x => normalize_(x.name).includes(pn) && normalize_(x.model) === mn && x.price > 0);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1 && exact.every(x => x.price === exact[0].price)) return exact[0];
+
+  const text = body.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ').replace(/&yen;|&#165;/gi, '¥').replace(/&nbsp;/gi, ' ');
+  const pos = normalize_(text).indexOf(mn);
+  if (pos < 0 || !normalize_(text).includes(pn)) return null;
+  const around = text.slice(Math.max(0, pos - 500), pos + 1000);
+  const prices = [...around.matchAll(/[¥￥]\s*([0-9,]+)/g)].map(m => Number(m[1].replace(/,/g,''))).filter(Boolean);
+  return prices.length === 1 ? { name: product, model, price: prices[0] } : null;
+}
+
+function collectCardrush_(node, out) {
+  if (!node || typeof node !== 'object') return;
+  const name = node.name || node.product_name || node.card_name || (node.ocha_product && node.ocha_product.name);
+  const model = node.model_number || node.model || (node.ocha_product && node.ocha_product.model_number);
+  const price = Number(String(node.amount || node.buying_price || node.price || '').replace(/[^0-9]/g, ''));
+  if (name && model && price) out.push({ name, model, price });
+  Object.keys(node).forEach(k => collectCardrush_(node[k], out));
 }
