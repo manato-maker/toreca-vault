@@ -43,6 +43,7 @@
       <div class="setting-block"><h3>JSONバックアップ</h3><p>すべての記録と商品マスターを1ファイルに保存します。</p><button class="primary-button" data-action="export-json">JSONを書き出す</button></div>
       <div class="setting-block"><h3>復元</h3><p>このアプリのバックアップJSONを読み込み、内容を確認して置き換えます。</p><label class="file-button">バックアップを選択<input id="restore-input" type="file" accept="application/json,.json"></label></div>
       <div class="setting-block"><h3>旧アプリからインポート</h3><p>旧データを変換し、現在のデータに追加します。元ファイルは変更しません。</p><label class="file-button">旧JSONを選択<input id="legacy-input" type="file" accept="application/json,.json"></label></div>
+      <div class="setting-block"><h3>自動同期</h3><p>非公開のGoogle Driveデータを起動時に取得し、この端末での変更も安全に反映します。</p><label class="field full"><span>Apps Script URL</span><input id="sync-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="field full"><span>同期キー</span><input id="sync-token" type="password" autocomplete="off" placeholder="初回設定時のキー"></label><div class="sync-actions"><button class="primary-button" data-action="connect-sync">接続して同期</button><button class="secondary-button" data-action="sync-now">今すぐ同期</button><button class="quiet-button" data-action="disconnect-sync">接続解除</button></div><div id="sync-status" class="notice">未接続</div></div>
       <div id="import-status" class="notice" hidden></div>
     </section>
   </dialog>
