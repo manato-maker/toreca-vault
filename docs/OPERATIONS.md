@@ -6,19 +6,16 @@ GitHub がコードと運用知識の正本です。ユーザーデータの実�
 
 ## 自動化コードの正本
 
-**`automation/Code.gs` が唯一の編集元（source of truth）です。** 新しい担当者やAIは、自動化を直すとき `Code.gs` を編集してください。
+**`automation/Code.gs` が唯一の本番ソース（source of truth）です。** 新しい担当者やAIは、自動化を直すときこのファイルだけを編集してください。
 
-Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。Apps Script 側は薄いランナーで、2026-09-15時点では GitHub の `automation/Code-v4.gs` URL を取得して関数を実行しています。この `Code-v4.gs` は独立したソースではなく、現行ランナーとの互換性を保つための**配布コピー**です。
+Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。Apps Script 側は薄いランナーで、2026-09-15から GitHub の `automation/Code.gs` URL を直接取得して関数を実行しています。旧 `Code-v4.gs` は廃止済みです。
 
-### 自動化変更のリリース手順
+### 自動化変更の手順
 
 1. `automation/Code.gs` を変更する。
 2. テスト・構文確認を行う。
-3. `automation/Code-v4.gs` を `Code.gs` と完全に同じ内容へ同期する。
-4. 必要な場合だけ Apps Script で `install` を1回実行する。
-5. 実行ログと Drive JSON の `automation.lastGmailRunAt` / `lastMarketRunAt` を確認する。
-
-`Code-v4.gs` だけを直接編集してはいけません。将来 Apps Script ランナーの `TV_SOURCE` を `automation/Code.gs` に変更できたら、`Code-v4.gs` を削除して物理的にも完全な単一ソースへ移行します。それまでは現行GASを壊さないため v4 を残します。
+3. 必要な場合だけ Apps Script で `install` を1回実行する。
+4. 実行ログと Drive JSON の `automation.lastGmailRunAt` / `lastMarketRunAt` を確認する。
 
 ## 定期処理
 
@@ -26,7 +23,7 @@ Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。App
 - `runTorecaVaultMarketSync`: JST 13:00。カード単品の買取相場を更新。
 - `installTorecaVaultAutomation`: 上記トリガーを作り直し、直後に抽選同期を1回実行。
 
-トリガーを壊した、または本番コード更新後に再設定が必要な場合は Apps Script で `install` を1回実行します。実行ログが `実行完了` なら基本動作は成功です。
+トリガーを壊した、または再設定が必要な場合は Apps Script で `install` を1回実行します。実行ログが `実行完了` なら基本動作は成功です。
 
 ## 抽選メールの基本動作
 
@@ -39,13 +36,17 @@ Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。App
 ## 障害時チェック順
 
 1. Apps Script の実行ログにエラーがないか。
-2. GitHub の `automation/Code.gs` と配布用 `Code-v4.gs` が一致しているか。
+2. GitHub の `automation/Code.gs` が取得できるか。
 3. Drive JSON が壊れていないか、`app: toreca-vault` と `data` があるか。
 4. `automation.lastGmailRunAt` / `lastMarketRunAt` が更新されているか。
 5. `needsReview` / `marketNeedsReview` に保留理由がないか。
 6. Webアプリだけ同期できない場合は `/exec` URL と同期設定を確認する。
 
 データを直接修正する前にバックアップを取ります。特に `automation` を消さないでください。
+
+## Apps Script 側の注意
+
+ランナーには権限確認用の古い補助関数が残っている場合があります。**`requiredPermissions_` は実行しないでください。** 既存データを書き換える処理を含む版が確認されています。通常運用で使うのは `install`、`runTorecaVaultLotterySync`、`runTorecaVaultMarketSync` だけです。
 
 ## 秘密情報
 
