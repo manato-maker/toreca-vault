@@ -4,11 +4,21 @@
 
 GitHub がコードと運用知識の正本です。ユーザーデータの実体は同期構成では Google Drive JSON、メール自動取得は Google Apps Script が担当します。過去チャットは運用に必須ではありません。
 
-## 本番自動化の見分け方
+## 自動化コードの正本
 
-Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。Apps Script 側は薄いランナーで、GitHub の `automation/Code-v4.gs` を取得して関数を実行します。2026-09-15 時点ではこの v4 が実行中ソースです。`automation/Code.gs` は同内容の保守用コピーです。
+**`automation/Code.gs` が唯一の編集元（source of truth）です。** 新しい担当者やAIは、自動化を直すとき `Code.gs` を編集してください。
 
-変更時は v4 と Code.gs の内容を一致させます。将来ランナーを `Code.gs` の安定URLへ変更できたら v4 を廃止し、単一ソース化してください。それまでは v4 を削除・改名しないでください。
+Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。Apps Script 側は薄いランナーで、2026-09-15時点では GitHub の `automation/Code-v4.gs` URL を取得して関数を実行しています。この `Code-v4.gs` は独立したソースではなく、現行ランナーとの互換性を保つための**配布コピー**です。
+
+### 自動化変更のリリース手順
+
+1. `automation/Code.gs` を変更する。
+2. テスト・構文確認を行う。
+3. `automation/Code-v4.gs` を `Code.gs` と完全に同じ内容へ同期する。
+4. 必要な場合だけ Apps Script で `install` を1回実行する。
+5. 実行ログと Drive JSON の `automation.lastGmailRunAt` / `lastMarketRunAt` を確認する。
+
+`Code-v4.gs` だけを直接編集してはいけません。将来 Apps Script ランナーの `TV_SOURCE` を `automation/Code.gs` に変更できたら、`Code-v4.gs` を削除して物理的にも完全な単一ソースへ移行します。それまでは現行GASを壊さないため v4 を残します。
 
 ## 定期処理
 
@@ -29,7 +39,7 @@ Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。App
 ## 障害時チェック順
 
 1. Apps Script の実行ログにエラーがないか。
-2. GitHub の `automation/Code-v4.gs` が存在するか。
+2. GitHub の `automation/Code.gs` と配布用 `Code-v4.gs` が一致しているか。
 3. Drive JSON が壊れていないか、`app: toreca-vault` と `data` があるか。
 4. `automation.lastGmailRunAt` / `lastMarketRunAt` が更新されているか。
 5. `needsReview` / `marketNeedsReview` に保留理由がないか。
@@ -43,4 +53,4 @@ DriveファイルID、同期トークン、APIキーなどの実値を README・
 
 ## 引き継ぎチェック
 
-新しい保守担当者は README → ARCHITECTURE → OPERATIONS → `js/schema.js` → `automation/Code-v4.gs` の順で読めば全体を追えます。仕様を変えたコミットでは、関連する文書も同時に更新してください。
+新しい保守担当者は README → ARCHITECTURE → OPERATIONS → `js/schema.js` → `automation/Code.gs` の順で読めば全体を追えます。仕様を変えたコミットでは、関連する文書も同時に更新してください。
