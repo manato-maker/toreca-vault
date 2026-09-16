@@ -23,7 +23,8 @@ function removeStock(items,record){
 
 export function applyPurchase(state,purchase){
   const next=copy(state);assertCategory(purchase,'購入');next.purchases.unshift(purchase);const target=map[purchase.category];
-  if(target&&purchase.inventoryAction!=='記録のみ')next[target].unshift({id:`stock-${purchase.id}`,product:purchase.product,inventoryKey:purchase.inventoryKey||'',shrinkStatus:purchase.shrinkStatus||'',quantity:qty(purchase),cost:Number(purchase.price)||0,marketPrice:0,store:purchase.store,date:purchase.date,origin:'purchase',sourceId:purchase.id,memo:purchase.memo||''});
+  // 購入先は購入履歴だけに保持し、在庫レコードには持ち込まない。
+  if(target&&purchase.inventoryAction!=='記録のみ')next[target].unshift({id:`stock-${purchase.id}`,product:purchase.product,inventoryKey:purchase.inventoryKey||'',shrinkStatus:purchase.shrinkStatus||'',quantity:qty(purchase),cost:Number(purchase.price)||0,marketPrice:0,date:purchase.date,origin:'purchase',sourceId:purchase.id,memo:purchase.memo||''});
   return next;
 }
 
