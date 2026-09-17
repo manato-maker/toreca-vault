@@ -1,5 +1,6 @@
 import test from'node:test';import assert from'node:assert/strict';import{assets,storeStats}from'../js/calculations.js';import{emptyState,importLegacy}from'../js/schema.js';
 import{applyPurchase,applySale,applyOpening}from'../js/inventory.js';
+import{franchiseOf,FRANCHISES}from'../js/franchise.js';
 test('空データの資産は主要値がすべて0',()=>{const a=assets(emptyState());for(const key of ['inventoryCost','cards','boxes','packs','total','purchases','sales','realizedProfit','pendingSales','pendingSaleRevenue','unrealizedProfit','totalProfit','netInvested','difference'])assert.equal(a[key],0)});
 test('資産・取得原価・購入差額を集計',()=>{const s=emptyState();s.cards=[{quantity:2,cost:100,buybackPrice:300}];s.boxes=[{quantity:1,cost:5000,marketPrice:6500}];s.packs=[{quantity:3,cost:180,marketPrice:220}];s.purchases=[{quantity:2,price:1000}];assert.equal(assets(s).total,7760);assert.equal(assets(s).inventoryCost,5740);assert.equal(assets(s).difference,2020)});
 test('店舗別購入と売却を集計',()=>{const s=emptyState();s.purchases=[{store:'A',price:100,quantity:2}];s.sales=[{store:'A',price:350,quantity:1}];assert.deepEqual(storeStats(s)[0],{store:'A',purchases:1,spent:200,sales:1,revenue:350})});
@@ -11,3 +12,8 @@ test('在庫不足の売却を拒否',()=>{assert.throws(()=>applySale(emptyStat
 test('数量0の在庫を資産として数えない',()=>{const s=emptyState();s.boxes=[{quantity:0,cost:5000,marketPrice:10000}];assert.equal(assets(s).total,0);assert.equal(assets(s).inventoryCost,0)});
 test('最後の1点を売却した在庫は一覧から削除',()=>{let s=applyPurchase(emptyState(),{id:'p1',product:'完売BOX',category:'BOX',quantity:1,price:5000});s=applySale(s,{id:'s1',product:'完売BOX',category:'BOX',quantity:1,price:6000});assert.equal(s.boxes.length,0)});
 test('原価不明の売却は確定実現損益に含めない',()=>{const s=emptyState();s.sales=[{product:'未確定',price:10000,quantity:1,acquisitionCost:null}];const a=assets(s);assert.equal(a.realizedProfit,0);assert.equal(a.pendingSales,1);assert.equal(a.pendingSaleRevenue,10000)});
+test('作品区分はポケモン・ワンピース・その他の3区分',()=>{assert.deepEqual(FRANCHISES,['ポケモン','ワンピース','その他'])});
+test('ポケモン商品を自動判定',()=>{assert.equal(franchiseOf({product:'MEGA 拡張パック 30th CELEBRATION'}),'ポケモン');assert.equal(franchiseOf({product:'MEGA スタートデッキ100'}),'ポケモン')});
+test('ワンピース商品を自動判定',()=>{assert.equal(franchiseOf({product:'世界最強の戦士 OP-17（テープ付き）'}),'ワンピース')});
+test('ドラゴンボールとユニオンアリーナはその他',()=>{assert.equal(franchiseOf({product:'ドラゴンボール フュージョンワールド'}),'その他');assert.equal(franchiseOf({product:'ユニオンアリーナ ブースターパック'}),'その他')});
+test('明示した作品区分を自動判定より優先',()=>{assert.equal(franchiseOf({product:'不明商品',franchise:'ワンピース'}),'ワンピース')});
