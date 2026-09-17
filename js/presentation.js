@@ -1,0 +1,4 @@
+export const transactionKind=type=>type==='sales'?'sale':type==='purchases'?'purchase':'';
+export const transactionAmount=x=>{const quantity=x?.quantity==null?1:Number(x.quantity)||0;const unit=Number(x?.price)||0;const fee=Number(x?.fee)||0;return Math.max(0,unit*quantity-fee)};
+export const transactionBreakdown=x=>{const quantity=x?.quantity==null?1:Number(x.quantity)||0;const unit=Number(x?.price)||0;const category=String(x?.category||'').trim();const unitLabel=category==='BOX'?'BOX':category==='パック'?'パック':category==='カード'?'枚':'点';return{quantity,unit,total:transactionAmount(x),unitLabel,showBreakdown:quantity>1,text:`¥${unit.toLocaleString('ja-JP')} × ${quantity}${unitLabel}`}};
+export const marketCheckedDate=x=>{const raw=String(x?.marketCheckedAt||'').trim();if(!raw)return'';const match=raw.match(/^(\d{4}-\d{2}-\d{2})/);return match?match[1]:raw};
