@@ -1,0 +1,4 @@
+import test from'node:test';import assert from'node:assert/strict';import{normalizeUiTransaction}from'../v2/ui-write.js';
+test('normalizes purchase for V2 core',()=>{const x=normalizeUiTransaction('purchase',{id:'p1',product:'BOX A',category:'BOX',shrinkStatus:'あり',quantity:'2',price:100});assert.equal(x.type,'purchase');assert.equal(x.productKey,'BOX A');assert.equal(x.condition,'あり');assert.equal(x.quantity,2)});
+test('normalizes special unopened condition without store inventory dimension',()=>{const x=normalizeUiTransaction('purchase',{id:'p2',product:'スペシャルBOX',category:'BOX',condition:'未開封',quantity:1,price:2090,store:'購入店'});assert.equal(x.condition,'未開封');assert.equal(x.store,'購入店')});
+test('rejects non transaction type',()=>assert.throws(()=>normalizeUiTransaction('lottery',{}),/種別/));
