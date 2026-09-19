@@ -1,6 +1,7 @@
 import{applyTransaction,validateState}from'./core.js';
 import{loadVaultV2,getVaultV2Config}from'./browser-sync.js';
 import{saveV2}from'./api-client.js';
+import{assertV2WriteEnabled}from'./write-gate.js';
 
 const makeId=(prefix='tx')=>prefix+'-'+Date.now()+'-'+crypto.randomUUID();
 export function normalizeUiTransaction(type,data){
@@ -10,6 +11,7 @@ export function normalizeUiTransaction(type,data){
  return{...data,id:data.id||makeId(type),type,product:String(data.product||'').trim(),productKey:String(data.productKey||data.product||'').trim(),category,condition,quantity:Number(data.quantity)};
 }
 export async function commitV2Transaction(type,data,config=getVaultV2Config()){
+ assertV2WriteEnabled();
  const before=await loadVaultV2(config),tx=normalizeUiTransaction(type,data);
  const mutationId='ui-'+tx.id;
  const next=applyTransaction(before.payload,tx,mutationId);validateState(next);
