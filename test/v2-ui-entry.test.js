@@ -1,0 +1,4 @@
+import test from'node:test';import assert from'node:assert/strict';import{uiTypeToV2,canUseV2Entry,v2EntryPayload}from'../v2/ui-entry.js';
+test('maps supported UI transaction types',()=>{assert.equal(uiTypeToV2('purchases'),'purchase');assert.equal(uiTypeToV2('sales'),'sale');assert.equal(uiTypeToV2('openings'),'opening');assert.equal(canUseV2Entry('lotteries'),false)});
+test('blocks legacy record-only semantics until explicitly implemented',()=>{assert.throws(()=>v2EntryPayload('purchases',{category:'BOX',inventoryAction:'記録のみ'}),/記録のみ/);assert.throws(()=>v2EntryPayload('sales',{category:'BOX',inventoryAction:'記録のみ'}),/記録のみ/)});
+test('blocks unsupported category and normalizes opening as BOX',()=>{assert.throws(()=>v2EntryPayload('purchases',{category:'その他'}),/カテゴリ/);const x=v2EntryPayload('openings',{product:'A',quantity:1});assert.equal(x.category,'BOX');assert.equal(x.condition,'あり')});
