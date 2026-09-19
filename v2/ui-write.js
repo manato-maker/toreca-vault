@@ -12,7 +12,7 @@ export function normalizeUiTransaction(type,data){
 }
 export async function commitV2Transaction(type,data,config=getVaultV2Config()){
  assertV2WriteEnabled();
- const before=await loadVaultV2(config),tx=normalizeUiTransaction(type,data);
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);const tx=normalizeUiTransaction(type,data);
  const mutationId='ui-'+tx.id;
  const next=applyTransaction(before.payload,tx,mutationId);validateState(next);
  const confirmed=await saveV2(config.url,config.token,next,before.revision);
