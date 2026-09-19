@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "catalogType": "package-image-reference",
+  "purpose": "Recognition-time reference catalog; not model training data",
+  "updatedAt": "2026-09-20",
+  "sourcePolicy": {
+    "primary": [
+      "manufacturer official product pages",
+      "manufacturer-hosted official images"
+    ],
+    "auxiliaryOnly": [
+      "image search"
+    ],
+    "confirmationRule": "Do not confirm from unofficial images alone"
+  },
+  "products": [
+    {
+      "id": "pokemon-m6a-30th-celebration",
+      "game": "ポケモンカードゲーム",
+      "productName": "ポケモンカードゲーム MEGA 拡張パック「30th CELEBRATION」",
+      "series": "MEGA",
+      "productCode": "M6a",
+      "productCodeBasis": "公式商品ページURL /product/m6a",
+      "releaseDate": "2026-09-16",
+      "packageForms": [
+        {
+          "type": "PACK",
+          "officialImageUrl": "https://www.30th.pokemon-card.com/images/m6a/m6a_pillow_4f272152.webp"
+        },
+        {
+          "type": "BOX",
+          "officialImageUrl": null,
+          "status": "needs_review",
+          "note": "公式ページでBOX単体の直接画像URLを確認できず"
+        }
+      ],
+      "frontRecognitionFeatures": [
+        "商品名に「30th CELEBRATION」",
+        "ポケモンカードゲーム30周年記念ロゴ",
+        "通常の拡張パックより高価格帯の6枚入りキラカード仕様"
+      ],
+      "officialProductUrl": "https://www.30th.pokemon-card.com/product/m6a",
+      "verifiedAt": "2026-09-20",
+      "status": "confirmed"
+    },
+    {
+      "id": "onepiece-op13-carrying-on-his-will",
+      "game": "ONE PIECEカードゲーム",
+      "productName": "ブースターパック 受け継がれる意志",
+      "series": "ブースターパック",
+      "productCode": "OP-13",
+      "releaseDate": "2025-08-23",
+      "packageForms": [
+        {
+          "type": "PACK",
+          "officialImageUrl": "https://www.onepiece-cardgame.com/products/boosters/op13/images/img_item01.webp"
+        },
+        {
+          "type": "BOX",
+          "officialImageUrl": "https://www.onepiece-cardgame.com/products/boosters/op13/images/img_item02.webp"
+        }
+      ],
+      "frontRecognitionFeatures": [
+        "赤を基調とした3周年記念弾",
+        "「受け継がれる意志」「OP-13」の表記",
+        "三兄弟（ルフィ・エース・サボ）と3rd Anniversary要素"
+      ],
+      "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op13/",
+      "verifiedAt": "2026-09-20",
+      "status": "confirmed"
+    },
+    {
+      "id": "onepiece-op17-worlds-strongest-warriors",
+      "game": "ONE PIECEカードゲーム",
+      "productName": "ブースターパック 世界最強の戦士",
+      "series": "ブースターパック",
+      "productCode": "OP-17",
+      "releaseDate": "2026-08-22",
+      "packageForms": [
+        {
+          "type": "PACK",
+          "officialImageUrl": null,
+          "status": "needs_review"
+        },
+        {
+          "type": "BOX",
+          "officialImageUrl": null,
+          "status": "needs_review"
+        }
+      ],
+      "frontRecognitionFeatures": [
+        "「世界最強の戦士」「OP-17」の表記",
+        "4周年・エルバフ編の商品として公式掲載"
+      ],
+      "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op17/",
+      "verifiedAt": "2026-09-20",
+      "status": "needs_review",
+      "reviewReason": "公式商品ページの存在・名称・コード・発売日は確認済みだが、今回の取得ではページがタイムアウトし公式画像URLを確定できず"
+    }
+  ],
+  "changeSummary": {
+    "baseline": "初版作成（既存の独立カタログなし）",
+    "newProducts": [
+      "pokemon-m6a-30th-celebration",
+      "onepiece-op13-carrying-on-his-will",
+      "onepiece-op17-worlds-strongest-warriors"
+    ],
+    "designChanges": [],
+    "easilyConfused": [
+      {
+        "ids": [
+          "pokemon-m6a-30th-celebration"
+        ],
+        "note": "同日発売の30th CELEBRATION関連セット（プレミアムデッキセット、FUTURISTIC BOX）と名称が近い。パック/BOX判定では「拡張パック」表記を必須確認"
+      },
+      {
+        "ids": [
+          "onepiece-op13-carrying-on-his-will",
+          "onepiece-op17-worlds-strongest-warriors"
+        ],
+        "note": "いずれも周年弾のONE PIECEブースター。正面のOPコードを最優先し、周年表現だけで判定しない"
+      }
+    ],
+    "insufficientInformation": [
+      "M6aのBOX単体公式画像URL",
+      "OP-17のPACK/BOX公式画像URLと詳細な正面識別特徴"
+    ]
+  }
+}
