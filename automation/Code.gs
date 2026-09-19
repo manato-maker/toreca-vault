@@ -356,3 +356,85 @@ function fetchAltemaBuyback_(product, model) {
   }
   return null;
 }
+
+/**
+ * Vaultからの認証付き更新API。
+ * doPostは mutationId + expectedRevision で二重実行/競合を防ぎ、
+ * 保存後に同じDriveファイルを再読込して mutationId を照合する。
+ */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  const callback = String(p.callback || '');
+  try {
+    assertSyncToken_(p.token);
+    if (String(p.action || '') !== 'load') throw new Error('unsupported action');
+    const root = readVaultRoot_();
+    const meta = root.sync || {};
+    return jsonpResponse_(callback, { ok:true, payload:root, revision:vaultRevision_(root), lastMutationId:String(meta.lastMutationId || '') });
+  } catch (err) {
+    return jsonpResponse_(callback, { ok:false, error:String(err && err.message || err) });
+  }
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return jsonResponse_({ ok:false, error:'locked' });
+  try {
+    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    assertSyncToken_(req.token);
+    if (!req.payload || req.payload.app !== 'toreca-vault' || !req.payload.data) throw new Error('invalid payload');
+    const current = readVaultRoot_();
+    const currentRevision = vaultRevision_(current);
+    const mutationId = String(req.mutationId || '');
+    if (!mutationId) throw new Error('mutationId required');
+    if (String((current.sync || {}).lastMutationId || '') === mutationId) {
+      return jsonResponse_({ ok:true, duplicate:true, revision:currentRevision, lastMutationId:mutationId });
+    }
+    if (req.expectedRevision && String(req.expectedRevision) !== currentRevision) {
+      return jsonResponse_({ ok:false, conflict:true, error:'revision conflict', revision:currentRevision });
+    }
+    const next = req.payload;
+    validate_(next);
+    next.sync = Object.assign({}, current.sync || {}, { lastMutationId:mutationId, updatedAt:new Date().toISOString() });
+    next.exportedAt = new Date().toISOString();
+    const out = JSON.stringify(next, null, 2);
+    JSON.parse(out);
+    DriveApp.getFileById(DATA_FILE_ID).setContent(out);
+
+    const confirmed = readVaultRoot_();
+    if (String((confirmed.sync || {}).lastMutationId || '') !== mutationId) throw new Error('post-save verification failed');
+    return jsonResponse_({ ok:true, revision:vaultRevision_(confirmed), lastMutationId:mutationId });
+  } catch (err) {
+    return jsonResponse_({ ok:false, error:String(err && err.message || err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readVaultRoot_() {
+  if (!DATA_FILE_ID) throw new Error('TV_DATA_FILE_ID が未設定です');
+  const root = JSON.parse(DriveApp.getFileById(DATA_FILE_ID).getBlob().getDataAsString('UTF-8'));
+  validate_(root);
+  return root;
+}
+
+function vaultRevision_(root) {
+  const text = JSON.stringify(root);
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8);
+  return bytes.map(b => ('0' + ((b < 0 ? b + 256 : b).toString(16))).slice(-2)).join('');
+}
+
+function assertSyncToken_(token) {
+  const expected = PropertiesService.getScriptProperties().getProperty('TV_SYNC_TOKEN');
+  if (!expected || expected.length < 24) throw new Error('TV_SYNC_TOKEN が未設定です');
+  if (String(token || '') !== expected) throw new Error('unauthorized');
+}
+
+function jsonResponse_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function jsonpResponse_(callback, obj) {
+  const body = callback ? callback + '(' + JSON.stringify(obj) + ')' : JSON.stringify(obj);
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
