@@ -6,7 +6,7 @@ const condition=(x,category)=>category==='BOX'?boxCondition(x):String(x.conditio
 const migratedCategory=x=>/マクドナルド.*プロモ|プロモ.*マクドナルド/.test(String(x.product||''))?'パック':null;
 const migratedCondition=(x,category)=>{const p=String(x.product||'');if(category==='BOX'&&/^スペシャルBOX/.test(p))return'未開封';if(category==='パック'&&/マクドナルド.*プロモ|プロモ.*マクドナルド/.test(p))return'未開封';if(category==='BOX'&&(/インフェルノX/.test(p)||/MEGAドリームex/.test(p)))return'あり';return condition(x,category)};
 const productKey=x=>String(x.inventoryKey||x.productKey||x.product||'').trim();
-const unitCost=x=>{const c=num(x.cost);return c===null?null:c};
+const unitCost=x=>{const c=num(x.cost);if(c===null)return null;if(c===0&&/未配賦|原価.*未設定|取得原価.*未/.test(String(x.memo||'')))return null;return c};
 
 export function migrateV1(root){
  const src=root?.data||root;if(!src)throw new Error('旧データがありません');const out=emptyV2();
