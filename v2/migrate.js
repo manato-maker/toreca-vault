@@ -4,6 +4,7 @@ const num=x=>{if(x===null||x===undefined||x==='')return null;const n=Number(x);r
 const boxCondition=x=>{const raw=String(x.shrinkStatus||x.condition||'').trim();if(raw==='シュリンクあり'||raw==='あり')return'あり';if(raw==='シュリンクなし'||raw==='なし')return'なし';if(raw==='対象外')return'対象外';if(raw==='未開封')return'未開封';return''};
 const condition=(x,category)=>category==='BOX'?boxCondition(x):String(x.condition||x.shrinkStatus||'').trim();
 const migratedCategory=x=>/マクドナルド.*プロモ|プロモ.*マクドナルド/.test(String(x.product||''))?'パック':null;
+const migratedCondition=(x,category)=>{const p=String(x.product||'');if(category==='BOX'&&/^スペシャルBOX/.test(p))return'未開封';if(category==='パック'&&/マクドナルド.*プロモ|プロモ.*マクドナルド/.test(p))return'未開封';if(category==='BOX'&&(/インフェルノX/.test(p)||/MEGAドリームex/.test(p)))return'あり';return condition(x,category)};
 const productKey=x=>String(x.inventoryKey||x.productKey||x.product||'').trim();
 const unitCost=x=>{const c=num(x.cost);return c===null?null:c};
 
@@ -14,7 +15,7 @@ export function migrateV1(root){
  for(const o of src.openings||[])out.transactions.push({...structuredClone(o),id:o.id,type:'opening',productKey:productKey(o),condition:condition(o,'BOX')});
  for(const [legacyCategory,name] of [['BOX','boxes'],['パック','packs'],['カード','cards']])for(const x of src[name]||[]){
    if(q(x)<=0)continue;const category=migratedCategory(x)||legacyCategory;
-   out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:condition(x,category),quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
+   out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:migratedCondition(x,category),quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
  }
  out.lotteries=structuredClone(src.lotteries||[]);
  out.marketQuotes=[...(src.boxes||[]),...(src.packs||[]),...(src.cards||[])].filter(x=>q(x)>0&&num(x.marketPrice)!==null).map(x=>({product:x.product,productKey:productKey(x),category:(src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX',condition:condition(x,(src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX'),price:num(x.marketPrice),checkedAt:x.marketCheckedAt||'',source:x.marketSource||'',history:structuredClone(x.marketHistory||[]),legacyInventoryId:x.id}));
