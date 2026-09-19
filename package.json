@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check js/app.js && node --check js/schema.js && node --check js/storage.js && node --check js/calculations.js && node --check js/inventory.js && node --check js/remote-sync.js && node --check v2/core.js && node --check v2/migrate.js && node --check v2/persistence.js && node --check v2/api-client.js && node --check v2/automation.js && node --check v2/browser-sync.js"
+    "check": "node --check js/app.js && node --check js/schema.js && node --check js/storage.js && node --check js/calculations.js && node --check js/inventory.js && node --check js/remote-sync.js && node --check v2/core.js && node --check v2/migrate.js && node --check v2/persistence.js && node --check v2/api-client.js && node --check v2/automation.js && node --check v2/browser-sync.js && node --check v2/view-model.js"
   }
 }
