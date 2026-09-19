@@ -1,8 +1,9 @@
 import{emptyV2,validateState}from'./core.js';
 const q=x=>Number(x?.quantity)||0;
 const num=x=>{if(x===null||x===undefined||x==='')return null;const n=Number(x);return Number.isFinite(n)?n:null};
-const boxCondition=x=>{const raw=String(x.shrinkStatus||'').trim();if(raw==='シュリンクあり')return'あり';if(raw==='シュリンクなし')return'なし';if(raw==='対象外')return'対象外';return''};
+const boxCondition=x=>{const raw=String(x.shrinkStatus||x.condition||'').trim();if(raw==='シュリンクあり'||raw==='あり')return'あり';if(raw==='シュリンクなし'||raw==='なし')return'なし';if(raw==='対象外')return'対象外';if(raw==='未開封')return'未開封';return''};
 const condition=(x,category)=>category==='BOX'?boxCondition(x):String(x.condition||x.shrinkStatus||'').trim();
+const migratedCategory=x=>/マクドナルド.*プロモ|プロモ.*マクドナルド/.test(String(x.product||''))?'パック':null;
 const productKey=x=>String(x.inventoryKey||x.productKey||x.product||'').trim();
 const unitCost=x=>{const c=num(x.cost);return c===null?null:c};
 
@@ -11,8 +12,8 @@ export function migrateV1(root){
  for(const p of src.purchases||[])out.transactions.push({...structuredClone(p),id:p.id,type:'purchase',productKey:productKey(p),condition:condition(p,p.category)});
  for(const s of src.sales||[])out.transactions.push({...structuredClone(s),id:s.id,type:'sale',productKey:productKey(s),condition:condition(s,s.category)});
  for(const o of src.openings||[])out.transactions.push({...structuredClone(o),id:o.id,type:'opening',productKey:productKey(o),condition:condition(o,'BOX')});
- for(const [category,name] of [['BOX','boxes'],['パック','packs'],['カード','cards']])for(const x of src[name]||[]){
-   if(q(x)<=0)continue;
+ for(const [legacyCategory,name] of [['BOX','boxes'],['パック','packs'],['カード','cards']])for(const x of src[name]||[]){
+   if(q(x)<=0)continue;const category=migratedCategory(x)||legacyCategory;
    out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:condition(x,category),quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
  }
  out.lotteries=structuredClone(src.lotteries||[]);
