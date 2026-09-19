@@ -43,13 +43,19 @@ function doPost(e) {
       file.setContent(JSON.stringify(next, null, 2));
       var reread = tv2Read_();
       tv2Validate_(reread);
-      if (reread.lastMutationId !== req.mutationId || Number(reread.revision) !== Number(next.revision)) {
+      if (reread.lastMutationId !== req.mutationId || Number(reread.revision) !== Number(next.revision) || tv2Canonical_(reread) !== tv2Canonical_(next)) {
         throw new Error('post-write verification failed');
       }
       return tv2Json_({ok:true, revision:Number(reread.revision), lastMutationId:reread.lastMutationId});
     } catch (writeErr) {
-      // Best-effort rollback. Never report success if verification failed.
-      try { file.setContent(before); } catch (rollbackErr) {}
+      // Roll back and verify restoration. Never report success if either verification fails.
+      try {
+        file.setContent(before);
+        var restored = file.getBlob().getDataAsString('UTF-8');
+        if (restored !== before) throw new Error('rollback verification failed');
+      } catch (rollbackErr) {
+        throw new Error('write failed and rollback was not verified: '+String(rollbackErr && rollbackErr.message || rollbackErr));
+      }
       throw writeErr;
     }
   } catch (err) {
@@ -76,6 +82,7 @@ function tv2Validate_(x) {
   x.inventoryLots.forEach(function(l){if(!l.id || lots[l.id]) throw new Error('duplicate inventory lot'); lots[l.id]=true; if(!(Number(l.quantity)>0)) throw new Error('invalid inventory quantity');});
   return true;
 }
+function tv2Canonical_(x) { return JSON.stringify(x); }
 function tv2Auth_(token) {
   var expected = tv2Prop_('TV_V2_SYNC_TOKEN');
   if (!token || token !== expected) throw new Error('unauthorized');
