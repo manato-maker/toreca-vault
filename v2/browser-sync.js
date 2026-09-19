@@ -9,16 +9,20 @@ export function validateBrowserState(state){
   return true;
 }
 
+const CONFIG_KEY='toreca-vault:v2:sync';
+const TOKEN_KEY='toreca-vault:v2:token';
 export function getVaultV2Config(){
-  try{return JSON.parse(localStorage.getItem('toreca-vault:v2:sync')||'{}')}catch{return{}}
+  let saved={};try{saved=JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')}catch{}
+  const token=sessionStorage.getItem(TOKEN_KEY)||'';
+  return{url:String(saved.url||'').trim(),token:String(token).trim()};
 }
 export function setVaultV2Config(url,token){
   const c={url:String(url||'').trim(),token:String(token||'').trim()};
   if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(c.url))throw new Error('Apps Scriptの /exec URLが必要です');
   if(c.token.length<24)throw new Error('同期キーが短すぎます');
-  localStorage.setItem('toreca-vault:v2:sync',JSON.stringify(c));return c;
+  localStorage.setItem(CONFIG_KEY,JSON.stringify({url:c.url}));sessionStorage.setItem(TOKEN_KEY,c.token);return c;
 }
-export function clearVaultV2Config(){localStorage.removeItem('toreca-vault:v2:sync')}
+export function clearVaultV2Config(){localStorage.removeItem(CONFIG_KEY);sessionStorage.removeItem(TOKEN_KEY)}
 
 export async function loadVaultV2(config=getVaultV2Config()){
   if(!config.url||!config.token)throw new Error('V2同期設定がありません');
