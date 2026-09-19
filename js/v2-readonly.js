@@ -14,3 +14,7 @@ export function enableV2ReadOnly(url,token){
 }
 export function disableV2ReadOnly(){localStorage.removeItem('toreca-vault:v2:sync')}
 export function hasV2ReadOnly(){const c=getVaultV2Config();return Boolean(c.url&&c.token)}
+export function applyV2ReadOnlyToUi(currentState,snapshot){
+ if(!snapshot?.state)return{state:currentState,active:false};
+ return{state:snapshot.state,active:true,assets:snapshot.assets,realizedProfit:snapshot.realizedProfit,revision:snapshot.revision,lastMutationId:snapshot.lastMutationId};
+}
