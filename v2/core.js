@@ -1,5 +1,5 @@
 const CATEGORIES=new Set(['BOX','パック','カード']);
-const CONDITIONS=new Set(['あり','なし','対象外','']);
+const CONDITIONS=new Set(['あり','なし','対象外','未開封','']);
 const clone=x=>structuredClone(x);
 const qty=x=>Number(x?.quantity)||0;
 const money=x=>Number(x)||0;
