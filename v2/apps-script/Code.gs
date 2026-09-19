@@ -24,6 +24,10 @@ function doPost(e) {
   try {
     var req = JSON.parse(e.postData && e.postData.contents || '{}');
     tv2Auth_(req.token);
+    if (req.action === 'load') {
+      var loaded = tv2Read_();
+      return tv2Json_({ok:true, payload:loaded, revision:Number(loaded.revision)||0, lastMutationId:loaded.lastMutationId||''});
+    }
     if (!req.mutationId) throw new Error('mutationId required');
     var current = tv2Read_();
     if (current.lastMutationId === req.mutationId) {
