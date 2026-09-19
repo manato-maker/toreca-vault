@@ -6,6 +6,6 @@ export function v2EntryPayload(type,data){
  if(out.category==='その他')throw new Error('V2では在庫カテゴリをBOX・パック・カードから選んでください');
  if(type==='purchases'&&data.inventoryAction==='記録のみ')throw new Error('V2では購入の「記録のみ」はまだ利用できません');
  if(type==='sales'&&data.inventoryAction==='記録のみ')throw new Error('V2では売却の「記録のみ」はまだ利用できません');
- if(type==='openings'){out.category='BOX';out.condition=String(data.condition||data.shrinkStatus||'あり')}
+ const condition=String(data.condition||data.shrinkStatus||'').trim();if(['purchases','sales','openings'].includes(type)&&(!condition||condition==='未選択'))throw new Error('V2では在庫状態を選択してください');out.condition=condition;if(type==='openings')out.category='BOX'
  return out;
 }
