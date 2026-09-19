@@ -1,5 +1,6 @@
 export async function loadV2(url,token){
- const r=await fetch(url+'?'+new URLSearchParams({action:'load',token,ts:String(Date.now())}));
+ const body={action:'load',token};
+ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
  const j=await r.json();if(!j.ok)throw new Error(j.error||'load failed');return j;
 }
 export async function saveV2(url,token,next,expectedRevision){
