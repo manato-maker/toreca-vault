@@ -13,4 +13,4 @@ jobs:
         with:
           node-version: 22
       - run: npm test
-      - run: node --check v2/core.js && node --check v2/migrate.js
+      - run: npm run check
