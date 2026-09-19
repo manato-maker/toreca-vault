@@ -4,6 +4,7 @@ import{assets,storeStats}from'./calculations.js';
 import{id,importLegacy}from'./schema.js';
 import{applyPurchase,applySale,applyOpening}from'./inventory.js';
 import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi}from'./v2-readonly.js';
+import{acceptanceSnapshot}from'../v2/acceptance.js';
 
 const jstToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let state=load(),remoteRevision='',remoteSaveTimer=null,remoteSaving=false,receiptTargetId='',v2ReadOnly=false,v2AssetsCache=null,v2ProfitCache=null;const initialHash=location.hash.slice(1).split('/');let route=initialHash[0]||'dashboard';let subtype=route==='inventory'&&['boxes','packs','cards'].includes(initialHash[1])?initialHash[1]:route==='ledger'&&initialHash[1]?initialHash[1]:'purchases';let calendarMonth=jstToday().slice(0,7);let selectedCalendarDate=jstToday(),reviewExpanded=false,pendingExpanded=false;
@@ -92,7 +93,7 @@ document.querySelector('#legacy-input').addEventListener('change',async e=>{if(v
 addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).split('/');route=next||'dashboard';if(route==='inventory')subtype=['boxes','packs','cards'].includes(param)?param:'boxes';if(route==='ledger'&&param)subtype=param;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
 async function bootRemote(){
- if(hasV2ReadOnly())try{const snapshot=await tryLoadV2ReadOnly(),applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認モード · revision ${applied.revision}`,'success');return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}
+ if(hasV2ReadOnly())try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}
  if(getSyncConfig().url)pullAndApply().catch(err=>console.warn('起動時同期に失敗しました',err));
 }
 bootRemote();
