@@ -3,6 +3,7 @@ const CONDITIONS=new Set(['あり','なし','対象外','']);
 const clone=x=>structuredClone(x);
 const qty=x=>Number(x?.quantity)||0;
 const money=x=>Number(x)||0;
+const knownMoney=x=>x===null||x===undefined||x===''?null:(Number.isFinite(Number(x))?Number(x):null);
 const key=x=>String(x||'').trim().toLocaleLowerCase('ja');
 const sortLots=lots=>lots.sort((a,b)=>String(a.acquiredAt||'').localeCompare(String(b.acquiredAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
 
@@ -19,13 +20,13 @@ export function validateState(state){
   return true;
 }
 function consumeFIFO(lots,sale){
-  let remaining=qty(sale),cost=0;
+  let remaining=qty(sale),cost=0,unknownCost=false;
   const wanted=inventoryKey(sale);
   const ordered=sortLots(lots.filter(l=>inventoryKey(l)===wanted));
   const available=ordered.reduce((n,l)=>n+qty(l),0);
   if(available<remaining)throw new Error('在庫不足');
-  for(const lot of ordered){if(!remaining)break;const take=Math.min(qty(lot),remaining);lot.quantity=qty(lot)-take;cost+=take*money(lot.unitCost);remaining-=take}
-  return cost;
+  for(const lot of ordered){if(!remaining)break;const take=Math.min(qty(lot),remaining);lot.quantity=qty(lot)-take;if(knownMoney(lot.unitCost)===null)unknownCost=true;else cost+=take*Number(lot.unitCost);remaining-=take}
+  return unknownCost?null:cost;
 }
 export function applyTransaction(state,input,mutationId){
   validateState(state);
@@ -33,15 +34,16 @@ export function applyTransaction(state,input,mutationId){
   if(state.lastMutationId===mutationId||state.auditLog.some(x=>x.mutationId===mutationId))return clone(state);
   if(!input?.id||state.transactions.some(x=>x.id===input.id))throw new Error('transactionId が重複または未設定です');
   if(!['purchase','sale','opening'].includes(input.type))throw new Error('transaction type が不正です');
+  if(!Number.isInteger(Number(input.quantity))||Number(input.quantity)<=0)throw new Error('quantity は正の整数が必要です');
   if(!CATEGORIES.has(input.category))throw new Error('category が不正です');
   const next=clone(state),t=clone(input);
   if(t.type==='purchase'){
-    next.inventoryLots.push({id:'lot-'+t.id,product:t.product,productKey:t.productKey||t.product,category:t.category,condition:t.condition||t.shrinkStatus||'',quantity:qty(t),unitCost:money(t.unitCost??t.price),acquiredAt:t.date||'',sourceTransactionId:t.id});
+    next.inventoryLots.push({id:'lot-'+t.id,product:t.product,productKey:t.productKey||t.product,category:t.category,condition:t.condition||t.shrinkStatus||'',quantity:qty(t),unitCost:knownMoney(t.unitCost??t.price),acquiredAt:t.date||'',sourceTransactionId:t.id});
   }else if(t.type==='sale'){
     t.acquisitionCost=consumeFIFO(next.inventoryLots,t);
     next.inventoryLots=next.inventoryLots.filter(l=>qty(l)>0);
   }else{
-    t.acquisitionCost=consumeFIFO(next.inventoryLots,{...t,category:'BOX'});
+    t.acquisitionCost=consumeFIFO(next.inventoryLots,t);
     next.inventoryLots=next.inventoryLots.filter(l=>qty(l)>0);
   }
   next.transactions.push(t);next.revision=money(next.revision)+1;next.lastMutationId=mutationId;
