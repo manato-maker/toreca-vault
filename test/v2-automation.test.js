@@ -7,3 +7,6 @@ test('health retains last success across failure',()=>{let s=recordAutomationHea
 
 test('market batch preserves failed quote and records health',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=runMarketBatch(s,[{productKey:'p',product:'P',category:'BOX',condition:'あり'}],()=>({ok:false}),'t');assert.equal(r.preserved,1);assert.equal(r.state.marketQuotes[0].price,100);assert.equal(r.state.automation.health.market.ok,false)});
 test('lottery batch counts duplicate without review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];const r=runLotteryBatch(s,[{applicationId:'104'}],'t');assert.equal(r.duplicate,1);assert.equal(r.review,0);assert.equal(r.state.automation.health.lottery.ok,true)});
+
+test('lottery mail without stable id is review and cannot create a record',()=>{const s=emptyV2();const r=mergeLotteryMail(s,{store:'X',product:'Y'});assert.equal(r.outcome,'review');assert.equal(r.state.lotteries.length,0)});
+test('lottery batch rejects non-array input',()=>{assert.throws(()=>runLotteryBatch(emptyV2(),null,'t'),/array/)});
