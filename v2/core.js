@@ -34,6 +34,7 @@ export function applyTransaction(state,input,mutationId){
   if(state.lastMutationId===mutationId||state.auditLog.some(x=>x.mutationId===mutationId))return clone(state);
   if(!input?.id||state.transactions.some(x=>x.id===input.id))throw new Error('transactionId が重複または未設定です');
   if(!['purchase','sale','opening'].includes(input.type))throw new Error('transaction type が不正です');
+  if(!String(input.productKey||input.product||'').trim())throw new Error('product が必要です');
   if(!Number.isInteger(Number(input.quantity))||Number(input.quantity)<=0)throw new Error('quantity は正の整数が必要です');
   if(!CATEGORIES.has(input.category))throw new Error('category が不正です');
   const next=clone(state),t=clone(input);
