@@ -15,6 +15,7 @@
 var TV2_AUTO_TZ = 'Asia/Tokyo';
 
 function installTorecaVaultV2Automation() {
+  tv2AutoAssertProductionReady_();
   tv2AutoRemoveTriggers_();
   ScriptApp.newTrigger('runTorecaVaultV2LotterySync').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TV2_AUTO_TZ).create();
   ScriptApp.newTrigger('runTorecaVaultV2LotterySync').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TV2_AUTO_TZ).create();
@@ -106,6 +107,11 @@ function tv2AutoValidate_(x) {
 }
 
 function tv2AutoCanonical_(x) { return JSON.stringify(x); }
+function tv2AutoAssertProductionReady_() {
+  var flags = PropertiesService.getScriptProperties();
+  if (flags.getProperty('TV_V2_LOTTERY_WRITER_READY') !== 'true') throw new Error('lottery writer is not acceptance-tested');
+  if (flags.getProperty('TV_V2_MARKET_WRITER_READY') !== 'true') throw new Error('market writer is not acceptance-tested');
+}
 function tv2AutoProp_(name) {
   var v = PropertiesService.getScriptProperties().getProperty(name);
   if (!v) throw new Error(name+' is not configured');
