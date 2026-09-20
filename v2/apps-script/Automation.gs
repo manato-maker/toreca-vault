@@ -34,6 +34,22 @@ function runTorecaVaultV2LotterySync() {
   return tv2AutoRecordHealthOnly_('lottery', 'parser-not-enabled');
 }
 
+function previewTorecaVaultV2Automation() {
+  var root = tv2AutoRead_();
+  var positive = root.inventoryLots.filter(function(x) { return Number(x.quantity) > 0; });
+  return {
+    ok: true,
+    readOnly: true,
+    schemaVersion: Number(root.schemaVersion),
+    revision: Number(root.revision) || 0,
+    lastMutationId: String(root.lastMutationId || ''),
+    transactions: root.transactions.length,
+    lotteries: root.lotteries.length,
+    positiveInventoryLots: positive.length,
+    inventoryQuantity: positive.reduce(function(n, x) { return n + Number(x.quantity || 0); }, 0)
+  };
+}
+
 function runTorecaVaultV2MarketSync() {
   // Production market fetching is deliberately not enabled until current
   // source parsing is acceptance-tested. Existing quotes must never be erased.
