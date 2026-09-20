@@ -10,3 +10,6 @@ test('browser adapter rejects v1 wrapper',()=>{
 });
 
 test('V2 token is session-only and never persisted in localStorage',()=>{const local=new Map(),session=new Map();global.localStorage={getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)};global.sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v),removeItem:k=>session.delete(k)};const url='https://script.google.com/macros/s/example/exec',token='123456789012345678901234';setVaultV2Config(url,token);assert.equal(JSON.parse(local.get('toreca-vault:v2:sync')).token,undefined);assert.equal(local.get('toreca-vault:v2:sync').includes(token),false);assert.deepEqual(getVaultV2Config(),{url,token});clearVaultV2Config();assert.deepEqual(getVaultV2Config(),{url:'',token:''})});
+
+
+test('V2 URL may persist across sessions but token must be re-entered',()=>{const local=new Map(),session=new Map();global.localStorage={getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)};global.sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v),removeItem:k=>session.delete(k)};const url='https://script.google.com/macros/s/example/exec',token='abcdefghijklmnopqrstuvwxyz123456';setVaultV2Config(url,token);session.clear();assert.deepEqual(getVaultV2Config(),{url,token:''})});
