@@ -12,3 +12,5 @@ test('zero and negative quantities are rejected',()=>{const s=emptyV2();for(cons
 test('opening consumes the stated category instead of forcing BOX',()=>{let s=emptyV2();s=applyTransaction(s,{id:'pk1',type:'purchase',product:'Pack',category:'パック',condition:'',quantity:1,price:100},'mp1');s=applyTransaction(s,{id:'op1',type:'opening',product:'Pack',category:'パック',condition:'',quantity:1},'mo1');assert.equal(s.inventoryLots.length,0)});
 
 test('special BOX can use unopened condition',()=>{let s=emptyV2();s=applyTransaction(s,{id:'sp1',type:'purchase',product:'スペシャルBOX',category:'BOX',condition:'未開封',quantity:1,price:100},'msp1');assert.equal(s.inventoryLots[0].condition,'未開封')});
+
+test('productless transaction is rejected without changing state',()=>{const s=emptyV2(),before=structuredClone(s);assert.throws(()=>applyTransaction(s,{id:'no-product',type:'purchase',category:'BOX',condition:'あり',quantity:1,price:100},'m-no-product'),/product/);assert.deepEqual(s,before)});
