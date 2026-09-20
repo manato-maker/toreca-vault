@@ -26,10 +26,10 @@ This branch remains isolated from production UI deployment. The v1 Drive file is
 - automated CI regression/syntax checks
 
 ## Production cutover blockers
-1. Rotate `TV_V2_SYNC_TOKEN`. A previously used token was exposed during setup and must not be reused.
-2. Reconnect the browser with the new token and verify a read of the REAL v2 file.
-3. Perform a smartphone read-only/UI acceptance on the production frontend build.
-4. Only after 1-3, deliberately enable the session write gate. Do not perform a test mutation against REAL merely to prove writing.
+1. **Completed 2026-09-20:** rotated `TV_V2_SYNC_TOKEN`, deployed the fixed V2 API as Apps Script Version 4, and reconnected the production frontend without persisting the token.
+2. **Completed 2026-09-20:** smartphone read-only acceptance against the REAL v2 file: `V2確認OK`, revision 1, 67 transactions, 22 inventory quantity. Drive-side baseline was independently reread and matched.
+3. **Completed in code/CI:** the write gate is revision-bound and is forced OFF after every verified UI write. REAL remains unmodified during cutover checks.
+4. Before the first real user transaction, deliberately enable the session write gate only from a freshly verified revision. Do not perform an artificial mutation against REAL merely to prove writing.
 5. Deploy/verify the separated V2 Gmail/market automation path before claiming those automations are operational.
 6. Inspect/remove obsolete Apps Script triggers from the old combined project so deleted V1 automation functions do not keep failing.
 
