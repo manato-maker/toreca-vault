@@ -17,3 +17,15 @@ test('V2 automation does not silently enable Gmail or market writes',async()=>{
  assert.match(s,/fetcher-not-enabled/);
  assert.match(s,/installTorecaVaultV2Automation/);
 });
+
+
+test('V2 automation exposes a read-only acceptance preview',async()=>{
+ const s=await read();
+ assert.match(s,/function previewTorecaVaultV2Automation\(\)/);
+ assert.match(s,/readOnly:\s*true/);
+ const start=s.indexOf('function previewTorecaVaultV2Automation()');
+ const end=s.indexOf('function runTorecaVaultV2MarketSync()',start);
+ const preview=s.slice(start,end);
+ assert.doesNotMatch(preview,/setContent\s*\(/);
+ assert.doesNotMatch(preview,/tv2AutoSaveVerified_\s*\(/);
+});
