@@ -46,3 +46,14 @@ export function parseLivePocketLotteryMail(mail){
  else if(!/申込みが完了しました/.test(body))return{ok:false,review:true,reason:'livepocket-status-unknown'};
  return normalizeLotteryMail({id,applicationId,livePocketId:applicationId,store:venue,product:event,status,source:'LivePocket',receivedAt});
 }
+
+
+export function classifyTradingCardLottery(event){
+ const x=String(event||'');
+ if(/ポケモン|ポケカ|Pokémon|Pokemon/i.test(x))return'pokemon';
+ if(/ワンピース|ONE\s*PIECE/i.test(x))return'one-piece';
+ if(/ドラゴンボール|DRAGON\s*BALL/i.test(x))return'dragon-ball';
+ if(/ユニオンアリーナ|UNION\s*ARENA/i.test(x))return'union-arena';
+ if(/遊戯王|YU-?GI-?OH/i.test(x))return'yu-gi-oh';
+ return'other-tcg';
+}
