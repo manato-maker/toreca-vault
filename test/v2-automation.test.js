@@ -23,3 +23,11 @@ test('LivePocket parser fails closed on unknown status or missing fields',()=>{a
 
 
 test('LivePocket parser quarantines non-Pokemon events',()=>{const r=parseLivePocketLotteryMail({id:'m5',subject:'[LivePocket]抽選結果のお知らせ（1046856255）',body:'残念ながら落選となりました。\nイベント名：【再販分】ワンピースカードゲーム 『蒼海の七傑』 抽選販売\n会場：TSUTAYAあべの橋店（大阪府）\n申込番号：1046856255'});assert.equal(r.review,true);assert.equal(r.reason,'non-pokemon-event')});
+
+
+test('LivePocket parser accepts trading card games beyond Pokemon',()=>{
+ for(const [id,event] of [['1046856255',"ワンピースカードゲーム 『蒼海の七傑』"],['1046856256','ドラゴンボールスーパーカードゲーム'],['1046856257','UNION ARENA ユニオンアリーナ'],['1046856258','遊戯王OCG']]){
+  const r=parseLivePocketLotteryMail({id:'mail-'+id,subject:'[LivePocket]抽選結果のお知らせ（'+id+'）',body:'残念ながら落選となりました。\\nイベント名：'+event+' 抽選販売\\n会場：トレカ店\\n申込番号：'+id});
+  assert.equal(r.ok,true);assert.equal(r.input.status,'落選');
+ }
+});
