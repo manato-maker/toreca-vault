@@ -34,8 +34,8 @@ test('V2 automation exposes a read-only acceptance preview',async()=>{
 test('production triggers fail closed until both writers are accepted',async()=>{
  const s=await read();
  assert.match(s,/tv2AutoAssertProductionReady_\(\)/);
- assert.match(s,/TV_V2_LOTTERY_WRITER_READY/);
- assert.match(s,/TV_V2_MARKET_WRITER_READY/);
+ assert.match(s,/function tv2AutoLotteryWriterReady_\(\) \{ return false; \}/);
+ assert.match(s,/function tv2AutoMarketWriterReady_\(\) \{ return false; \}/);
  const install=s.slice(s.indexOf('function installTorecaVaultV2Automation()'),s.indexOf('function uninstallTorecaVaultV2Automation()'));
  assert.match(install,/tv2AutoAssertProductionReady_\(\)/);
 });
