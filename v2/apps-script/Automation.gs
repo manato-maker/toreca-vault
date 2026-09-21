@@ -50,7 +50,16 @@ function acceptTorecaVaultV2ReadOnly() {
   };
 }
 
+function preflightTorecaVaultV2Deployment() {
+  var inspection = inspectTorecaVaultV2Automation();
+  if (!inspection.dataFileConfigured) throw new Error('TV_V2_DATA_FILE_ID is not configured');
+  if (!inspection.readOnly || inspection.productionReady) throw new Error('deployment must remain read-only');
+  if (inspection.v2TriggerHandlers.length) throw new Error('V2 triggers already exist');
+  return {ok:true, readOnly:true, productionReady:false, dataFileConfigured:true, v2TriggerHandlers:[]};
+}
+
 function acceptTorecaVaultV2Deployment() {
+  preflightTorecaVaultV2Deployment();
   var base = acceptTorecaVaultV2ReadOnly();
   var market = acceptTorecaVaultV2MarketReadOnly();
   var inspection = inspectTorecaVaultV2Automation();
