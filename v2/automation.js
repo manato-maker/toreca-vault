@@ -75,3 +75,16 @@ export function parseToysRUsLotteryMail(mail){
  if(!/抽選受付が完了しました/.test(body))return{ok:false,review:true,reason:'toysrus-status-unknown'};
  return normalizeLotteryMail({id,store:'トイザらス '+store,product,tcg:classifyTradingCardLottery(product),status:'応募済み',source:'ToysRUs',receivedAt});
 }
+
+
+export function parseGoogleFormLotteryMail(mail){
+ const id=String(mail?.id||'').trim(),subject=String(mail?.subject||''),body=String(mail?.body||''),receivedAt=String(mail?.receivedAt||mail?.email_ts||'');
+ if(!id||!body||!/^フォームにご記入いただきありがとうございます:/.test(subject))return{ok:false,review:true,reason:'not-google-form-or-missing-id'};
+ let store='';
+ if(/owned by カードラボ ゲーマーズ/.test(body)){const m=subject.match(/【([^】]+)】/);if(m)store='カードラボ '+m[1]}
+ else {const m=body.match(/こちらは([^\n]+?)の抽選販売応募フォームです/);if(m)store=m[1].trim()}
+ const selected=[...body.matchAll(/✓\s*\n([^\n]+)/g)].map(m=>m[1].trim()).filter(Boolean);
+ if(!store||selected.length!==1)return{ok:false,review:true,reason:selected.length>1?'multiple-products-review':'google-form-fields-missing'};
+ const product=selected[0];
+ return normalizeLotteryMail({id,store,product,tcg:classifyTradingCardLottery(subject+' '+body.slice(0,500)+' '+product),status:'応募済み',source:'GoogleForms',receivedAt});
+}
