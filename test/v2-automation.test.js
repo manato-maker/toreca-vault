@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,normalizeMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -81,4 +81,17 @@ test('lottery parser router accepts supported providers and fails closed otherwi
  assert.equal(toys.ok,true);assert.equal(toys.input.source,'ToysRUs');
  const unknown=parseLotteryMail({id:'router-x',subject:'未知の抽選',body:'応募完了'});
  assert.equal(unknown.review,true);assert.equal(unknown.reason,'unsupported-lottery-mail');
+});
+
+
+test('market normalizer requires valid price timestamp and source',()=>{
+ assert.deepEqual(normalizeMarketFetch({ok:true,price:1234,checkedAt:'2026-09-21T12:00:00+09:00',source:'shop'}),{ok:true,price:1234,checkedAt:'2026-09-21T12:00:00+09:00',source:'shop'});
+ assert.equal(normalizeMarketFetch({ok:true,price:1234,source:'shop'}).ok,false);
+ assert.equal(normalizeMarketFetch({ok:true,price:'NaN',checkedAt:'x',source:'shop'}).ok,false);
+ assert.equal(normalizeMarketFetch({ok:true,price:-1,checkedAt:'x',source:'shop'}).ok,false);
+});
+test('market fetch preserves prior quote when provenance is missing',()=>{
+ const state={marketQuotes:[{product:'A',productKey:'a',condition:'あり',price:1000,checkedAt:'old',source:'old',history:[]}]};
+ const r=applyMarketFetch(state,{product:'A',productKey:'a',condition:'あり'},{ok:true,price:2000});
+ assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,1000);
 });
