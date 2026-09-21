@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseToysRUsLotteryMail}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -63,4 +63,14 @@ test('ToysRUs parser extracts product and pickup store without persisting member
 test('ToysRUs parser fails closed on incomplete or unrelated mail',()=>{
  assert.equal(parseToysRUsLotteryMail({id:'toys-2',subject:'申込受付完了『商品』',body:'抽選受付が完了しました。'}).review,true);
  assert.equal(parseToysRUsLotteryMail({id:'',subject:'申込受付完了『商品』',body:'●配信元：日本トイザらス株式会社'}).review,true);
+});
+
+
+test('Google Forms lottery parser accepts one selected product and strips personal fields',()=>{
+ const r=parseGoogleFormLotteryMail({id:'gf-1',subject:'フォームにご記入いただきありがとうございます: ONE PIECEカードゲーム【OP-17】抽選販売応募フォーム',body:'フォームの回答\\nこちらはトレカプラザ55通販店の抽選販売応募フォームです\\n顧客ID *\\n123456789\\nお名前 *\\nテスト太郎\\n✓\\nブースターパック 「世界最強の戦士」1BOX(24パック) ¥5,760'});
+ assert.equal(r.ok,true);assert.equal(r.input.store,'トレカプラザ55通販店');assert.equal(r.input.tcg,'one-piece');assert.equal(JSON.stringify(r.input).includes('123456789'),false);assert.equal(JSON.stringify(r.input).includes('テスト太郎'),false);
+});
+test('Google Forms lottery parser sends multi-product responses to review',()=>{
+ const r=parseGoogleFormLotteryMail({id:'gf-2',subject:'フォームにご記入いただきありがとうございます: 【なんば店】抽選応募フォーム',body:'This form is owned by カードラボ ゲーマーズ.\\n✓\\n商品A\\n✓\\n商品B'});
+ assert.equal(r.review,true);assert.equal(r.reason,'multiple-products-review');
 });
