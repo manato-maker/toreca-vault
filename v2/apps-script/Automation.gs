@@ -58,6 +58,22 @@ function preflightTorecaVaultV2Deployment() {
   return {ok:true, readOnly:true, productionReady:false, dataFileConfigured:true, v2TriggerHandlers:[]};
 }
 
+function getTorecaVaultV2DeploymentChecklist() {
+  var inspection = inspectTorecaVaultV2Automation();
+  return {
+    ok:true,
+    readOnly:true,
+    sourceComplete:
+      typeof acceptTorecaVaultV2ReadOnly === 'function' &&
+      typeof acceptTorecaVaultV2MarketReadOnly === 'function' &&
+      typeof preflightTorecaVaultV2Deployment === 'function',
+    dataFileConfigured:inspection.dataFileConfigured,
+    productionReady:inspection.productionReady,
+    v2TriggerHandlers:inspection.v2TriggerHandlers,
+    nextAction:'acceptTorecaVaultV2Deployment'
+  };
+}
+
 function acceptTorecaVaultV2Deployment() {
   preflightTorecaVaultV2Deployment();
   var base = acceptTorecaVaultV2ReadOnly();
