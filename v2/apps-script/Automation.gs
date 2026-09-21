@@ -78,6 +78,7 @@ function acceptTorecaVaultV2Deployment() {
   preflightTorecaVaultV2Deployment();
   var base = acceptTorecaVaultV2ReadOnly();
   var market = acceptTorecaVaultV2MarketReadOnly();
+  var lottery = previewTorecaVaultV2LotteryMailParsing();
   var inspection = inspectTorecaVaultV2Automation();
   if (!base.accepted || !market.accepted) throw new Error('read-only acceptance incomplete');
   if (inspection.productionReady) throw new Error('production must remain locked');
@@ -91,6 +92,7 @@ function acceptTorecaVaultV2Deployment() {
     lotteries:base.lotteries,
     inventoryQuantity:base.inventoryQuantity,
     marketAccepted:true,
+    lotteryPreview:{accepted:lottery.accepted, review:lottery.review, providers:lottery.providers},
     productionReady:false,
     v2TriggerHandlers:[]
   };
