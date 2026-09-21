@@ -29,6 +29,27 @@ function uninstallTorecaVaultV2Automation() {
   return {ok:true, installed:false};
 }
 
+function acceptTorecaVaultV2ReadOnly() {
+  var preview = previewTorecaVaultV2Automation();
+  var inspection = inspectTorecaVaultV2Automation();
+  if (!preview.readOnly || !inspection.readOnly) throw new Error('read-only acceptance failed');
+  if (Number(preview.schemaVersion) !== 2) throw new Error('unexpected schemaVersion');
+  if (inspection.productionReady) throw new Error('production writers must remain locked');
+  if (inspection.v2TriggerHandlers.length) throw new Error('V2 triggers must not exist during read-only acceptance');
+  return {
+    ok: true,
+    readOnly: true,
+    accepted: true,
+    revision: preview.revision,
+    lastMutationId: preview.lastMutationId,
+    transactions: preview.transactions,
+    lotteries: preview.lotteries,
+    inventoryQuantity: preview.inventoryQuantity,
+    productionReady: false,
+    v2TriggerHandlers: []
+  };
+}
+
 function inspectTorecaVaultV2Automation() {
   var triggers = ScriptApp.getProjectTriggers().map(function(t) {
     return String(t.getHandlerFunction());
