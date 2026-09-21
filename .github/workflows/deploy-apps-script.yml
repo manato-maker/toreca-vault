@@ -1,0 +1,47 @@
+name: Deploy V2 Apps Script
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toreca-vault-v2-apps-script
+  cancel-in-progress: false
+
+jobs:
+  verify-and-push:
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Prepare isolated Apps Script source
+        run: |
+          mkdir -p .apps-script-v2
+          cp v2/apps-script/Automation.gs .apps-script-v2/Automation.gs
+          cat > .apps-script-v2/appsscript.json <<'EOF'
+          {
+            "timeZone": "Asia/Tokyo",
+            "exceptionLogging": "STACKDRIVER",
+            "runtimeVersion": "V8"
+          }
+          EOF
+      - name: Configure clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":".apps-script-v2"}\n' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Push verified source
+        run: npx --yes @google/clasp@3.0.6 push --force
