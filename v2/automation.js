@@ -31,3 +31,18 @@ export function prepareLotteryMailBatch(rawInputs){
  for(const raw of rawInputs){const r=normalizeLotteryMail(raw);if(r.ok)accepted.push(r.input);else review.push({reason:r.reason,input:r.input||raw||{}})}
  return{accepted,review};
 }
+
+
+export function parseLivePocketLotteryMail(mail){
+ const id=String(mail?.id||'').trim(),subject=String(mail?.subject||''),body=String(mail?.body||''),receivedAt=String(mail?.receivedAt||mail?.email_ts||'');
+ if(!id||!body||subject.indexOf('[LivePocket]')<0)return{ok:false,review:true,reason:'not-livepocket-or-missing-id'};
+ const applicationId=(subject.match(/[（(](\d{6,})[）)]/)||body.match(/申込番号[：:]\s*(\d{6,})/))?.[1]||'';
+ const event=(body.match(/イベント名[：:]\s*([^\n]+)/)||[])[1]?.trim()||'';
+ const venue=(body.match(/会場[：:]\s*([^\n]+)/)||[])[1]?.trim()||'';
+ if(!applicationId||!event||!venue)return{ok:false,review:true,reason:'livepocket-fields-missing'};
+ let status='応募済み';
+ if(/落選となりました/.test(body))status='落選';
+ else if(/当選となりました|当選いたしました|ご当選/.test(body))status='当選';
+ else if(!/申込みが完了しました/.test(body))return{ok:false,review:true,reason:'livepocket-status-unknown'};
+ return normalizeLotteryMail({id,applicationId,livePocketId:applicationId,store:venue,product:event,status,source:'LivePocket',receivedAt});
+}
