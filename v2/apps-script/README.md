@@ -37,3 +37,7 @@ The phone-side acceptance path is intentionally one-shot:
 Do not paste helper functions in separate fragments. If the complete source cannot be saved reliably, stop rather than assembling a partial production script.
 
 Production trigger installation is deliberately impossible in the current source because both writer readiness functions return `false`.
+
+## Market read-only acceptance
+
+After the one-shot source deployment, `acceptTorecaVaultV2MarketReadOnly()` verifies market normalization and fail-closed behavior without fetching live prices or writing REAL V2. It must return `readOnly: true`, `accepted: true`, and `productionReady: false` before any market writer work proceeds.
