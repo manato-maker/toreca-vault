@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -29,4 +29,14 @@ test('LivePocket parser accepts trading card games beyond Pokemon',()=>{
   const r=parseLivePocketLotteryMail({id:'mail-'+id,subject:'[LivePocket]抽選結果のお知らせ（'+id+'）',body:'残念ながら落選となりました。\\nイベント名：'+event+' 抽選販売\\n会場：トレカ店\\n申込番号：'+id});
   assert.equal(r.ok,true);assert.equal(r.input.status,'落選');
  }
+});
+
+
+test('trading card lottery classifier recognizes major TCGs without excluding others',()=>{
+ assert.equal(classifyTradingCardLottery('ポケモンカードゲーム'),'pokemon');
+ assert.equal(classifyTradingCardLottery('ONE PIECE カードゲーム'),'one-piece');
+ assert.equal(classifyTradingCardLottery('ドラゴンボールスーパーカードゲーム'),'dragon-ball');
+ assert.equal(classifyTradingCardLottery('UNION ARENA'),'union-arena');
+ assert.equal(classifyTradingCardLottery('遊戯王OCG'),'yu-gi-oh');
+ assert.equal(classifyTradingCardLottery('新作トレーディングカード抽選'),'other-tcg');
 });
