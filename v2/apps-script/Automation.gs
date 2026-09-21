@@ -113,6 +113,83 @@ function inspectTorecaVaultV2Automation() {
   };
 }
 
+function previewTorecaVaultV2LotteryMailParsing() {
+  var threads = GmailApp.search('newer_than:30d (LivePocket OR "日本トイザらス株式会社" OR "フォームにご記入いただきありがとうございます")', 0, 100);
+  var accepted = 0, review = 0, providers = {};
+  threads.forEach(function(thread) {
+    thread.getMessages().forEach(function(message) {
+      var parsed = tv2AutoParseLotteryMail_({
+        id:String(message.getId() || ''),
+        subject:String(message.getSubject() || ''),
+        body:String(message.getPlainBody() || ''),
+        receivedAt:message.getDate() ? message.getDate().toISOString() : ''
+      });
+      if (parsed.ok) {
+        accepted++;
+        var source = String(parsed.input.source || 'unknown');
+        providers[source] = (providers[source] || 0) + 1;
+      } else review++;
+    });
+  });
+  return {ok:true, readOnly:true, threads:threads.length, accepted:accepted, review:review, providers:providers, productionReady:false};
+}
+
+function tv2AutoNormalizeLotteryMail_(input) {
+  var x=input||{}, id=String(x.id||'').trim(), applicationId=String(x.applicationId||x.livePocketId||'').trim();
+  if (!id && !applicationId) return {ok:false, review:true, reason:'missing-stable-id'};
+  var out={};
+  ['id','applicationId','livePocketId','store','product','tcg','status','source','receivedAt'].forEach(function(k){
+    if (x[k] !== undefined && x[k] !== null && String(x[k]).trim() !== '') out[k] = typeof x[k] === 'string' ? x[k].trim() : x[k];
+  });
+  if (!out.store || !out.product) return {ok:false, review:true, reason:'missing-store-or-product'};
+  return {ok:true, review:false, input:out};
+}
+function tv2AutoClassifyTcg_(value) {
+  var x=String(value||'');
+  if (/ポケモン|ポケカ|Pokémon|Pokemon/i.test(x)) return 'pokemon';
+  if (/ワンピース|ONE\s*PIECE/i.test(x)) return 'one-piece';
+  if (/ドラゴンボール|DRAGON\s*BALL/i.test(x)) return 'dragon-ball';
+  if (/ユニオンアリーナ|UNION\s*ARENA/i.test(x)) return 'union-arena';
+  if (/遊戯王|YU-?GI-?OH/i.test(x)) return 'yu-gi-oh';
+  return 'other-tcg';
+}
+function tv2AutoParseLivePocket_(mail) {
+  var id=String(mail.id||'').trim(), subject=String(mail.subject||''), body=String(mail.body||'');
+  if (!id || !body || subject.indexOf('[LivePocket]') < 0) return {ok:false, review:true, reason:'not-livepocket'};
+  var am=subject.match(/[（(](\d{6,})[）)]/) || body.match(/申込番号[：:]\s*(\d{6,})/);
+  var em=body.match(/イベント名[：:]\s*([^\n]+)/), vm=body.match(/会場[：:]\s*([^\n]+)/);
+  if (!am || !em || !vm) return {ok:false, review:true, reason:'livepocket-fields-missing'};
+  var status='応募済み';
+  if (/落選となりました/.test(body)) status='落選';
+  else if (/当選となりました|当選いたしました|ご当選/.test(body)) status='当選';
+  else if (!/申込みが完了しました/.test(body)) return {ok:false, review:true, reason:'livepocket-status-unknown'};
+  return tv2AutoNormalizeLotteryMail_({id:id,applicationId:am[1],livePocketId:am[1],store:vm[1],product:em[1],tcg:tv2AutoClassifyTcg_(em[1]),status:status,source:'LivePocket',receivedAt:mail.receivedAt});
+}
+function tv2AutoParseToysRUs_(mail) {
+  var id=String(mail.id||'').trim(), subject=String(mail.subject||''), body=String(mail.body||'');
+  if (!id || !body || !/^申込受付完了/.test(subject) || !/日本トイザらス株式会社/.test(body)) return {ok:false, review:true, reason:'not-toysrus'};
+  var pm=subject.match(/申込受付完了[『「]\s*([^』」]+)[』」]/) || body.match(/[『「]([^』」]+)[』」]の抽選受付が完了/);
+  var sm=body.match(/受取登録店舗は[「『]([^」』]+)[」』]/);
+  if (!pm || !sm || !/抽選受付が完了しました/.test(body)) return {ok:false, review:true, reason:'toysrus-fields-missing'};
+  return tv2AutoNormalizeLotteryMail_({id:id,store:'トイザらス '+sm[1],product:pm[1],tcg:tv2AutoClassifyTcg_(pm[1]),status:'応募済み',source:'ToysRUs',receivedAt:mail.receivedAt});
+}
+function tv2AutoParseGoogleForm_(mail) {
+  var id=String(mail.id||'').trim(), subject=String(mail.subject||''), body=String(mail.body||'');
+  if (!id || !body || !/^フォームにご記入いただきありがとうございます:/.test(subject)) return {ok:false, review:true, reason:'not-google-form'};
+  var store='', m;
+  if (/owned by カードラボ ゲーマーズ/.test(body)) { m=subject.match(/【([^】]+)】/); if (m) store='カードラボ '+m[1]; }
+  else { m=body.match(/こちらは([^\n]+?)の抽選販売応募フォームです/); if (m) store=m[1].trim(); }
+  var selected=[], re=/✓\s*\n([^\n]+)/g, hit;
+  while ((hit=re.exec(body)) !== null) selected.push(hit[1].trim());
+  if (!store || selected.length !== 1) return {ok:false, review:true, reason:selected.length>1?'multiple-products-review':'google-form-fields-missing'};
+  return tv2AutoNormalizeLotteryMail_({id:id,store:store,product:selected[0],tcg:tv2AutoClassifyTcg_(subject+' '+selected[0]),status:'応募済み',source:'GoogleForms',receivedAt:mail.receivedAt});
+}
+function tv2AutoParseLotteryMail_(mail) {
+  var parsers=[tv2AutoParseLivePocket_,tv2AutoParseToysRUs_,tv2AutoParseGoogleForm_];
+  for (var i=0;i<parsers.length;i++) { var r=parsers[i](mail); if (r.ok) return r; }
+  return {ok:false, review:true, reason:'unsupported-lottery-mail'};
+}
+
 function runTorecaVaultV2LotterySync() {
   // Production Gmail parsing is deliberately not enabled until its parser is
   // deployed and acceptance-tested against current REAL mail samples.
