@@ -38,7 +38,6 @@ export function parseLivePocketLotteryMail(mail){
  if(!id||!body||subject.indexOf('[LivePocket]')<0)return{ok:false,review:true,reason:'not-livepocket-or-missing-id'};
  const applicationId=(subject.match(/[（(](\d{6,})[）)]/)||body.match(/申込番号[：:]\s*(\d{6,})/))?.[1]||'';
  const event=(body.match(/イベント名[：:]\s*([^\n]+)/)||[])[1]?.trim()||'';
- if(!/ポケモン|ポケカ|Pokémon|Pokemon/i.test(event))return{ok:false,review:true,reason:'non-pokemon-event'};
  const venue=(body.match(/会場[：:]\s*([^\n]+)/)||[])[1]?.trim()||'';
  if(!applicationId||!event||!venue)return{ok:false,review:true,reason:'livepocket-fields-missing'};
  let status='応募済み';
