@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -45,4 +45,12 @@ test('trading card lottery classifier recognizes major TCGs without excluding ot
 test('LivePocket parser carries TCG classification through normalization',()=>{
  const cases=[['ポケモンカードゲーム','pokemon'],['ワンピースカードゲーム','one-piece'],['ドラゴンボールスーパーカードゲーム','dragon-ball'],['UNION ARENA','union-arena'],['遊戯王OCG','yu-gi-oh']];
  for(let i=0;i<cases.length;i++){const [event,tcg]=cases[i],id=String(1050000000+i);const r=parseLivePocketLotteryMail({id:'tcg-'+i,subject:'[LivePocket]抽選申込完了のお知らせ（'+id+'）',body:'下記のチケットの申込みが完了しました。\\nイベント名：'+event+' 抽選販売\\n会場：トレカ店\\n申込番号：'+id});assert.equal(r.ok,true);assert.equal(r.input.tcg,tcg)}
+});
+
+
+test('lottery mail preparation pipeline accepts parsed TCG mail and quarantines unknown mail',()=>{
+ const ok=prepareLotteryMailForMerge({id:'pipe-1',subject:'[LivePocket]抽選申込完了のお知らせ（1051234567）',body:'申込みが完了しました。\\nイベント名：ONE PIECE カードゲーム 抽選販売\\n会場：カードショップ\\n申込番号：1051234567'});
+ assert.equal(ok.accepted.length,1);assert.equal(ok.review.length,0);assert.equal(ok.accepted[0].tcg,'one-piece');
+ const bad=prepareLotteryMailForMerge({id:'pipe-2',subject:'不明な抽選メール',body:'結果'});
+ assert.equal(bad.accepted.length,0);assert.equal(bad.review.length,1);assert.equal(bad.review[0].reason,'not-livepocket-or-missing-id');
 });
