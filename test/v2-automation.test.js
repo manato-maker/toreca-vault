@@ -22,7 +22,6 @@ test('LivePocket result mail parses rejection without guessing',()=>{const r=par
 test('LivePocket parser fails closed on unknown status or missing fields',()=>{assert.equal(parseLivePocketLotteryMail({id:'m3',subject:'[LivePocket]通知（123456）',body:'イベント名：X\n会場：Y\n申込番号：123456'}).review,true);assert.equal(parseLivePocketLotteryMail({id:'m4',subject:'other',body:'x'}).review,true)});
 
 
-test('LivePocket parser quarantines non-Pokemon events',()=>{const r=parseLivePocketLotteryMail({id:'m5',subject:'[LivePocket]抽選結果のお知らせ（1046856255）',body:'残念ながら落選となりました。\nイベント名：【再販分】ワンピースカードゲーム 『蒼海の七傑』 抽選販売\n会場：TSUTAYAあべの橋店（大阪府）\n申込番号：1046856255'});assert.equal(r.review,true);assert.equal(r.reason,'non-pokemon-event')});
 
 
 test('LivePocket parser accepts trading card games beyond Pokemon',()=>{
