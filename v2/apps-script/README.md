@@ -45,3 +45,5 @@ After the one-shot source deployment, `acceptTorecaVaultV2MarketReadOnly()` veri
 `acceptTorecaVaultV2Deployment()` is the preferred phone-side acceptance entry point. It combines the read-only data check and market normalization check into one run; it still cannot enable production writers or install triggers.
 
 Before the combined acceptance runs, it now performs a fail-closed preflight: `TV_V2_DATA_FILE_ID` must exist, production readiness must still be false, and no V2 triggers may already be installed. A failed preflight performs no write.
+
+For troubleshooting after the one-shot paste, `getTorecaVaultV2DeploymentChecklist()` is read-only and reports whether the complete acceptance functions are present, the V2 file property is configured, production remains locked, and V2 triggers are absent. It does not replace the preferred single acceptance call.
