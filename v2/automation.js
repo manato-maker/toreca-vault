@@ -59,8 +59,14 @@ export function classifyTradingCardLottery(event){
 }
 
 
+export function parseLotteryMail(mail){
+ const parsers=[parseLivePocketLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail];
+ const reasons=[];
+ for(const parser of parsers){const r=parser(mail);if(r.ok)return r;reasons.push(r.reason)}
+ return{ok:false,review:true,reason:'unsupported-lottery-mail',details:reasons};
+}
 export function prepareLotteryMailForMerge(mail){
- const parsed=parseLivePocketLotteryMail(mail);
+ const parsed=parseLotteryMail(mail);
  if(!parsed.ok)return{accepted:[],review:[{reason:parsed.reason,input:{id:String(mail?.id||''),subject:String(mail?.subject||'')}}]};
  return prepareLotteryMailBatch([parsed.input]);
 }
