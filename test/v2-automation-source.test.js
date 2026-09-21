@@ -70,3 +70,22 @@ test('one-step read-only acceptance keeps production locked and trigger-free',as
  assert.doesNotMatch(accept,/setContent\s*\(/);
  assert.doesNotMatch(accept,/newTrigger\s*\(/);
 });
+
+
+test('Gmail lottery integration remains read-only and privacy-minimal',async()=>{
+ const s=await read();
+ assert.match(s,/function previewTorecaVaultV2LotteryMailParsing\(\)/);
+ assert.match(s,/tv2AutoParseLivePocket_/);
+ assert.match(s,/tv2AutoParseToysRUs_/);
+ assert.match(s,/tv2AutoParseGoogleForm_/);
+ const start=s.indexOf('function previewTorecaVaultV2LotteryMailParsing()');
+ const end=s.indexOf('function runTorecaVaultV2LotterySync()',start);
+ assert.ok(start >= 0 && end > start);
+ const preview=s.slice(start,end);
+ assert.match(preview,/GmailApp\.search/);
+ assert.match(preview,/readOnly:true/);
+ assert.doesNotMatch(preview,/setContent\s*\(/);
+ assert.doesNotMatch(preview,/tv2AutoSaveVerified_\s*\(/);
+ assert.doesNotMatch(preview,/createDraft|sendEmail|moveToTrash|markRead/);
+ assert.doesNotMatch(preview,/会員番号|顧客ID|お名前/);
+});
