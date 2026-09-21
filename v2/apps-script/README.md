@@ -43,3 +43,5 @@ Production trigger installation is deliberately impossible in the current source
 After the one-shot source deployment, `acceptTorecaVaultV2MarketReadOnly()` verifies market normalization and fail-closed behavior without fetching live prices or writing REAL V2. It must return `readOnly: true`, `accepted: true`, and `productionReady: false` before any market writer work proceeds.
 
 `acceptTorecaVaultV2Deployment()` is the preferred phone-side acceptance entry point. It combines the read-only data check and market normalization check into one run; it still cannot enable production writers or install triggers.
+
+Before the combined acceptance runs, it now performs a fail-closed preflight: `TV_V2_DATA_FILE_ID` must exist, production readiness must still be false, and no V2 triggers may already be installed. A failed preflight performs no write.
