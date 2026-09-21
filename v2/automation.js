@@ -44,7 +44,7 @@ export function parseLivePocketLotteryMail(mail){
  if(/落選となりました/.test(body))status='落選';
  else if(/当選となりました|当選いたしました|ご当選/.test(body))status='当選';
  else if(!/申込みが完了しました/.test(body))return{ok:false,review:true,reason:'livepocket-status-unknown'};
- return normalizeLotteryMail({id,applicationId,livePocketId:applicationId,store:venue,product:event,status,source:'LivePocket',receivedAt});
+ return normalizeLotteryMail({id,applicationId,livePocketId:applicationId,store:venue,product:event,tcg:classifyTradingCardLottery(event),status,source:'LivePocket',receivedAt});
 }
 
 
