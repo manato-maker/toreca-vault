@@ -89,3 +89,16 @@ test('Gmail lottery integration remains read-only and privacy-minimal',async()=>
  assert.doesNotMatch(preview,/createDraft|sendEmail|moveToTrash|markRead/);
  assert.doesNotMatch(preview,/会員番号|顧客ID|お名前/);
 });
+
+
+test('single deployment acceptance includes read-only Gmail parser preview',async()=>{
+ const s=await read();
+ const start=s.indexOf('function acceptTorecaVaultV2Deployment()');
+ const end=s.indexOf('function inspectTorecaVaultV2Automation()',start);
+ assert.ok(start >= 0 && end > start);
+ const accept=s.slice(start,end);
+ assert.match(accept,/previewTorecaVaultV2LotteryMailParsing\(\)/);
+ assert.match(accept,/lotteryPreview:/);
+ assert.doesNotMatch(accept,/tv2AutoSaveVerified_\s*\(/);
+ assert.doesNotMatch(accept,/newTrigger\s*\(/);
+});
