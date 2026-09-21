@@ -23,3 +23,17 @@ Do not build the Apps Script project by repeatedly pasting small code fragments 
 - On verification failure, restore and verify the original bytes.
 
 The current `Automation.gs` intentionally keeps Gmail parsing and market fetching disabled.
+
+
+## Phone deployment acceptance
+
+The phone-side acceptance path is intentionally one-shot:
+
+1. Paste/replace the complete tested `Automation.gs` once.
+2. Save once.
+3. Run `acceptTorecaVaultV2ReadOnly()` once.
+4. The acceptance must report `readOnly: true`, `accepted: true`, `productionReady: false`, and no V2 trigger handlers.
+
+Do not paste helper functions in separate fragments. If the complete source cannot be saved reliably, stop rather than assembling a partial production script.
+
+Production trigger installation is deliberately impossible in the current source because both writer readiness functions return `false`.
