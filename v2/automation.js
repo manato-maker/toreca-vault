@@ -57,3 +57,10 @@ export function classifyTradingCardLottery(event){
  if(/遊戯王|YU-?GI-?OH/i.test(x))return'yu-gi-oh';
  return'other-tcg';
 }
+
+
+export function prepareLotteryMailForMerge(mail){
+ const parsed=parseLivePocketLotteryMail(mail);
+ if(!parsed.ok)return{accepted:[],review:[{reason:parsed.reason,input:{id:String(mail?.id||''),subject:String(mail?.subject||'')}}]};
+ return prepareLotteryMailBatch([parsed.input]);
+}
