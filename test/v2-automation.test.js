@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -10,3 +10,8 @@ test('lottery batch counts duplicate without review',()=>{const s=emptyV2();s.lo
 
 test('lottery mail without stable id is review and cannot create a record',()=>{const s=emptyV2();const r=mergeLotteryMail(s,{store:'X',product:'Y'});assert.equal(r.outcome,'review');assert.equal(r.state.lotteries.length,0)});
 test('lottery batch rejects non-array input',()=>{assert.throws(()=>runLotteryBatch(emptyV2(),null,'t'),/array/)});
+
+
+test('lottery mail normalization rejects unstable or incomplete records',()=>{assert.equal(normalizeLotteryMail({store:'X',product:'Y'}).reason,'missing-stable-id');assert.equal(normalizeLotteryMail({id:'m1',store:'X'}).reason,'missing-store-or-product')});
+test('lottery mail normalization trims accepted fields',()=>{const r=normalizeLotteryMail({id:' m1 ',store:' X ',product:' Y ',applicationId:' 104 '});assert.equal(r.ok,true);assert.deepEqual(r.input,{id:'m1',applicationId:'104',store:'X',product:'Y'})});
+test('lottery mail batch separates review items before merge',()=>{const r=prepareLotteryMailBatch([{id:'m1',store:'X',product:'Y'},{store:'X',product:'Y'}]);assert.equal(r.accepted.length,1);assert.equal(r.review.length,1);assert.equal(r.review[0].reason,'missing-stable-id')});
