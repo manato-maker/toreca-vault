@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -73,4 +73,12 @@ test('Google Forms lottery parser accepts one selected product and strips person
 test('Google Forms lottery parser sends multi-product responses to review',()=>{
  const r=parseGoogleFormLotteryMail({id:'gf-2',subject:'フォームにご記入いただきありがとうございます: 【なんば店】抽選応募フォーム',body:'This form is owned by カードラボ ゲーマーズ.\n✓\n商品A\n✓\n商品B'});
  assert.equal(r.review,true);assert.equal(r.reason,'multiple-products-review');
+});
+
+
+test('lottery parser router accepts supported providers and fails closed otherwise',()=>{
+ const toys=parseLotteryMail({id:'router-1',subject:'申込受付完了『 ポケモンカードゲーム BOX販売』',body:'『 ポケモンカードゲーム BOX販売』の抽選受付が完了しました。\n受取登録店舗は「奈良店」です。\n●配信元：日本トイザらス株式会社'});
+ assert.equal(toys.ok,true);assert.equal(toys.input.source,'ToysRUs');
+ const unknown=parseLotteryMail({id:'router-x',subject:'未知の抽選',body:'応募完了'});
+ assert.equal(unknown.review,true);assert.equal(unknown.reason,'unsupported-lottery-mail');
 });
