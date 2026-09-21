@@ -89,6 +89,29 @@ function previewTorecaVaultV2Automation() {
   };
 }
 
+function tv2AutoNormalizeMarketFetch_(result) {
+  var x = result || {};
+  var price = Number(x.price);
+  if (x.ok !== true || !isFinite(price) || price < 0) return {ok:false, reason:'invalid-market-result'};
+  var checkedAt = String(x.checkedAt || '').trim();
+  var source = String(x.source || '').trim();
+  if (!checkedAt || !source) return {ok:false, reason:'missing-market-provenance'};
+  return {ok:true, price:price, checkedAt:checkedAt, source:source};
+}
+
+function tv2AutoPreviewMarketFetch_(result) {
+  var normalized = tv2AutoNormalizeMarketFetch_(result);
+  return {
+    ok: normalized.ok,
+    readOnly: true,
+    wouldUpdate: normalized.ok,
+    reason: normalized.ok ? '' : normalized.reason,
+    price: normalized.ok ? normalized.price : null,
+    checkedAt: normalized.ok ? normalized.checkedAt : '',
+    source: normalized.ok ? normalized.source : ''
+  };
+}
+
 function runTorecaVaultV2MarketSync() {
   // Production market fetching is deliberately not enabled until current
   // source parsing is acceptance-tested. Existing quotes must never be erased.
