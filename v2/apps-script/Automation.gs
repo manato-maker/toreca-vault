@@ -50,6 +50,27 @@ function acceptTorecaVaultV2ReadOnly() {
   };
 }
 
+function acceptTorecaVaultV2Deployment() {
+  var base = acceptTorecaVaultV2ReadOnly();
+  var market = acceptTorecaVaultV2MarketReadOnly();
+  var inspection = inspectTorecaVaultV2Automation();
+  if (!base.accepted || !market.accepted) throw new Error('read-only acceptance incomplete');
+  if (inspection.productionReady) throw new Error('production must remain locked');
+  if (inspection.v2TriggerHandlers.length) throw new Error('V2 triggers must remain absent');
+  return {
+    ok:true,
+    readOnly:true,
+    accepted:true,
+    revision:base.revision,
+    transactions:base.transactions,
+    lotteries:base.lotteries,
+    inventoryQuantity:base.inventoryQuantity,
+    marketAccepted:true,
+    productionReady:false,
+    v2TriggerHandlers:[]
+  };
+}
+
 function inspectTorecaVaultV2Automation() {
   var triggers = ScriptApp.getProjectTriggers().map(function(t) {
     return String(t.getHandlerFunction());
