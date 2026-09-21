@@ -107,10 +107,11 @@ function tv2AutoValidate_(x) {
 }
 
 function tv2AutoCanonical_(x) { return JSON.stringify(x); }
+function tv2AutoLotteryWriterReady_() { return false; }
+function tv2AutoMarketWriterReady_() { return false; }
 function tv2AutoAssertProductionReady_() {
-  var flags = PropertiesService.getScriptProperties();
-  if (flags.getProperty('TV_V2_LOTTERY_WRITER_READY') !== 'true') throw new Error('lottery writer is not acceptance-tested');
-  if (flags.getProperty('TV_V2_MARKET_WRITER_READY') !== 'true') throw new Error('market writer is not acceptance-tested');
+  if (!tv2AutoLotteryWriterReady_()) throw new Error('lottery writer is not acceptance-tested');
+  if (!tv2AutoMarketWriterReady_()) throw new Error('market writer is not acceptance-tested');
 }
 function tv2AutoProp_(name) {
   var v = PropertiesService.getScriptProperties().getProperty(name);
