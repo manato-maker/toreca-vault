@@ -52,7 +52,7 @@ test('lottery mail preparation pipeline accepts parsed TCG mail and quarantines 
  const ok=prepareLotteryMailForMerge({id:'pipe-1',subject:'[LivePocket]抽選申込完了のお知らせ（1051234567）',body:'申込みが完了しました。\nイベント名：ONE PIECE カードゲーム 抽選販売\n会場：カードショップ\n申込番号：1051234567'});
  assert.equal(ok.accepted.length,1);assert.equal(ok.review.length,0);assert.equal(ok.accepted[0].tcg,'one-piece');
  const bad=prepareLotteryMailForMerge({id:'pipe-2',subject:'不明な抽選メール',body:'結果'});
- assert.equal(bad.accepted.length,0);assert.equal(bad.review.length,1);assert.equal(bad.review[0].reason,'not-livepocket-or-missing-id');
+ assert.equal(bad.accepted.length,0);assert.equal(bad.review.length,1);assert.equal(bad.review[0].reason,'unsupported-lottery-mail');
 });
 
 
