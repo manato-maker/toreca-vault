@@ -112,6 +112,16 @@ function tv2AutoPreviewMarketFetch_(result) {
   };
 }
 
+function acceptTorecaVaultV2MarketReadOnly() {
+  var inspection = inspectTorecaVaultV2Automation();
+  var good = tv2AutoPreviewMarketFetch_({ok:true, price:1234, checkedAt:'acceptance-check', source:'acceptance-fixture'});
+  var bad = tv2AutoPreviewMarketFetch_({ok:true, price:1234});
+  if (!inspection.readOnly || inspection.productionReady) throw new Error('market read-only lock failed');
+  if (!good.readOnly || !good.wouldUpdate || good.price !== 1234) throw new Error('market normalization acceptance failed');
+  if (!bad.readOnly || bad.wouldUpdate || bad.reason !== 'missing-market-provenance') throw new Error('market fail-closed acceptance failed');
+  return {ok:true, readOnly:true, accepted:true, productionReady:false, validPreview:good, invalidPreview:bad};
+}
+
 function runTorecaVaultV2MarketSync() {
   // Production market fetching is deliberately not enabled until current
   // source parsing is acceptance-tested. Existing quotes must never be erased.
