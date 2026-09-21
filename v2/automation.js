@@ -13,3 +13,21 @@ export function recordAutomationHealth(state,name,result){const next=clone(state
 
 export function runMarketBatch(state,targets,fetchQuote,at=''){let next=clone(state),externalFetchCount=0,updated=0,preserved=0;for(const target of targets){let result;try{externalFetchCount++;result=fetchQuote(target)}catch(err){result={ok:false,error:String(err&&err.message||err)}}const applied=applyMarketFetch(next,target,result);next=applied.state;if(applied.outcome==='updated')updated++;else preserved++}next=recordAutomationHealth(next,'market',{ok:preserved===0,at,externalFetchCount,error:preserved?preserved+' fetch(es) preserved prior quote':''});return{state:next,updated,preserved,externalFetchCount}}
 export function runLotteryBatch(state,inputs,at=''){if(!Array.isArray(inputs))throw new Error('lottery inputs must be an array');let next=clone(state),created=0,updated=0,duplicate=0,review=0;for(const input of inputs){const r=mergeLotteryMail(next,input);next=r.state;if(r.outcome==='created')created++;else if(r.outcome==='updated')updated++;else if(r.outcome==='duplicate')duplicate++;else review++}next=recordAutomationHealth(next,'lottery',{ok:review===0,at,externalFetchCount:inputs.length,error:review?review+' item(s) require review':''});return{state:next,created,updated,duplicate,review}}
+
+
+export function normalizeLotteryMail(input){
+ const x=input||{},stableMailId=String(x.id||'').trim(),applicationKey=lotteryApplicationKey(x);
+ if(!stableMailId&&!applicationKey)return{ok:false,review:true,reason:'missing-stable-id'};
+ const out={};
+ for(const k of ['id','applicationId','entryNo','orderNo','livePocketId','store','product','appliedAt','status','result','source','receivedAt']){
+  if(x[k]!==undefined&&x[k]!==null&&String(x[k]).trim()!=='')out[k]=typeof x[k]==='string'?x[k].trim():x[k];
+ }
+ if(!out.store||!out.product)return{ok:false,review:true,reason:'missing-store-or-product',input:out};
+ return{ok:true,review:false,input:out};
+}
+export function prepareLotteryMailBatch(rawInputs){
+ if(!Array.isArray(rawInputs))throw new Error('lottery mail inputs must be an array');
+ const accepted=[],review=[];
+ for(const raw of rawInputs){const r=normalizeLotteryMail(raw);if(r.ok)accepted.push(r.input);else review.push({reason:r.reason,input:r.input||raw||{}})}
+ return{accepted,review};
+}
