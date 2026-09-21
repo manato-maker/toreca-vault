@@ -54,3 +54,19 @@ test('automation readiness inspection is read-only and reports trigger handlers'
  assert.doesNotMatch(inspect,/newTrigger\s*\(/);
  assert.doesNotMatch(inspect,/deleteTrigger\s*\(/);
 });
+
+
+test('one-step read-only acceptance keeps production locked and trigger-free',async()=>{
+ const s=await read();
+ const start=s.indexOf('function acceptTorecaVaultV2ReadOnly()');
+ const end=s.indexOf('function inspectTorecaVaultV2Automation()',start);
+ assert.ok(start >= 0 && end > start);
+ const accept=s.slice(start,end);
+ assert.match(accept,/previewTorecaVaultV2Automation\(\)/);
+ assert.match(accept,/inspectTorecaVaultV2Automation\(\)/);
+ assert.match(accept,/production writers must remain locked/);
+ assert.match(accept,/V2 triggers must not exist during read-only acceptance/);
+ assert.match(accept,/accepted:\s*true/);
+ assert.doesNotMatch(accept,/setContent\s*\(/);
+ assert.doesNotMatch(accept,/newTrigger\s*\(/);
+});
