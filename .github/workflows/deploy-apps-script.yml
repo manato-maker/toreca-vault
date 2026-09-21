@@ -25,8 +25,8 @@ jobs:
       - run: npm test
       - name: Prepare isolated Apps Script source
         run: |
-          mkdir -p .apps-script-v2
-          cp v2/apps-script/Automation.gs .apps-script-v2/Automation.gs
+          rm -rf .apps-script-v2
+          cp -R v2/apps-script .apps-script-v2
           cat > .apps-script-v2/appsscript.json <<'EOF'
           {
             "timeZone": "Asia/Tokyo",
