@@ -39,3 +39,18 @@ test('production triggers fail closed until both writers are accepted',async()=>
  const install=s.slice(s.indexOf('function installTorecaVaultV2Automation()'),s.indexOf('function uninstallTorecaVaultV2Automation()'));
  assert.match(install,/tv2AutoAssertProductionReady_\(\)/);
 });
+
+
+test('automation readiness inspection is read-only and reports trigger handlers',async()=>{
+ const s=await read();
+ const start=s.indexOf('function inspectTorecaVaultV2Automation()');
+ const end=s.indexOf('function runTorecaVaultV2LotterySync()',start);
+ assert.ok(start >= 0 && end > start);
+ const inspect=s.slice(start,end);
+ assert.match(inspect,/readOnly:\s*true/);
+ assert.match(inspect,/productionReady:/);
+ assert.match(inspect,/v2TriggerHandlers:/);
+ assert.doesNotMatch(inspect,/setContent\s*\(/);
+ assert.doesNotMatch(inspect,/newTrigger\s*\(/);
+ assert.doesNotMatch(inspect,/deleteTrigger\s*\(/);
+});
