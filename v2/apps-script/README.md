@@ -31,8 +31,8 @@ The phone-side acceptance path is intentionally one-shot:
 
 1. Paste/replace the complete tested `Automation.gs` once.
 2. Save once.
-3. Run `acceptTorecaVaultV2ReadOnly()` once.
-4. The acceptance must report `readOnly: true`, `accepted: true`, `productionReady: false`, and no V2 trigger handlers.
+3. Run `acceptTorecaVaultV2Deployment()` once.
+4. The combined acceptance checks REAL V2 read-only access plus market fail-closed normalization and must report `readOnly: true`, `accepted: true`, `productionReady: false`, and no V2 trigger handlers.
 
 Do not paste helper functions in separate fragments. If the complete source cannot be saved reliably, stop rather than assembling a partial production script.
 
@@ -41,3 +41,5 @@ Production trigger installation is deliberately impossible in the current source
 ## Market read-only acceptance
 
 After the one-shot source deployment, `acceptTorecaVaultV2MarketReadOnly()` verifies market normalization and fail-closed behavior without fetching live prices or writing REAL V2. It must return `readOnly: true`, `accepted: true`, and `productionReady: false` before any market writer work proceeds.
+
+`acceptTorecaVaultV2Deployment()` is the preferred phone-side acceptance entry point. It combines the read-only data check and market normalization check into one run; it still cannot enable production writers or install triggers.
