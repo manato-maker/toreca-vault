@@ -40,3 +40,9 @@ test('trading card lottery classifier recognizes major TCGs without excluding ot
  assert.equal(classifyTradingCardLottery('遊戯王OCG'),'yu-gi-oh');
  assert.equal(classifyTradingCardLottery('新作トレーディングカード抽選'),'other-tcg');
 });
+
+
+test('LivePocket parser carries TCG classification through normalization',()=>{
+ const cases=[['ポケモンカードゲーム','pokemon'],['ワンピースカードゲーム','one-piece'],['ドラゴンボールスーパーカードゲーム','dragon-ball'],['UNION ARENA','union-arena'],['遊戯王OCG','yu-gi-oh']];
+ for(let i=0;i<cases.length;i++){const [event,tcg]=cases[i],id=String(1050000000+i);const r=parseLivePocketLotteryMail({id:'tcg-'+i,subject:'[LivePocket]抽選申込完了のお知らせ（'+id+'）',body:'下記のチケットの申込みが完了しました。\\nイベント名：'+event+' 抽選販売\\n会場：トレカ店\\n申込番号：'+id});assert.equal(r.ok,true);assert.equal(r.input.tcg,tcg)}
+});
