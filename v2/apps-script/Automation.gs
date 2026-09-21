@@ -29,6 +29,23 @@ function uninstallTorecaVaultV2Automation() {
   return {ok:true, installed:false};
 }
 
+function inspectTorecaVaultV2Automation() {
+  var triggers = ScriptApp.getProjectTriggers().map(function(t) {
+    return String(t.getHandlerFunction());
+  }).filter(function(name) {
+    return ['runTorecaVaultV2LotterySync','runTorecaVaultV2MarketSync'].indexOf(name) >= 0;
+  });
+  return {
+    ok: true,
+    readOnly: true,
+    dataFileConfigured: !!PropertiesService.getScriptProperties().getProperty('TV_V2_DATA_FILE_ID'),
+    lotteryWriterReady: tv2AutoLotteryWriterReady_(),
+    marketWriterReady: tv2AutoMarketWriterReady_(),
+    productionReady: tv2AutoLotteryWriterReady_() && tv2AutoMarketWriterReady_(),
+    v2TriggerHandlers: triggers
+  };
+}
+
 function runTorecaVaultV2LotterySync() {
   // Production Gmail parsing is deliberately not enabled until its parser is
   // deployed and acceptance-tested against current REAL mail samples.
