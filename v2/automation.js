@@ -64,3 +64,14 @@ export function prepareLotteryMailForMerge(mail){
  if(!parsed.ok)return{accepted:[],review:[{reason:parsed.reason,input:{id:String(mail?.id||''),subject:String(mail?.subject||'')}}]};
  return prepareLotteryMailBatch([parsed.input]);
 }
+
+
+export function parseToysRUsLotteryMail(mail){
+ const id=String(mail?.id||'').trim(),subject=String(mail?.subject||''),body=String(mail?.body||''),receivedAt=String(mail?.receivedAt||mail?.email_ts||'');
+ if(!id||!body||!/^申込受付完了/.test(subject)||!/日本トイザらス株式会社/.test(body))return{ok:false,review:true,reason:'not-toysrus-or-missing-id'};
+ const product=(subject.match(/申込受付完了[『「]\s*([^』」]+)[』」]/)||body.match(/[『「]([^』」]+)[』」]の抽選受付が完了/))?.[1]?.trim()||'';
+ const store=(body.match(/受取登録店舗は[「『]([^」』]+)[」』]/)||[])[1]?.trim()||'';
+ if(!product||!store)return{ok:false,review:true,reason:'toysrus-fields-missing'};
+ if(!/抽選受付が完了しました/.test(body))return{ok:false,review:true,reason:'toysrus-status-unknown'};
+ return normalizeLotteryMail({id,store:'トイザらス '+store,product,tcg:classifyTradingCardLottery(product),status:'応募済み',source:'ToysRUs',receivedAt});
+}
