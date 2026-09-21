@@ -19,7 +19,7 @@ export function normalizeLotteryMail(input){
  const x=input||{},stableMailId=String(x.id||'').trim(),applicationKey=lotteryApplicationKey(x);
  if(!stableMailId&&!applicationKey)return{ok:false,review:true,reason:'missing-stable-id'};
  const out={};
- for(const k of ['id','applicationId','entryNo','orderNo','livePocketId','store','product','appliedAt','status','result','source','receivedAt']){
+ for(const k of ['id','applicationId','entryNo','orderNo','livePocketId','store','product','tcg','appliedAt','status','result','source','receivedAt']){
   if(x[k]!==undefined&&x[k]!==null&&String(x[k]).trim()!=='')out[k]=typeof x[k]==='string'?x[k].trim():x[k];
  }
  if(!out.store||!out.product)return{ok:false,review:true,reason:'missing-store-or-product',input:out};
