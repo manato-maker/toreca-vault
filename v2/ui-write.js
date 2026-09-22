@@ -11,7 +11,7 @@ export function normalizeUiTransaction(type,data){
  return{...data,id:data.id||makeId(type),type,product:String(data.product||'').trim(),productKey:String(data.productKey||data.product||'').trim(),category,condition,quantity:Number(data.quantity)};
 }
 export async function commitV2Transaction(type,data,config=getVaultV2Config()){
- const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);const tx=normalizeUiTransaction(type,data);
+ let before;try{before=await loadVaultV2(config)}catch(err){throw new Error('batch preflight: '+String(err?.message||err))}assertV2WriteEnabled(before.revision);const tx=normalizeUiTransaction(type,data);
  const mutationId='ui-'+tx.id;
  const next=applyTransaction(before.payload,tx,mutationId);validateState(next);
  const confirmed=await saveV2(config.url,config.token,next,before.revision);
@@ -37,7 +37,7 @@ export async function commitV2Batch(items,config=getVaultV2Config()){
  next.lastMutationId=txs.at(-1).mutationId;
  // Keep per-item audit entries, but bind them to the single persisted revision.
  for(const {mutationId} of txs){const audit=next.auditLog.find(x=>x.mutationId===mutationId);if(audit)audit.revision=next.revision}
- validateState(next);const confirmed=await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
+ validateState(next);let confirmed;try{confirmed=await saveV2(config.url,config.token,next,before.revision)}catch(err){throw new Error('batch save: '+String(err?.message||err))}let reread;try{reread=await loadVaultV2(config)}catch(err){throw new Error('batch reread: '+String(err?.message||err))}
  for(const {tx,mutationId} of txs){if(reread.payload.transactions.filter(x=>x.id===tx.id).length!==1)throw new Error('一括反映後の取引一意性検証に失敗しました');if(reread.payload.auditLog.filter(x=>x.mutationId===mutationId).length!==1)throw new Error('一括反映後の監査検証に失敗しました')}
  if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==txs.at(-1).mutationId)throw new Error('一括反映後のrevision検証に失敗しました');
  return{transactions:txs.map(x=>x.tx),payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
