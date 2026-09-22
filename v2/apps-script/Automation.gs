@@ -1,4 +1,4 @@
-// Deployment sync probe 23: harden final blocker inspection against unexpected market adapter state; production writers remain locked.
+// Deployment sync probe 24: deploy tested fail-closed production blocker adapter probe; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
