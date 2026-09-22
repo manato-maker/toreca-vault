@@ -211,3 +211,10 @@ test('market targets fail closed on invalid quantity or missing product identity
  assert.match(fn,/var identity=String\(lot\.productKey\|\|lot\.product\|\|''\)\.trim\(\);if\(!identity\)return/);
  assert.ok(fn.indexOf('if(!identity)return') < fn.indexOf('seen[k]=true'));
 });
+
+
+test('read-only lottery preview uses the same candidate filter as the writer',async()=>{
+ const s=await read();const fn=s.slice(s.indexOf('function previewTorecaVaultV2LotteryMailParsing()'),s.indexOf('function tv2AutoNormalizeLotteryMail_'));
+ assert.match(fn,/if \(!tv2AutoLotteryMailCandidate_\(mail\)\) return/);
+ assert.ok(fn.indexOf('tv2AutoLotteryMailCandidate_(mail)') < fn.indexOf('tv2AutoParseLotteryMail_(mail)'));
+});
