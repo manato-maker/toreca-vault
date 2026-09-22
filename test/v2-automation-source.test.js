@@ -218,3 +218,13 @@ test('read-only lottery preview uses the same candidate filter as the writer',as
  assert.match(fn,/if \(!tv2AutoLotteryMailCandidate_\(mail\)\) return/);
  assert.ok(fn.indexOf('tv2AutoLotteryMailCandidate_(mail)') < fn.indexOf('tv2AutoParseLotteryMail_(mail)'));
 });
+
+
+test('final production blocker inspection is read-only and exposes locked release gates',async()=>{
+ const s=await read();const fn=s.slice(s.indexOf('function getTorecaVaultV2ProductionBlockers()'),s.indexOf('function tv2AutoCanonical_'));
+ assert.match(fn,/readOnly:true/);
+ assert.match(fn,/lottery-writer-locked/);
+ assert.match(fn,/market-writer-locked/);
+ assert.match(fn,/market-source-adapter-not-enabled/);
+ assert.doesNotMatch(fn,/setContent|newTrigger|create\(\)/);
+});
