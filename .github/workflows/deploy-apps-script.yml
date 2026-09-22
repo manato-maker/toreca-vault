@@ -41,11 +41,11 @@ jobs:
           mkdir .apps-script-v2
           npx --yes @google/clasp@3.4.1 pull
           test -f .apps-script-v2/appsscript.json
-          test -f .apps-script-v2/コード.gs
+          test -f .apps-script-v2/コード.js
       - name: Patch only canonical automation source
         run: |
-          cp v2/apps-script/Automation.gs .apps-script-v2/Automation.gs
-          test -s .apps-script-v2/Automation.gs
-          test -s .apps-script-v2/コード.gs
+          cp v2/apps-script/Automation.gs .apps-script-v2/Automation.js
+          test -s .apps-script-v2/Automation.js
+          test -s .apps-script-v2/コード.js
       - name: Push while preserving remote API and manifest
         run: npx --yes @google/clasp@3.4.1 push --force
