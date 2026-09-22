@@ -21,6 +21,8 @@ export function v2ViewModel(state){
    const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],date:l.acquiredAt||'',memo:l.memo||''};
    if(l.category==='BOX')boxes.push(base);else if(l.category==='パック')packs.push(base);else if(l.category==='カード')cards.push({...base,buybackPrice:q?.price??null});
  }
+ const newestFirst=(a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.id||'').localeCompare(String(a.id||''));
+ boxes.sort(newestFirst);packs.sort(newestFirst);cards.sort(newestFirst);
  return {purchases,sales,openings,lotteries:structuredClone(state.lotteries||[]),boxes,packs,cards,products:[]};
 }
 export function v2Assets(state){
