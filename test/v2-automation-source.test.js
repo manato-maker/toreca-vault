@@ -180,3 +180,18 @@ test('market source adapter remains fail-closed and cannot fabricate provenance'
  assert.match(adapter,/ok:false/);assert.match(adapter,/source-adapter-not-enabled/);
  assert.doesNotMatch(adapter,/price\s*:/);assert.doesNotMatch(adapter,/checkedAt\s*:/);assert.doesNotMatch(adapter,/source\s*:/);
 });
+
+
+test('lottery writer fails closed on ambiguity and ignores unrelated messages in matched threads',async()=>{
+ const s=await read();
+ assert.match(s,/function tv2AutoLotteryMailCandidate_/);
+ assert.match(s,/if\(!tv2AutoLotteryMailCandidate_\(mail\)\) return/);
+ const merge=s.slice(s.indexOf('function tv2AutoMergeLotteryInputs_'),s.indexOf('function previewTorecaVaultV2Automation()'));
+ assert.match(merge,/matches\.length>1\)\{review\+\+;return;/);
+ assert.match(merge,/x\.appliedAt/);assert.match(merge,/input\.appliedAt/);
+ assert.match(merge,/duplicateId/);
+ const run=s.slice(s.indexOf('function runTorecaVaultV2LotterySync()'),s.indexOf('function tv2AutoLotteryMailCandidate_'));
+ assert.match(run,/if \(merged\.review > 0\) return/);
+ assert.ok(run.indexOf('merged.review > 0') < run.indexOf('tv2AutoSaveVerified_'));
+ assert.match(run,/next\.auditLog = next\.auditLog \|\| \[\]/);
+});
