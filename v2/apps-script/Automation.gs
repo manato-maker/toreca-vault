@@ -1,4 +1,4 @@
-// Deployment sync probe 8: read-only verified-save preflight; no production triggers.
+// Deployment sync probe 9: production lottery writer implemented behind hard lock; no triggers.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -194,9 +194,62 @@ function tv2AutoParseLotteryMail_(mail) {
 }
 
 function runTorecaVaultV2LotterySync() {
-  // Production Gmail parsing is deliberately not enabled until its parser is
-  // deployed and acceptance-tested against current REAL mail samples.
-  return tv2AutoRecordHealthOnly_('lottery', 'parser-not-enabled');
+  if (!tv2AutoLotteryWriterReady_()) return tv2AutoRecordHealthOnly_('lottery', 'writer-locked');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var before = tv2AutoRead_();
+    var prepared = tv2AutoCollectLotteryInputs_();
+    if (prepared.review > 0) return {ok:false, skipped:true, kind:'lottery', reason:'review-required', review:prepared.review, revision:Number(before.revision)||0};
+    var merged = tv2AutoMergeLotteryInputs_(before, prepared.accepted);
+    if (!merged.changed) return {ok:true, skipped:true, kind:'lottery', reason:'no-change', revision:Number(before.revision)||0};
+    var next = merged.state;
+    next.revision = Number(before.revision || 0) + 1;
+    next.lastMutationId = 'auto-lottery-' + Utilities.getUuid();
+    next.auditLog.push({mutationId:next.lastMutationId, revision:next.revision, automation:'lottery', created:merged.created, updated:merged.updated});
+    var preflight = tv2AutoPreviewVerifiedSave_(before, next);
+    if (!preflight.ok || !preflight.wouldWrite) throw new Error('lottery save preflight failed');
+    var saved = tv2AutoSaveVerified_(before, next);
+    return {ok:true, kind:'lottery', revision:Number(saved.revision), mutationId:saved.lastMutationId, created:merged.created, updated:merged.updated};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function tv2AutoCollectLotteryInputs_() {
+  var threads = GmailApp.search('newer_than:30d (LivePocket OR "日本トイザらス株式会社" OR "フォームにご記入いただきありがとうございます")', 0, 100);
+  var accepted=[], review=0;
+  threads.forEach(function(thread) {
+    thread.getMessages().forEach(function(message) {
+      var parsed = tv2AutoParseLotteryMail_({id:String(message.getId()||''),subject:String(message.getSubject()||''),body:String(message.getPlainBody()||''),receivedAt:message.getDate()?message.getDate().toISOString():''});
+      if (parsed.ok) accepted.push(parsed.input); else review++;
+    });
+  });
+  return {accepted:accepted, review:review};
+}
+
+function tv2AutoLotteryKey_(x) {
+  return String((x||{}).applicationId || (x||{}).entryNo || (x||{}).orderNo || (x||{}).livePocketId || '').trim().toLocaleLowerCase('ja');
+}
+function tv2AutoNorm_(x) { return String(x||'').trim().toLocaleLowerCase('ja'); }
+function tv2AutoMergeLotteryInputs_(state, inputs) {
+  var next = JSON.parse(JSON.stringify(state)), created=0, updated=0, changed=false;
+  inputs.forEach(function(input) {
+    var key=tv2AutoLotteryKey_(input), matches=[];
+    if (key) matches=next.lotteries.filter(function(x){return tv2AutoLotteryKey_(x)===key;});
+    if (!key) matches=next.lotteries.filter(function(x){return tv2AutoNorm_(x.store)===tv2AutoNorm_(input.store)&&tv2AutoNorm_(x.product)===tv2AutoNorm_(input.product);});
+    if (matches.length > 1) return;
+    if (matches.length === 1) {
+      var i=next.lotteries.indexOf(matches[0]), merged={};
+      Object.keys(next.lotteries[i]).forEach(function(k){merged[k]=next.lotteries[i][k];});
+      Object.keys(input).forEach(function(k){merged[k]=input[k];});
+      merged.id=next.lotteries[i].id;
+      if (tv2AutoCanonical_(merged)!==tv2AutoCanonical_(next.lotteries[i])) { next.lotteries[i]=merged; updated++; changed=true; }
+      return;
+    }
+    next.lotteries.push(JSON.parse(JSON.stringify(input))); created++; changed=true;
+  });
+  return {state:next, created:created, updated:updated, changed:changed};
 }
 
 function previewTorecaVaultV2Automation() {
