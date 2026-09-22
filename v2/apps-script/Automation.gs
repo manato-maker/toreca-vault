@@ -1,4 +1,4 @@
-// Deployment sync probe 18: deploy tested market target identity guard; production writers remain locked.
+// Deployment sync probe 19: align read-only lottery preview with writer candidate filter; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -121,12 +121,14 @@ function previewTorecaVaultV2LotteryMailParsing() {
   var accepted = 0, review = 0, providers = {};
   threads.forEach(function(thread) {
     thread.getMessages().forEach(function(message) {
-      var parsed = tv2AutoParseLotteryMail_({
+      var mail={
         id:String(message.getId() || ''),
         subject:String(message.getSubject() || ''),
         body:String(message.getPlainBody() || ''),
         receivedAt:message.getDate() ? message.getDate().toISOString() : ''
-      });
+      };
+      if (!tv2AutoLotteryMailCandidate_(mail)) return;
+      var parsed = tv2AutoParseLotteryMail_(mail);
       if (parsed.ok) {
         accepted++;
         var source = String(parsed.input.source || 'unknown');
