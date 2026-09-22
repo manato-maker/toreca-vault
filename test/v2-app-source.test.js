@@ -8,7 +8,7 @@ test('V2 entry submit is single-flight and fail-closed',()=>{
   assert.match(source,/let entrySubmitting=false;/);
   assert.match(source,/if\(entrySubmitting\)return;entrySubmitting=true;/);
   assert.match(source,/finally\{entrySubmitting=false\}/);
-  assert.match(source,/if\(hasV2ReadOnly\(\)&&!v2Connected\(\)\)throw new Error\('V2接続が完了していません。ローカル保存を停止しました'\)/);
+  assert.match(source,/if\(hasV2ReadOnly\(\)&&!v2Connected\(\)\)\{entrySubmitting=false;setSyncStatus\('V2保存失敗/);
 });
 
 test('completed one-shot purchase preset is removed',()=>{
