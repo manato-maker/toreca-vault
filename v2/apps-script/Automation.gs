@@ -1,4 +1,4 @@
-// Deployment sync probe 9: production lottery writer implemented behind hard lock; no triggers.
+// Deployment sync probe 10: deploy tested locked lottery writer; no production triggers.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
