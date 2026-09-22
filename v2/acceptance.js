@@ -15,3 +15,13 @@ export function acceptanceSnapshot(state){
  if(inventory.some(x=>Object.hasOwn(x,'store')))issues.push('inventory store dimension leaked');
  return{ok:issues.length===0,issues,counts:{transactions:(state.transactions||[]).length,purchases:view.purchases.length,sales:view.sales.length,openings:view.openings.length,lotteries:view.lotteries.length,inventoryRecords:inventory.length,inventoryQuantity:inventory.reduce((n,x)=>n+qty(x),0)},assets,realizedProfit:v2RealizedProfit(state),revision:state.revision,lastMutationId:state.lastMutationId};
 }
+
+export function pendingMigrationSnapshot(state){
+ const txIds=new Set((state.transactions||[]).map(x=>x.id));
+ const lots=new Map((state.inventoryLots||[]).map(x=>[x.sourceTransactionId,x]));
+ const requiredTx=['pending-joshin-deck-20260919','pending-joshin-30th-box-20260919','pending-plays-30th-box-20260920','pending-allium-30th-noshrink-20260920','pending-lawson-awajitomishima-packs-20260921','pending-lawson-awajitomishima-opening-20260921','pending-pull-charizard-137-20260921','pending-pull-pikachu-ex-127-20260921'];
+ const requiredLots=['pending-joshin-deck-20260919','pending-plays-30th-box-20260920','pending-pull-charizard-137-20260921','pending-pull-pikachu-ex-127-20260921'];
+ const missingTransactions=requiredTx.filter(id=>!txIds.has(id));
+ const missingLots=requiredLots.filter(id=>!lots.has(id)||qty(lots.get(id))<=0);
+ return{ok:missingTransactions.length===0&&missingLots.length===0,missingTransactions,missingLots,requiredTxCount:requiredTx.length,requiredLotCount:requiredLots.length};
+}
