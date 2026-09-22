@@ -1,4 +1,4 @@
-// Deployment sync probe 20: deploy tested lottery preview/writer candidate parity; production writers remain locked.
+// Deployment sync probe 21: add read-only final production blocker inspection; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -413,6 +413,17 @@ function tv2AutoValidate_(x) {
     if (!Array.isArray(x[k])) throw new Error('invalid '+k);
   });
   return true;
+}
+
+function getTorecaVaultV2ProductionBlockers() {
+  var inspection = inspectTorecaVaultV2Automation();
+  var blockers = [];
+  if (!inspection.dataFileConfigured) blockers.push('v2-data-file-not-configured');
+  if (!inspection.lotteryWriterReady) blockers.push('lottery-writer-locked');
+  if (!inspection.marketWriterReady) blockers.push('market-writer-locked');
+  if (inspection.v2TriggerHandlers.length) blockers.push('production-triggers-already-installed');
+  if (tv2AutoFetchMarketQuote_({}).reason === 'source-adapter-not-enabled') blockers.push('market-source-adapter-not-enabled');
+  return {ok:blockers.length===0, readOnly:true, blockers:blockers, inspection:inspection};
 }
 
 function tv2AutoCanonical_(x) { return JSON.stringify(x); }
