@@ -1,4 +1,4 @@
-// Deployment sync probe 14: deploy tested lottery ambiguity guards; production writers remain locked.
+// Deployment sync probe 15: market audit-log guard; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -323,6 +323,7 @@ function runTorecaVaultV2MarketSync() {
     targets.forEach(function(target){var a=tv2AutoApplyMarketQuote_(next,target,tv2AutoFetchMarketQuote_(target));next=a.state;if(a.updated)updated++;else preserved++;});
     if (!updated) return {ok:false,skipped:true,kind:'market',reason:'no-valid-updates',preserved:preserved,revision:Number(before.revision)||0};
     next.revision=Number(before.revision||0)+1; next.lastMutationId='auto-market-'+Utilities.getUuid();
+    next.auditLog=next.auditLog||[];
     next.auditLog.push({mutationId:next.lastMutationId,revision:next.revision,automation:'market',updated:updated,preserved:preserved});
     var preflight=tv2AutoPreviewVerifiedSave_(before,next); if(!preflight.ok||!preflight.wouldWrite)throw new Error('market save preflight failed');
     var saved=tv2AutoSaveVerified_(before,next);
