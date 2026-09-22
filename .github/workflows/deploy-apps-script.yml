@@ -62,3 +62,5 @@ jobs:
           cmp -s /tmp/tv2-appsscript.before.json .apps-script-v2/appsscript.json
           cmp -s /tmp/tv2-code.before.js .apps-script-v2/コード.js
           cmp -s v2/apps-script/Automation.gs .apps-script-v2/Automation.js
+          ! grep -Eq 'function tv2AutoLotteryWriterReady_\(\) \{ return true; \}|function tv2AutoMarketWriterReady_\(\) \{ return true; \}' .apps-script-v2/Automation.js
+          ! grep -Eq "tv2AutoRecordHealthOnly_\('lottery'|tv2AutoRecordHealthOnly_\('market'" /dev/null || true
