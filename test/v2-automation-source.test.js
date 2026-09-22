@@ -203,3 +203,11 @@ test('market writer initializes audit log before recording a verified mutation',
  assert.ok(run.indexOf('next.auditLog=next.auditLog||[]') < run.indexOf('next.auditLog.push'));
  assert.ok(run.indexOf('next.auditLog.push') < run.indexOf('tv2AutoPreviewVerifiedSave_'));
 });
+
+
+test('market targets fail closed on invalid quantity or missing product identity',async()=>{
+ const s=await read();const fn=s.slice(s.indexOf('function tv2AutoMarketTargets_'),s.indexOf('function tv2AutoFetchMarketQuote_'));
+ assert.match(fn,/!isFinite\(quantity\)\|\|quantity<=0/);
+ assert.match(fn,/var identity=String\(lot\.productKey\|\|lot\.product\|\|''\)\.trim\(\);if\(!identity\)return/);
+ assert.ok(fn.indexOf('if(!identity)return') < fn.indexOf('seen[k]=true'));
+});
