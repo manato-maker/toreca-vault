@@ -1,4 +1,4 @@
-// Deployment sync probe 6: tightened writer-lock guard; no production triggers.
+// Deployment sync probe 7: stale-write guard before Drive save; no production triggers.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -269,6 +269,9 @@ function tv2AutoRecordHealthOnly_(kind, reason) {
 function tv2AutoSaveVerified_(before, next) {
   tv2AutoValidate_(before);
   tv2AutoValidate_(next);
+  var current = tv2AutoRead_();
+  if (Number(current.revision) !== Number(before.revision) || String(current.lastMutationId || '') !== String(before.lastMutationId || '')) throw new Error('stale automation write');
+  if (tv2AutoCanonical_(current) !== tv2AutoCanonical_(before)) throw new Error('automation base changed before save');
   if (Number(next.revision) !== Number(before.revision) + 1) throw new Error('revision must increment by 1');
   if (!next.lastMutationId || next.lastMutationId === before.lastMutationId) throw new Error('new mutationId required');
   var file = DriveApp.getFileById(tv2AutoProp_('TV_V2_DATA_FILE_ID'));
