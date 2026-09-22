@@ -1,4 +1,4 @@
-// Deployment sync probe 11: market writer skeleton hard-locked; source adapter fail-closed.
+// Deployment sync probe 12: deploy tested locked market writer; source adapter remains fail-closed.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
