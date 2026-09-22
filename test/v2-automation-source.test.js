@@ -13,7 +13,7 @@ test('V2 automation is isolated from V1 and has verified save safety',async()=>{
 });
 test('V2 automation does not silently enable Gmail or market writes',async()=>{
  const s=await read();
- assert.match(s,/parser-not-enabled/);
+ assert.match(s,/writer-locked/);
  assert.match(s,/fetcher-not-enabled/);
  assert.match(s,/installTorecaVaultV2Automation/);
 });
@@ -132,4 +132,19 @@ test('REAL save preflight is read-only and reports whether a verified save would
  assert.match(preview,/wouldWrite:/);
  assert.doesNotMatch(preview,/setContent\s*\(/);
  assert.doesNotMatch(preview,/tv2AutoSaveVerified_\s*\(/);
+});
+
+
+test('lottery production writer is implemented but hard-locked and verified before save',async()=>{
+ const s=await read();
+ const start=s.indexOf('function runTorecaVaultV2LotterySync()');
+ const end=s.indexOf('function previewTorecaVaultV2Automation()',start);
+ assert.ok(start >= 0 && end > start);
+ const run=s.slice(start,end);
+ assert.match(run,/if \(!tv2AutoLotteryWriterReady_\(\)\) return tv2AutoRecordHealthOnly_/);
+ assert.match(run,/tv2AutoCollectLotteryInputs_\(\)/);
+ assert.match(run,/review-required/);
+ assert.match(run,/tv2AutoPreviewVerifiedSave_\(before, next\)/);
+ assert.match(run,/tv2AutoSaveVerified_\(before, next\)/);
+ assert.match(s,/function tv2AutoLotteryWriterReady_\(\) \{ return false; \}/);
 });
