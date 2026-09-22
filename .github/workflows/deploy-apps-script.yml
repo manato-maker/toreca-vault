@@ -1,0 +1,65 @@
+name: Deploy V2 Apps Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [vault-v2-prep]
+    paths:
+      - 'v2/apps-script/Automation.gs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toreca-vault-v2-apps-script
+  cancel-in-progress: false
+
+jobs:
+  verify-and-push:
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - name: Configure clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":".apps-script-v2"}\n' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Pull current remote project first
+        run: |
+          rm -rf .apps-script-v2
+          mkdir .apps-script-v2
+          npx --yes @google/clasp@3.4.1 pull
+          test -f .apps-script-v2/appsscript.json
+          test -f .apps-script-v2/コード.js
+          cp .apps-script-v2/appsscript.json /tmp/tv2-appsscript.before.json
+          cp .apps-script-v2/コード.js /tmp/tv2-code.before.js
+      - name: Patch only canonical automation source
+        run: |
+          cp v2/apps-script/Automation.gs .apps-script-v2/Automation.js
+          test -s .apps-script-v2/Automation.js
+          test -s .apps-script-v2/コード.js
+          cmp -s /tmp/tv2-appsscript.before.json .apps-script-v2/appsscript.json
+          cmp -s /tmp/tv2-code.before.js .apps-script-v2/コード.js
+      - name: Push while preserving remote API and manifest
+        run: npx --yes @google/clasp@3.4.1 push --force
+      - name: Verify remote project after push
+        run: |
+          rm -rf .apps-script-v2-verify
+          mv .apps-script-v2 .apps-script-v2-verify
+          mkdir .apps-script-v2
+          npx --yes @google/clasp@3.4.1 pull
+          cmp -s /tmp/tv2-appsscript.before.json .apps-script-v2/appsscript.json
+          cmp -s /tmp/tv2-code.before.js .apps-script-v2/コード.js
+          cmp -s v2/apps-script/Automation.gs .apps-script-v2/Automation.js
+          ! grep -Eq 'function tv2AutoLotteryWriterReady_\(\) \{ return true; \}|function tv2AutoMarketWriterReady_\(\) \{ return true; \}' .apps-script-v2/Automation.js

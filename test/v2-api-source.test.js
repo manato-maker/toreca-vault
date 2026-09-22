@@ -1,0 +1,8 @@
+import test from'node:test';import assert from'node:assert/strict';import fs from'node:fs';
+const source=fs.readFileSync(new URL('../v2/apps-script/Code.gs',import.meta.url),'utf8');
+test('v2 API does not fetch/eval remote code',()=>{assert.doesNotMatch(source,/UrlFetchApp|\beval\s*\(/)});
+test('v2 API uses lock, revision and reread verification',()=>{assert.match(source,/LockService\.getScriptLock/);assert.match(source,/revision conflict/);assert.match(source,/var reread = tv2Read_\(\)/);assert.match(source,/post-write verification failed/)});
+test('v2 API uses dedicated v2 file property',()=>{assert.match(source,/TV_V2_DATA_FILE_ID/);assert.doesNotMatch(source,/TV_DATA_FILE_ID['"]/)});
+test('Apps Script verifies full payload and rollback',()=>{assert.match(source,/tv2Canonical_\(reread\).*tv2Canonical_\(next\)/);assert.match(source,/rollback verification failed/);assert.match(source,/write failed and rollback was not verified/)})
+
+test('v2 API supports authenticated POST reads without URL token',()=>{assert.match(source,/req\.action === 'load'/);assert.match(source,/payload:loaded/)});
