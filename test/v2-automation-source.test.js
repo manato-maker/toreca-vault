@@ -102,3 +102,18 @@ test('single deployment acceptance includes read-only Gmail parser preview',asyn
  assert.doesNotMatch(accept,/tv2AutoSaveVerified_\s*\(/);
  assert.doesNotMatch(accept,/newTrigger\s*\(/);
 });
+
+
+test('verified automation save rejects stale REAL state before writing',async()=>{
+ const s=await read();
+ const start=s.indexOf('function tv2AutoSaveVerified_(before, next)');
+ const end=s.indexOf('function tv2AutoRead_()',start);
+ assert.ok(start >= 0 && end > start);
+ const save=s.slice(start,end);
+ assert.match(save,/var current = tv2AutoRead_\(\)/);
+ assert.match(save,/stale automation write/);
+ assert.match(save,/automation base changed before save/);
+ const firstWrite=save.indexOf('file.setContent(out)');
+ assert.ok(firstWrite > save.indexOf('stale automation write'));
+ assert.ok(firstWrite > save.indexOf('automation base changed before save'));
+});
