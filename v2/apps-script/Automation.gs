@@ -1,4 +1,4 @@
-// Deployment sync probe 10: deploy tested locked lottery writer; no production triggers.
+// Deployment sync probe 11: market writer skeleton hard-locked; source adapter fail-closed.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -302,9 +302,33 @@ function acceptTorecaVaultV2MarketReadOnly() {
 }
 
 function runTorecaVaultV2MarketSync() {
-  // Production market fetching is deliberately not enabled until current
-  // source parsing is acceptance-tested. Existing quotes must never be erased.
-  return tv2AutoRecordHealthOnly_('market', 'fetcher-not-enabled');
+  if (!tv2AutoMarketWriterReady_()) return tv2AutoRecordHealthOnly_('market', 'writer-locked');
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var before=tv2AutoRead_(), targets=tv2AutoMarketTargets_(before);
+    if (!targets.length) return {ok:true,skipped:true,kind:'market',reason:'no-targets',revision:Number(before.revision)||0};
+    var next=JSON.parse(JSON.stringify(before)),updated=0,preserved=0;
+    targets.forEach(function(target){var a=tv2AutoApplyMarketQuote_(next,target,tv2AutoFetchMarketQuote_(target));next=a.state;if(a.updated)updated++;else preserved++;});
+    if (!updated) return {ok:false,skipped:true,kind:'market',reason:'no-valid-updates',preserved:preserved,revision:Number(before.revision)||0};
+    next.revision=Number(before.revision||0)+1; next.lastMutationId='auto-market-'+Utilities.getUuid();
+    next.auditLog.push({mutationId:next.lastMutationId,revision:next.revision,automation:'market',updated:updated,preserved:preserved});
+    var preflight=tv2AutoPreviewVerifiedSave_(before,next); if(!preflight.ok||!preflight.wouldWrite)throw new Error('market save preflight failed');
+    var saved=tv2AutoSaveVerified_(before,next);
+    return {ok:preserved===0,kind:'market',revision:Number(saved.revision),mutationId:saved.lastMutationId,updated:updated,preserved:preserved};
+  } finally { lock.releaseLock(); }
+}
+function tv2AutoMarketTargets_(state) {
+  var seen={},out=[];(state.inventoryLots||[]).forEach(function(lot){if(Number(lot.quantity)<=0)return;var k=String(lot.productKey||lot.product||'')+'|'+String(lot.condition||'');if(seen[k])return;seen[k]=true;out.push({product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition});});return out;
+}
+function tv2AutoFetchMarketQuote_(target) { return {ok:false,reason:'source-adapter-not-enabled'}; }
+function tv2AutoApplyMarketQuote_(state,target,result) {
+  var next=JSON.parse(JSON.stringify(state)),price=Number(result&&result.price);
+  if(!result||result.ok!==true||!isFinite(price)||price<0||!String(result.checkedAt||'').trim()||!String(result.source||'').trim())return{state:next,updated:false};
+  var k=String(target.productKey||target.product||'')+'|'+String(target.condition||''),i=-1;
+  for(var n=0;n<(next.marketQuotes||[]).length;n++){var q=next.marketQuotes[n];if(String(q.productKey||q.product||'')+'|'+String(q.condition||'')===k){i=n;break;}}
+  var h=i>=0?(next.marketQuotes[i].history||[]).slice():[];h.push({price:price,checkedAt:String(result.checkedAt),source:String(result.source)});
+  var quote={product:target.product,productKey:target.productKey,category:target.category,condition:target.condition,price:price,checkedAt:String(result.checkedAt),source:String(result.source),history:h};
+  if(i>=0)next.marketQuotes[i]=quote;else{next.marketQuotes=next.marketQuotes||[];next.marketQuotes.push(quote);}return{state:next,updated:true};
 }
 
 function tv2AutoRecordHealthOnly_(kind, reason) {
