@@ -42,10 +42,23 @@ jobs:
           npx --yes @google/clasp@3.4.1 pull
           test -f .apps-script-v2/appsscript.json
           test -f .apps-script-v2/コード.js
+          cp .apps-script-v2/appsscript.json /tmp/tv2-appsscript.before.json
+          cp .apps-script-v2/コード.js /tmp/tv2-code.before.js
       - name: Patch only canonical automation source
         run: |
           cp v2/apps-script/Automation.gs .apps-script-v2/Automation.js
           test -s .apps-script-v2/Automation.js
           test -s .apps-script-v2/コード.js
+          cmp -s /tmp/tv2-appsscript.before.json .apps-script-v2/appsscript.json
+          cmp -s /tmp/tv2-code.before.js .apps-script-v2/コード.js
       - name: Push while preserving remote API and manifest
         run: npx --yes @google/clasp@3.4.1 push --force
+      - name: Verify remote project after push
+        run: |
+          rm -rf .apps-script-v2-verify
+          mv .apps-script-v2 .apps-script-v2-verify
+          mkdir .apps-script-v2
+          npx --yes @google/clasp@3.4.1 pull
+          cmp -s /tmp/tv2-appsscript.before.json .apps-script-v2/appsscript.json
+          cmp -s /tmp/tv2-code.before.js .apps-script-v2/コード.js
+          cmp -s v2/apps-script/Automation.gs .apps-script-v2/Automation.js
