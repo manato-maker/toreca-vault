@@ -228,3 +228,11 @@ test('final production blocker inspection is read-only and exposes locked releas
  assert.match(fn,/market-source-adapter-not-enabled/);
  assert.doesNotMatch(fn,/setContent|newTrigger|create\(\)/);
 });
+
+
+test('production blocker inspection treats unexpected market adapter state as unsafe',async()=>{
+ const s=await read();const fn=s.slice(s.indexOf('function getTorecaVaultV2ProductionBlockers()'),s.indexOf('function tv2AutoCanonical_'));
+ assert.match(fn,/marketProbe\.ok !== false/);
+ assert.match(fn,/marketProbe\.reason !== 'source-adapter-not-enabled'/);
+ assert.match(fn,/market-source-adapter-state-unsafe/);
+});
