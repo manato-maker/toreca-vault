@@ -236,3 +236,16 @@ test('production blocker inspection treats unexpected market adapter state as un
  assert.match(fn,/marketProbe\.reason !== 'source-adapter-not-enabled'/);
  assert.match(fn,/market-source-adapter-state-unsafe/);
 });
+
+
+test('production blocker inspection keeps every mutating boundary explicitly closed',async()=>{
+ const s=await read();
+ const fn=s.slice(s.indexOf('function getTorecaVaultV2ProductionBlockers()'),s.indexOf('function tv2AutoCanonical_'));
+ assert.match(fn,/production-triggers-already-installed/);
+ assert.match(s,/function tv2AutoLotteryWriterReady_\(\) \{ return false; \}/);
+ assert.match(s,/function tv2AutoMarketWriterReady_\(\) \{ return false; \}/);
+ const adapter=s.slice(s.indexOf('function tv2AutoFetchMarketQuote_'),s.indexOf('function tv2AutoApplyMarketQuote_'));
+ assert.match(adapter,/\{ok:false,reason:'source-adapter-not-enabled'\}/);
+ const install=s.slice(s.indexOf('function installTorecaVaultV2Automation()'),s.indexOf('function uninstallTorecaVaultV2Automation()'));
+ assert.ok(install.indexOf('tv2AutoAssertProductionReady_()') < install.indexOf('ScriptApp.newTrigger'));
+});
