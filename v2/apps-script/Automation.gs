@@ -1,4 +1,4 @@
-// Deployment sync probe 21: add read-only final production blocker inspection; production writers remain locked.
+// Deployment sync probe 22: deploy tested read-only production blocker inspection; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
