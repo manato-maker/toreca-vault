@@ -1,4 +1,4 @@
-// Deployment sync probe 22: deploy tested read-only production blocker inspection; production writers remain locked.
+// Deployment sync probe 23: harden final blocker inspection against unexpected market adapter state; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -422,7 +422,9 @@ function getTorecaVaultV2ProductionBlockers() {
   if (!inspection.lotteryWriterReady) blockers.push('lottery-writer-locked');
   if (!inspection.marketWriterReady) blockers.push('market-writer-locked');
   if (inspection.v2TriggerHandlers.length) blockers.push('production-triggers-already-installed');
-  if (tv2AutoFetchMarketQuote_({}).reason === 'source-adapter-not-enabled') blockers.push('market-source-adapter-not-enabled');
+  var marketProbe = tv2AutoFetchMarketQuote_({});
+  if (!marketProbe || marketProbe.ok !== false || marketProbe.reason !== 'source-adapter-not-enabled') blockers.push('market-source-adapter-state-unsafe');
+  else blockers.push('market-source-adapter-not-enabled');
   return {ok:blockers.length===0, readOnly:true, blockers:blockers, inspection:inspection};
 }
 
