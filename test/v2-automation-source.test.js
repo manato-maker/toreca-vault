@@ -117,3 +117,19 @@ test('verified automation save rejects stale REAL state before writing',async()=
  assert.ok(firstWrite > save.indexOf('stale automation write'));
  assert.ok(firstWrite > save.indexOf('automation base changed before save'));
 });
+
+
+test('REAL save preflight is read-only and reports whether a verified save would be allowed',async()=>{
+ const s=await read();
+ const start=s.indexOf('function tv2AutoPreviewVerifiedSave_(before, next)');
+ const end=s.indexOf('function tv2AutoSaveVerified_(before, next)',start);
+ assert.ok(start >= 0 && end > start);
+ const preview=s.slice(start,end);
+ assert.match(preview,/tv2AutoRead_\(\)/);
+ assert.match(preview,/readOnly:true/);
+ assert.match(preview,/sameBase:/);
+ assert.match(preview,/nextValid:/);
+ assert.match(preview,/wouldWrite:/);
+ assert.doesNotMatch(preview,/setContent\s*\(/);
+ assert.doesNotMatch(preview,/tv2AutoSaveVerified_\s*\(/);
+});
