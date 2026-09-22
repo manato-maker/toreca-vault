@@ -1,4 +1,4 @@
-// Deployment sync probe 19: align read-only lottery preview with writer candidate filter; production writers remain locked.
+// Deployment sync probe 20: deploy tested lottery preview/writer candidate parity; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
