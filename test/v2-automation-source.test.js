@@ -14,7 +14,7 @@ test('V2 automation is isolated from V1 and has verified save safety',async()=>{
 test('V2 automation does not silently enable Gmail or market writes',async()=>{
  const s=await read();
  assert.match(s,/writer-locked/);
- assert.match(s,/fetcher-not-enabled/);
+ assert.match(s,/source-adapter-not-enabled/);
  assert.match(s,/installTorecaVaultV2Automation/);
 });
 
@@ -147,4 +147,17 @@ test('lottery production writer is implemented but hard-locked and verified befo
  assert.match(run,/tv2AutoPreviewVerifiedSave_\(before, next\)/);
  assert.match(run,/tv2AutoSaveVerified_\(before, next\)/);
  assert.match(s,/function tv2AutoLotteryWriterReady_\(\) \{ return false; \}/);
+});
+
+
+test('market production writer remains hard-locked and source adapter fails closed',async()=>{
+ const s=await read();
+ const start=s.indexOf('function runTorecaVaultV2MarketSync()');
+ const end=s.indexOf('function tv2AutoRecordHealthOnly_',start);
+ assert.ok(start>=0&&end>start);const run=s.slice(start,end);
+ assert.match(run,/if \(!tv2AutoMarketWriterReady_\(\)\) return tv2AutoRecordHealthOnly_/);
+ assert.match(run,/tv2AutoPreviewVerifiedSave_\(before,next\)/);
+ assert.match(run,/tv2AutoSaveVerified_\(before,next\)/);
+ assert.match(run,/source-adapter-not-enabled/);
+ assert.match(s,/function tv2AutoMarketWriterReady_\(\) \{ return false; \}/);
 });
