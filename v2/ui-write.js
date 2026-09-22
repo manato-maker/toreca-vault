@@ -22,3 +22,17 @@ export async function commitV2Transaction(type,data,config=getVaultV2Config()){
  if(reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('V2保存後のrevision検証に失敗しました');
  return{transaction:stored[0],payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
 }
+
+export async function commitV2Batch(items,config=getVaultV2Config()){
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);
+ if(!Array.isArray(items)||!items.length)throw new Error('一括反映データがありません');
+ let next=before.payload;const txs=[];const batchId='ui-batch-'+crypto.randomUUID();
+ for(let i=0;i<items.length;i++){
+  const item=items[i],tx=normalizeUiTransaction(item.type,item.data),mutationId=batchId+'-'+String(i+1);
+  next=applyTransaction(next,tx,mutationId);txs.push({tx,mutationId});
+ }
+ validateState(next);const confirmed=await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
+ for(const {tx,mutationId} of txs){if(reread.payload.transactions.filter(x=>x.id===tx.id).length!==1)throw new Error('一括反映後の取引一意性検証に失敗しました');if(reread.payload.auditLog.filter(x=>x.mutationId===mutationId).length!==1)throw new Error('一括反映後の監査検証に失敗しました')}
+ if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==txs.at(-1).mutationId)throw new Error('一括反映後のrevision検証に失敗しました');
+ return{transactions:txs.map(x=>x.tx),payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
+}
