@@ -31,6 +31,12 @@ export async function commitV2Batch(items,config=getVaultV2Config()){
   const item=items[i],tx=normalizeUiTransaction(item.type,item.data),mutationId=batchId+'-'+String(i+1);
   next=applyTransaction(next,tx,mutationId);txs.push({tx,mutationId});
  }
+ // A batch is one persisted mutation. applyTransaction increments revision per item,
+ // but the server contract requires exactly +1 per save.
+ next.revision=Number(before.revision)+1;
+ next.lastMutationId=txs.at(-1).mutationId;
+ // Keep per-item audit entries, but bind them to the single persisted revision.
+ for(const {mutationId} of txs){const audit=next.auditLog.find(x=>x.mutationId===mutationId);if(audit)audit.revision=next.revision}
  validateState(next);const confirmed=await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
  for(const {tx,mutationId} of txs){if(reread.payload.transactions.filter(x=>x.id===tx.id).length!==1)throw new Error('一括反映後の取引一意性検証に失敗しました');if(reread.payload.auditLog.filter(x=>x.mutationId===mutationId).length!==1)throw new Error('一括反映後の監査検証に失敗しました')}
  if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==txs.at(-1).mutationId)throw new Error('一括反映後のrevision検証に失敗しました');
