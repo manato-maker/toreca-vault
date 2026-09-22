@@ -195,3 +195,11 @@ test('lottery writer fails closed on ambiguity and ignores unrelated messages in
  assert.ok(run.indexOf('merged.review > 0') < run.indexOf('tv2AutoSaveVerified_'));
  assert.match(run,/next\.auditLog = next\.auditLog \|\| \[\]/);
 });
+
+
+test('market writer initializes audit log before recording a verified mutation',async()=>{
+ const s=await read();const run=s.slice(s.indexOf('function runTorecaVaultV2MarketSync()'),s.indexOf('function tv2AutoMarketTargets_'));
+ assert.match(run,/next\.auditLog=next\.auditLog\|\|\[\]/);
+ assert.ok(run.indexOf('next.auditLog=next.auditLog||[]') < run.indexOf('next.auditLog.push'));
+ assert.ok(run.indexOf('next.auditLog.push') < run.indexOf('tv2AutoPreviewVerifiedSave_'));
+});
