@@ -1,4 +1,4 @@
-// Deployment sync probe 17: fail-closed market target identity guard; production writers remain locked.
+// Deployment sync probe 18: deploy tested market target identity guard; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
