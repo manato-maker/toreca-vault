@@ -1,4 +1,4 @@
-// Deployment sync probe 13: lottery ambiguity and unrelated-mail guards; writers remain locked.
+// Deployment sync probe 14: deploy tested lottery ambiguity guards; writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
