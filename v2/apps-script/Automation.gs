@@ -1,4 +1,4 @@
-// Deployment sync probe 7: stale-write guard before Drive save; no production triggers.
+// Deployment sync probe 8: read-only verified-save preflight; no production triggers.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -264,6 +264,18 @@ function tv2AutoRecordHealthOnly_(kind, reason) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function tv2AutoPreviewVerifiedSave_(before, next) {
+  tv2AutoValidate_(before);
+  tv2AutoValidate_(next);
+  var current = tv2AutoRead_();
+  var sameBase = Number(current.revision) === Number(before.revision) &&
+    String(current.lastMutationId || '') === String(before.lastMutationId || '') &&
+    tv2AutoCanonical_(current) === tv2AutoCanonical_(before);
+  var nextValid = Number(next.revision) === Number(before.revision) + 1 &&
+    !!next.lastMutationId && next.lastMutationId !== before.lastMutationId;
+  return {ok:sameBase && nextValid, readOnly:true, sameBase:sameBase, nextValid:nextValid, wouldWrite:sameBase && nextValid};
 }
 
 function tv2AutoSaveVerified_(before, next) {
