@@ -161,3 +161,22 @@ test('market production writer remains hard-locked and source adapter fails clos
  assert.match(run,/source-adapter-not-enabled/);
  assert.match(s,/function tv2AutoMarketWriterReady_\(\) \{ return false; \}/);
 });
+
+
+test('production writers cannot create triggers while either writer lock is closed',async()=>{
+ const s=await read();
+ const install=s.slice(s.indexOf('function installTorecaVaultV2Automation()'),s.indexOf('function uninstallTorecaVaultV2Automation()'));
+ assert.match(install,/tv2AutoAssertProductionReady_\(\)/);
+ assert.ok(install.indexOf('tv2AutoAssertProductionReady_()') < install.indexOf('ScriptApp.newTrigger'));
+ assert.match(s,/function tv2AutoLotteryWriterReady_\(\) \{ return false; \}/);
+ assert.match(s,/function tv2AutoMarketWriterReady_\(\) \{ return false; \}/);
+});
+
+test('market source adapter remains fail-closed and cannot fabricate provenance',async()=>{
+ const s=await read();
+ const start=s.indexOf('function tv2AutoFetchMarketQuote_(target)');
+ const end=s.indexOf('function tv2AutoApplyMarketQuote_',start);
+ assert.ok(start>=0&&end>start);const adapter=s.slice(start,end);
+ assert.match(adapter,/ok:false/);assert.match(adapter,/source-adapter-not-enabled/);
+ assert.doesNotMatch(adapter,/price\s*:/);assert.doesNotMatch(adapter,/checkedAt\s*:/);assert.doesNotMatch(adapter,/source\s*:/);
+});
