@@ -8,3 +8,5 @@ test('unknown acquisition cost is excluded from realized profit',()=>{const x=st
 import{applyV2ReadOnlyToUi}from'../js/v2-readonly.js';
 test('read-only UI adapter does not alter fallback state without snapshot',()=>{const fallback={purchases:[{id:'old'}]};const x=applyV2ReadOnlyToUi(fallback,null);assert.equal(x.state,fallback);assert.equal(x.active,false)});
 test('read-only UI adapter uses V2 projection when snapshot exists',()=>{const projected=v2ViewModel(state);const x=applyV2ReadOnlyToUi({purchases:[]},{state:projected,assets:{total:160},realizedProfit:50,revision:2,lastMutationId:'m'});assert.equal(x.active,true);assert.equal(x.state,projected);assert.equal(x.revision,2);assert.equal(x.lastMutationId,'m')});
+
+test('inventory projection shows newest acquired lots first',()=>{const x=structuredClone(state);x.inventoryLots.push({id:'new',product:'Newest',productKey:'Newest',category:'BOX',condition:'あり',quantity:1,unitCost:1,acquiredAt:'2026-09-20'});const view=v2ViewModel(x);assert.equal(view.boxes[0].product,'Newest')});
