@@ -1,4 +1,4 @@
-// Deployment sync probe 15: market audit-log guard; production writers remain locked.
+// Deployment sync probe 16: deploy tested market audit-log guard; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
