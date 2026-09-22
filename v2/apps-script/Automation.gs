@@ -1,4 +1,4 @@
-// Deployment sync probe 2: guarded workflow dependency fix; no production triggers.
+// Deployment sync probe 3: clasp .js preservation fix; no production triggers.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
