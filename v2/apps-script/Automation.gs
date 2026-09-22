@@ -1,4 +1,4 @@
-// Deployment sync probe 16: deploy tested market audit-log guard; production writers remain locked.
+// Deployment sync probe 17: fail-closed market target identity guard; production writers remain locked.
 /**
  * Toreca Vault V2 automation runner (separate Apps Script project).
  *
@@ -331,7 +331,12 @@ function runTorecaVaultV2MarketSync() {
   } finally { lock.releaseLock(); }
 }
 function tv2AutoMarketTargets_(state) {
-  var seen={},out=[];(state.inventoryLots||[]).forEach(function(lot){if(Number(lot.quantity)<=0)return;var k=String(lot.productKey||lot.product||'')+'|'+String(lot.condition||'');if(seen[k])return;seen[k]=true;out.push({product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition});});return out;
+  var seen={},out=[];(state.inventoryLots||[]).forEach(function(lot){
+    var quantity=Number(lot.quantity);if(!isFinite(quantity)||quantity<=0)return;
+    var identity=String(lot.productKey||lot.product||'').trim();if(!identity)return;
+    var k=identity+'|'+String(lot.condition||'');if(seen[k])return;seen[k]=true;
+    out.push({product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition});
+  });return out;
 }
 function tv2AutoFetchMarketQuote_(target) { return {ok:false,reason:'source-adapter-not-enabled'}; }
 function tv2AutoApplyMarketQuote_(state,target,result) {
