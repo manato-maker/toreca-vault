@@ -2,6 +2,10 @@ name: Deploy V2 Apps Script
 
 on:
   workflow_dispatch:
+  push:
+    branches: [vault-v2-prep]
+    paths:
+      - 'v2/apps-script/Automation.gs'
 
 permissions:
   contents: read
