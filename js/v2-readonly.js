@@ -8,7 +8,7 @@ export async function tryLoadV2ReadOnly(){
 }
 export function enableV2ReadOnly(url,token){return setVaultV2Config(url,token)}
 export function disableV2ReadOnly(){clearVaultV2Config()}
-export function hasV2ReadOnly(){const c=getVaultV2Config();return Boolean(c.url&&c.token)}
+export function hasV2ReadOnly(){const c=getVaultV2Config();return Boolean(c.url)}
 export function applyV2ReadOnlyToUi(currentState,snapshot){
  if(!snapshot?.state)return{state:currentState,active:false};
  return{state:snapshot.state,active:true,assets:snapshot.assets,realizedProfit:snapshot.realizedProfit,revision:snapshot.revision,lastMutationId:snapshot.lastMutationId};
