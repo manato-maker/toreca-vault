@@ -18,7 +18,7 @@ export function migrateV1(root){
    out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:migratedCondition(x,category),quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
  }
  out.lotteries=structuredClone(src.lotteries||[]);
- out.marketQuotes=[...(src.boxes||[]),...(src.packs||[]),...(src.cards||[])].filter(x=>q(x)>0&&num(x.marketPrice)!==null).map(x=>({product:x.product,productKey:productKey(x),category:migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX'),condition:migratedCondition(x,migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX')),price:num(x.marketPrice),checkedAt:x.marketCheckedAt||'',source:x.marketSource||'',history:structuredClone(x.marketHistory||[]),legacyInventoryId:x.id}));
+ out.marketQuotes=[...(src.boxes||[]),...(src.packs||[]),...(src.cards||[])].filter(x=>q(x)>0&&num(x.marketPrice??x.buybackPrice)!==null).map(x=>({product:x.product,productKey:productKey(x),category:migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX'),condition:migratedCondition(x,migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX')),price:num(x.marketPrice??x.buybackPrice),checkedAt:x.marketCheckedAt||'',source:x.marketSource||'',history:structuredClone(x.marketHistory||[]),legacyInventoryId:x.id}));
  validateState(out);return out;
 }
 export function migrationReport(oldRoot,v2){
