@@ -101,3 +101,13 @@ export function parseGoogleFormLotteryMail(mail){
  const product=selected[0];
  return normalizeLotteryMail({id,store,product,tcg:classifyTradingCardLottery(subject+' '+body.slice(0,500)+' '+product),status:'応募済み',source:'GoogleForms',receivedAt});
 }
+
+
+export function extractCardModel(target){
+ const text=[target?.set,target?.product,target?.productKey].filter(Boolean).join(' ').normalize('NFKC');
+ const m=text.match(/\b[A-Z0-9-]*\d[A-Z0-9-]*\s+\d{3}\/\d{3}\b/i)||text.match(/\b\d{3}\/\d{3}\b/i);
+ return m?m[0].toUpperCase().replace(/\s+/g,' '):'';
+}
+export function currentCardMarketTargets(state){
+ return (state.inventoryLots||[]).filter(x=>x.category==='カード'&&Number(x.quantity)>0).map(x=>({...x,marketModel:extractCardModel(x)}));
+}

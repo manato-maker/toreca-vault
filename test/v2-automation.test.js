@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,normalizeMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail}from'../v2/automation.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{matchLottery,mergeLotteryMail,applyMarketFetch,normalizeMarketFetch,recordAutomationHealth,runMarketBatch,runLotteryBatch,normalizeLotteryMail,prepareLotteryMailBatch,parseLivePocketLotteryMail,classifyTradingCardLottery,prepareLotteryMailForMerge,parseLotteryMail,parseToysRUsLotteryMail,parseGoogleFormLotteryMail,extractCardModel,currentCardMarketTargets}from'../v2/automation.js';
 test('same application id duplicates are ignored, not review',()=>{const s=emptyV2();s.lotteries=[{id:'a',applicationId:'104'},{id:'b',applicationId:'104'}];assert.equal(matchLottery(s.lotteries,{applicationId:'104'}).kind,'duplicate');assert.equal(mergeLotteryMail(s,{applicationId:'104'}).outcome,'duplicate')});
 test('truly ambiguous fallback goes to review',()=>{const s=emptyV2();s.lotteries=[{id:'a',store:'X',product:'Y'},{id:'b',store:'X',product:'Y'}];assert.equal(matchLottery(s.lotteries,{store:'X',product:'Y'}).kind,'review')});
 test('market fetch failure preserves prior quote',()=>{const s=emptyV2();s.marketQuotes=[{productKey:'p',condition:'あり',price:100,history:[]}];const r=applyMarketFetch(s,{productKey:'p',product:'P',category:'BOX',condition:'あり'},{ok:false});assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,100)});
@@ -95,3 +95,7 @@ test('market fetch preserves prior quote when provenance is missing',()=>{
  const r=applyMarketFetch(state,{product:'A',productKey:'a',condition:'あり'},{ok:true,price:2000});
  assert.equal(r.outcome,'preserved');assert.equal(r.state.marketQuotes[0].price,1000);
 });
+
+
+test('extracts model from current card product names',()=>{assert.equal(extractCardModel({product:'リザードン M6a 137/103'}),'M6A 137/103');assert.equal(extractCardModel({product:'ピカチュウex M6a 127/103'}),'M6A 127/103')});
+test('current card market targets only include positive card inventory',()=>{const s=emptyV2();s.inventoryLots=[{id:'c1',product:'リザードン M6a 137/103',category:'カード',quantity:1},{id:'c0',product:'旧カード 001/100',category:'カード',quantity:0},{id:'b1',product:'BOX',category:'BOX',quantity:1}];const x=currentCardMarketTargets(s);assert.equal(x.length,1);assert.equal(x[0].marketModel,'M6A 137/103')});
