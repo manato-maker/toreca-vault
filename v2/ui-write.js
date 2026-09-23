@@ -42,3 +42,22 @@ export async function commitV2Batch(items,config=getVaultV2Config()){
  if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==txs.at(-1).mutationId)throw new Error('一括反映後のrevision検証に失敗しました');
  return{transactions:txs.map(x=>x.tx),payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
 }
+
+export async function commitV2MarketQuotes(quotes,config=getVaultV2Config()){
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);
+ const incoming=(quotes||[]).filter(q=>q&&String(q.productKey||q.product||'').trim()&&Number.isFinite(Number(q.price)));
+ if(!incoming.length)throw new Error('復元できる相場データがありません');
+ const next=structuredClone(before.payload),key=q=>[String(q.productKey||q.product||'').trim().toLocaleLowerCase('ja'),String(q.condition||'')].join('::');
+ const map=new Map((next.marketQuotes||[]).map(q=>[key(q),q]));
+ for(const q of incoming)map.set(key(q),structuredClone(q));
+ next.marketQuotes=[...map.values()];
+ const mutationId='ui-market-restore-'+crypto.randomUUID();
+ next.revision=Number(before.revision)+1;next.lastMutationId=mutationId;
+ next.auditLog.push({mutationId,type:'market-quote-restore',revision:next.revision,count:incoming.length,at:new Date().toISOString()});
+ validateState(next);
+ await saveV2(config.url,config.token,next,before.revision);
+ const reread=await loadVaultV2(config);
+ if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('相場復元後のrevision検証に失敗しました');
+ if(reread.payload.auditLog.filter(x=>x.mutationId===mutationId).length!==1)throw new Error('相場復元後の監査検証に失敗しました');
+ return{payload:reread.payload,revision:reread.revision,count:incoming.length,lastMutationId:mutationId};
+}
