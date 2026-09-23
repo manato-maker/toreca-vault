@@ -340,7 +340,7 @@ function tv2AutoMarketTargets_(state) {
     out.push({product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition});
   });return out;
 }
-function tv2AutoFetchMarketQuote_(target) { return typeof tv2MarketFetchQuote === 'function' ? tv2MarketFetchQuote(target) : {ok:false,reason:'source-adapter-not-enabled'}; }
+function tv2AutoFetchMarketQuote_(target) { return {ok:false,reason:'source-adapter-not-enabled'}; }
 function tv2AutoApplyMarketQuote_(state,target,result) {
   var next=JSON.parse(JSON.stringify(state)),price=Number(result&&result.price);
   if(!result||result.ok!==true||!isFinite(price)||price<0||!String(result.checkedAt||'').trim()||!String(result.source||'').trim())return{state:next,updated:false};
@@ -430,7 +430,7 @@ function getTorecaVaultV2ProductionBlockers() {
 
 function tv2AutoCanonical_(x) { return JSON.stringify(x); }
 function tv2AutoLotteryWriterReady_() { return false; }
-function tv2AutoMarketWriterReady_() { return typeof tv2MarketFetchQuote === 'function' && typeof tv2MarketAdapterReady === 'function' && tv2MarketAdapterReady() === true; }
+function tv2AutoMarketWriterReady_() { return false; }
 function tv2AutoAssertProductionReady_() {
   if (!tv2AutoLotteryWriterReady_()) throw new Error('lottery writer is not acceptance-tested');
   if (!tv2AutoMarketWriterReady_()) throw new Error('market writer is not acceptance-tested');
