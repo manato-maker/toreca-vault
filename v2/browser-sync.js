@@ -13,7 +13,9 @@ const CONFIG_KEY='toreca-vault:v2:sync';
 const TOKEN_KEY='toreca-vault:v2:token';
 export function getVaultV2Config(){
   let saved={};try{saved=JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')}catch{}
-  const token=sessionStorage.getItem(TOKEN_KEY)||saved.token||'';
+  const sessionToken=sessionStorage.getItem(TOKEN_KEY)||'';
+  if(sessionToken&&!saved.token){saved={...saved,token:sessionToken};localStorage.setItem(CONFIG_KEY,JSON.stringify(saved))}
+  const token=sessionToken||saved.token||'';
   return{url:String(saved.url||'').trim(),token:String(token).trim()};
 }
 export function setVaultV2Config(url,token){
