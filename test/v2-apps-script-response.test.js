@@ -11,7 +11,7 @@ test('Apps Script V2 client accepts JSON and JSONP responses',()=>{
 
 
 test('V2 automation reuses the existing canonical V2 sync token property', () => {
-  const src = readFileSync(new URL('../automation/V2Automation.gs', import.meta.url), 'utf8');
-  assert.match(src, /getProperty\('TV_V2_SYNC_TOKEN'\)/);
-  assert.match(src, /getProperty\(TV2_SYNC_TOKEN_PROP\).*getProperty\('TV_V2_SYNC_TOKEN'\)/);
+  const source = fs.readFileSync(new URL('../automation/V2Automation.gs', import.meta.url), 'utf8');
+  assert.match(source, /getProperty\('TV_V2_SYNC_TOKEN'\)/);
+  assert.match(source, /getProperty\(TV2_SYNC_TOKEN_PROP\).*getProperty\('TV_V2_SYNC_TOKEN'\)/);
 });
