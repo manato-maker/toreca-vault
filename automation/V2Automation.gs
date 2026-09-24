@@ -27,8 +27,21 @@ function runTv2LotteryAuto(){
       const match=matchLottery_(state.lotteries,text);
       if(match.kind==='outside')report.outside++;else if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject:message.getSubject()})}else{
         const parsed=parseResult_(text,message.getDate());if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject:message.getSubject()})}
-        else{const item=match.item,old=JSON.stringify(item);if(item.receiptStatus==='受取済み'&&parsed.status==='落選'){report.review++;reviews.push({messageId:id,reason:'受取済みと落選メールが競合',subject:message.getSubject()})}
-        else{if(item.status==='応募済'||(item.status==='当選'&&parsed.status==='当選'))item.status=parsed.status;item.resultDate=parsed.resultDate||item.resultDate;if(parsed.receiveDeadline)item.receiveDeadline=parsed.receiveDeadline;if(parsed.status==='当選'&&!['受取済み','未受取'].includes(item.receiptStatus))item.receiptStatus='未受取';if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';item.updatedAt=now.toISOString();if(JSON.stringify(item)!==old){report.updated++;changed=true}else report.duplicate++;}}
+        else{
+          const item=match.item,old=JSON.stringify(item);
+          const conflict=(parsed.status==='落選'&&(['当選','購入済'].includes(item.status)||item.receiptStatus==='受取済み'))||
+            (parsed.status==='当選'&&item.status==='落選');
+          if(conflict){report.review++;reviews.push({messageId:id,reason:'既存の当落・購入・受取状態と結果メールが競合',subject:message.getSubject()})}
+          else{
+            if(['応募済','応募済み'].includes(item.status))item.status=parsed.status;
+            item.resultDate=parsed.resultDate||item.resultDate;
+            if(parsed.receiveDeadline)item.receiveDeadline=parsed.receiveDeadline;
+            if(parsed.status==='当選'&&!['受取済み','未受取'].includes(item.receiptStatus))item.receiptStatus='未受取';
+            if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
+            item.updatedAt=now.toISOString();
+            if(JSON.stringify(item)!==old){report.updated++;changed=true}else report.duplicate++;
+          }
+        }
       }newIds.push(id);
     }));
     health.gmailMessageIds=[...processed,...newIds].slice(-3000);health.lastGmailRunAt=now.toISOString();health.gmailReview=report.review;health.gmailStatus=report.review?'review':'ok';health.gmailNeedsReview=[...(health.gmailNeedsReview||[]),...reviews].slice(-200);
