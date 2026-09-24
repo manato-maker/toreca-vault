@@ -93,6 +93,10 @@ function runTorecaVaultLotterySync() {
     automation.gmailMessageIds = [...processed, ...newIds].slice(-MAX_IDS);
     automation.lastGmailRunAt = now.toISOString();
     automation.lastReport = report;
+    automation.health = automation.health || {};
+    automation.health.lastGmailRunAt = now.toISOString();
+    automation.health.gmailReview = report.review;
+    automation.health.gmailStatus = report.review ? 'review' : 'ok';
     automation.needsReview = [...(automation.needsReview || []), ...updates].slice(-200);
     root.automation = automation;
 
@@ -299,6 +303,10 @@ function runTorecaVaultMarketSync() {
     root.automation = root.automation || {};
     root.automation.lastMarketRunAt = now.toISOString();
     root.automation.lastMarketReport = report;
+    root.automation.health = root.automation.health || {};
+    root.automation.health.lastMarketRunAt = now.toISOString();
+    root.automation.health.marketReview = report.review;
+    root.automation.health.marketStatus = (report.fetchError || report.review) ? 'review' : 'ok';
     root.automation.marketNeedsReview = reviews.slice(-200);
     if (report.updated) root.data.updatedAt = now.toISOString();
     root.exportedAt = now.toISOString();
