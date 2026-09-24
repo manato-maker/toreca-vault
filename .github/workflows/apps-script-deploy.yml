@@ -16,19 +16,28 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ secrets.CLASPRC_JSON != '' && secrets.CLASP_JSON_AUTOMATION != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm install --no-save @google/clasp
+      - name: Check deployment credentials
+        id: creds
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASP_JSON_AUTOMATION: ${{ secrets.CLASP_JSON_AUTOMATION }}
+        run: |
+          if [ -n "$CLASPRC_JSON" ] && [ -n "$CLASP_JSON_AUTOMATION" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else echo "ready=false" >> "$GITHUB_OUTPUT"; fi
       - name: Configure clasp
+        if: steps.creds.outputs.ready == 'true'
         run: |
           printf '%s' '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
           printf '%s' '${{ secrets.CLASP_JSON_AUTOMATION }}' > automation/.clasp.json
       - name: Push automation source
+        if: steps.creds.outputs.ready == 'true'
         working-directory: automation
         run: npx clasp push --force
       - name: Create immutable version
+        if: steps.creds.outputs.ready == 'true'
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
