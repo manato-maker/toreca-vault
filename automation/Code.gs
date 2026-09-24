@@ -290,7 +290,11 @@ function runTorecaVaultMarketSync() {
         report.updated++;
       } catch (err) { card.marketFresh = false; card.marketTrend = 'stale'; report.review++; reviews.push((card.product || '') + ' ' + model + ': 取得失敗・前回価格維持'); }
     });
-    report.unsupported = root.data.boxes.filter(x => Number(x.quantity) > 0).length + root.data.packs.filter(x => Number(x.quantity) > 0).length;
+    const sealedReport = syncSealedMarketCandidates_(root.data, date, reviews);
+    report.updated += sealedReport.updated;
+    report.unchanged += sealedReport.unchanged;
+    report.review += sealedReport.review;
+    report.unsupported = sealedReport.unsupported;
     root.automation = root.automation || {};
     root.automation.lastMarketRunAt = now.toISOString();
     root.automation.lastMarketReport = report;
@@ -440,4 +444,30 @@ function jsonResponse_(obj) {
 function jsonpResponse_(callback, obj) {
   const body = callback ? callback + '(' + JSON.stringify(obj) + ')' : JSON.stringify(obj);
   return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+
+const SEALED_MARKET_STORES = new Set(['買取ミミ','AMTAF','アリウム']);
+function syncSealedMarketCandidates_(data, date, reviews) {
+  const report = { updated:0, unchanged:0, review:0, unsupported:0 };
+  const candidates = Array.isArray(data.marketCandidates) ? data.marketCandidates : [];
+  [...(data.boxes||[]), ...(data.packs||[])].filter(x=>Number(x.quantity)>0).forEach(item=>{
+    const product = String(item.product||'').trim();
+    const condition = String(item.condition||item.shrinkStatus||'').trim();
+    const exact = candidates.filter(q=>String(q.product||'').trim()===product && String(q.condition||'').trim()===condition && SEALED_MARKET_STORES.has(String(q.store||'').trim()) && Number(q.price)>0 && String(q.checkedAt||'')===date && q.verified===true && (!q.imageDerived || ['official','google'].includes(String(q.verifiedBy||'').toLowerCase())));
+    if(!exact.length){ item.marketFresh=false; item.marketTrend='stale'; report.review++; report.unsupported++; reviews.push(product+': 3店の同一商品・同一状態の確認済み価格なし・前回価格維持'); return; }
+    const best=exact.reduce((a,b)=>Number(b.price)>Number(a.price)?b:a);
+    const old=Number(item.marketPrice||item.buybackPrice||0);
+    item.marketPreviousPrice=old;
+    item.marketTrend=Number(best.price)>old?'up':Number(best.price)<old?'down':'same';
+    item.marketFresh=true;
+    item.marketPrice=Number(best.price);
+    item.marketCheckedAt=date;
+    item.marketSource=String(best.store)+' '+date;
+    const history=Array.isArray(item.marketHistory)?item.marketHistory:[];
+    if(!history.some(h=>h.date===date&&Number(h.value)===Number(best.price)))history.push({date,value:Number(best.price),source:item.marketSource});
+    item.marketHistory=history.slice(-400);
+    if(old===Number(best.price))report.unchanged++;else report.updated++;
+  });
+  return report;
 }
