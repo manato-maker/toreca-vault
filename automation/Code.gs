@@ -271,13 +271,16 @@ function runTorecaVaultMarketSync() {
     try { cardrushRows = fetchCardrushRows_(); } catch (err) { report.fetchError = String(err); }
     root.data.cards.forEach(card => {
       const model = extractModel_(card.set);
-      if (!model) { report.review++; reviews.push((card.product || '') + ': 型番を特定できません'); return; }
+      if (!model) { card.marketFresh = false; card.marketTrend = 'stale'; report.review++; reviews.push((card.product || '') + ': 型番を特定できません・前回価格維持'); return; }
       try {
         let result = findCardrushBuyback_(cardrushRows, card.product, model);
         if (!result) result = fetchAltemaBuyback_(card.product, model);
-        if (!result || !result.price) { report.review++; reviews.push((card.product || '') + ' ' + model + ': 完全一致なし'); return; }
+        if (!result || !result.price) { card.marketFresh = false; card.marketTrend = 'stale'; report.review++; reviews.push((card.product || '') + ' ' + model + ': 完全一致なし・前回価格維持'); return; }
         const old = Number(card.buybackPrice || 0);
-        if (old === result.price) { report.unchanged++; return; }
+        if (old === result.price) { card.marketCheckedAt = date; card.marketSource = result.source; card.marketTrend = 'same'; card.marketFresh = true; report.unchanged++; return; }
+        card.marketPreviousPrice = old;
+        card.marketTrend = result.price > old ? 'up' : result.price < old ? 'down' : 'same';
+        card.marketFresh = true;
         card.buybackPrice = result.price;
         card.marketCheckedAt = date;
         card.marketSource = result.source;
@@ -285,7 +288,7 @@ function runTorecaVaultMarketSync() {
         if (!history.some(x => x.date === date && Number(x.value) === result.price)) history.push({ date, value: result.price, source: result.source });
         card.marketHistory = history.slice(-400);
         report.updated++;
-      } catch (err) { report.review++; reviews.push((card.product || '') + ' ' + model + ': 取得失敗'); }
+      } catch (err) { card.marketFresh = false; card.marketTrend = 'stale'; report.review++; reviews.push((card.product || '') + ' ' + model + ': 取得失敗・前回価格維持'); }
     });
     report.unsupported = root.data.boxes.filter(x => Number(x.quantity) > 0).length + root.data.packs.filter(x => Number(x.quantity) > 0).length;
     root.automation = root.automation || {};
