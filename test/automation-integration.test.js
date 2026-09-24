@@ -11,7 +11,8 @@ const must=[
 /!q\.imageDerived \|\| \['official','google'\]/,
 /item\.marketFresh=false; item\.marketTrend='stale'/,
 /parsed\.status === '落選' && item\.receiptStatus !== '受取済み'/,
-/title: resultDate \? cleanStoreName_\(store\) : '詳細不明'/
+/title: resultDate \? cleanLotteryTitle_\(title\) : '詳細不明'/,
+/store: cleanStoreName_\(store\)/
 ];for(const re of must)assert.match(code,re);
 assert.ok(code.indexOf('refreshSealedMarketCandidates_(root.data, date, reviews)')<code.indexOf('syncSealedMarketCandidates_(root.data, date, reviews)'),'feed must run before policy');
 console.log('automation integration: ok');
