@@ -13,6 +13,7 @@ export function emptyV2(){
 export function inventoryKey(x){return [key(x.productKey||x.product),String(x.condition||x.shrinkStatus||'')].join('::')}
 export function validateState(state){
   if(!state||state.schemaVersion!==2)throw new Error('schemaVersion=2 が必要です');
+  if(!state.automation||typeof state.automation!=='object')state.automation={health:{}};
   for(const name of ['transactions','inventoryLots','lotteries','marketQuotes','auditLog'])if(!Array.isArray(state[name]))throw new Error(name+' が配列ではありません');
   const tx=new Set(),lots=new Set();
   for(const t of state.transactions){if(!t.id||tx.has(t.id))throw new Error('transactionId が重複または未設定です');tx.add(t.id)}
