@@ -1,5 +1,5 @@
-const CACHE='toreca-vault-v19';
-const ASSETS=['./','./index.html','./styles.css','./js/app.js','./js/presentation.js','./js/ui-enhancements.js','./js/franchise.js','./js/franchise-ui.js','./js/remote-sync.js','./js/schema.js','./js/storage.js','./js/calculations.js','./js/inventory.js','./market-update.json','./manifest.webmanifest','./assets/icon.svg'];
+const CACHE='toreca-vault-v20';
+const ASSETS=['./','./index.html','./styles.css','./js/app.js','./js/presentation.js','./js/ui-enhancements.js','./js/franchise.js','./js/franchise-ui.js','./js/remote-sync.js','./js/schema.js','./js/storage.js','./js/calculations.js','./js/inventory.js','./market-update.json','./data/current-box-market.js','./manifest.webmanifest','./assets/icon.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request)))})
