@@ -3,12 +3,15 @@ const TV2_SYNC_TOKEN_PROP='TV2_SYNC_TOKEN';
 const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
 
 function installTv2Automation(){
-  tv2Config_();
+  // Only replace schedules after both V2 jobs have successfully read and
+  // verified the canonical state. A failed connection must not install jobs.
+  const lottery=runTv2LotteryAuto(),market=runTv2MarketAuto();
+  if(lottery.skipped||market.skipped)throw new Error('V2自動化の実行がスキップされたためトリガーを作成しません');
   ScriptApp.getProjectTriggers().forEach(t=>{if(['runTv2LotteryAuto','runTv2MarketAuto'].includes(t.getHandlerFunction()))ScriptApp.deleteTrigger(t)});
   ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(13).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  return {lottery:runTv2LotteryAuto(),market:runTv2MarketAuto()};
+  return {lottery,market};
 }
 function runTv2LotteryAuto(){
   return tv2Mutate_('gmail-auto',state=>{
@@ -65,7 +68,7 @@ function runTv2MarketAuto(){
 function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}
 function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
 function tv2Health_(state){state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};state.automation.health=state.automation.health&&typeof state.automation.health==='object'?state.automation.health:{};return state.automation.health}
-function tv2Config_(){const p=PropertiesService.getScriptProperties(),url=String(p.getProperty(TV2_SYNC_URL_PROP)||''),token=String(p.getProperty(TV2_SYNC_TOKEN_PROP)||p.getProperty('TV_V2_SYNC_TOKEN')||'');if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url))throw new Error('TV2_SYNC_URL が未設定です');if(token.length<24)throw new Error('TV2_SYNC_TOKEN が未設定です');return{url,token}}
+function tv2Config_(){const p=PropertiesService.getScriptProperties(),url=String(p.getProperty(TV2_SYNC_URL_PROP)||''),token=String(p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty(TV2_SYNC_TOKEN_PROP)||'');if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url))throw new Error('TV2_SYNC_URL が未設定です');if(token.length<24)throw new Error('TV2_SYNC_TOKEN が未設定です');return{url,token}}
 function tv2ParseResponse_(raw){const text=String(raw||'').trim();if(!text)throw new Error('V2 API empty response');let json=text;const m=text.match(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(\s*([\s\S]*)\s*\)\s*;?$/);if(m)json=m[1].trim();try{return JSON.parse(json)}catch(e){throw new Error('V2 API response is not JSON/JSONP')}}
 function tv2Call_(body){const c=tv2Config_(),r=UrlFetchApp.fetch(c.url,{method:'post',contentType:'text/plain;charset=utf-8',payload:JSON.stringify(Object.assign({token:c.token},body)),muteHttpExceptions:true});const j=tv2ParseResponse_(r.getContentText());if(!j.ok)throw new Error(j.error||'V2 API error');return j}
 function tv2Load_(){const j=tv2Call_({action:'load'});if(!j.payload||Number(j.payload.schemaVersion)!==2)throw new Error('V2正本ではありません');return j}
