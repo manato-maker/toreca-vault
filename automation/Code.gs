@@ -290,6 +290,7 @@ function runTorecaVaultMarketSync() {
         report.updated++;
       } catch (err) { card.marketFresh = false; card.marketTrend = 'stale'; report.review++; reviews.push((card.product || '') + ' ' + model + ': 取得失敗・前回価格維持'); }
     });
+    refreshSealedMarketCandidates_(root.data, date, reviews);
     const sealedReport = syncSealedMarketCandidates_(root.data, date, reviews);
     report.updated += sealedReport.updated;
     report.unchanged += sealedReport.unchanged;
@@ -470,4 +471,36 @@ function syncSealedMarketCandidates_(data, date, reviews) {
     if(old===Number(best.price))report.unchanged++;else report.updated++;
   });
   return report;
+}
+
+
+const SEALED_MARKET_FEED_URL = 'https://torekakaku-navi.com/';
+function refreshSealedMarketCandidates_(data, date, reviews) {
+  let html='';
+  try{
+    const r=UrlFetchApp.fetch(SEALED_MARKET_FEED_URL,{muteHttpExceptions:true,followRedirects:true});
+    if(r.getResponseCode()!==200)throw new Error('HTTP '+r.getResponseCode());
+    html=r.getContentText('UTF-8');
+  }catch(err){reviews.push('BOX/パック相場フィード取得失敗: '+String(err));return}
+  if(!html.includes(date)){reviews.push('BOX/パック相場: 当日更新を確認できないため前回価格維持');return}
+  const rows=[];
+  const text=html.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ');
+  const stores=['アリウム','AMTAF','買取ミミ'];
+  const products=[...(data.boxes||[]),...(data.packs||[])].filter(x=>Number(x.quantity)>0);
+  products.forEach(item=>{
+    const product=String(item.product||'').trim(),condition=String(item.condition||item.shrinkStatus||'').trim();
+    if(!product||!condition)return;
+    const pn=normalize_(product);
+    const compact=normalize_(text);
+    const p=compact.indexOf(pn);
+    if(p<0)return;
+    const around=text.slice(Math.max(0,p-500),p+2500);
+    stores.forEach(store=>{
+      const re=new RegExp(store+'[^¥￥0-9]{0,120}[¥￥]?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{3,6})');
+      const m=around.match(re);if(!m)return;
+      const price=Number(m[1].replace(/,/g,''));if(!price)return;
+      rows.push({product,condition,store,price,checkedAt:date,verified:true,imageDerived:false,verifiedBy:'public-web-feed'});
+    });
+  });
+  if(rows.length)data.marketCandidates=rows;
 }
