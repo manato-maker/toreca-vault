@@ -1,6 +1,5 @@
 const TV2_SYNC_URL_PROP='TV2_SYNC_URL';
 const TV2_SYNC_TOKEN_PROP='TV2_SYNC_TOKEN';
-const TV2_SEALED_FEED='https://torekakaku-navi.com/';
 const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
 
 function installTv2Automation(){
@@ -37,18 +36,21 @@ function runTv2LotteryAuto(){
   });
 }
 function runTv2MarketAuto(){
- return tv2Mutate_('market-auto',state=>{const now=new Date(),date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),health=tv2Health_(state),reviews=[];let changed=false;const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
-  let html='';try{const r=UrlFetchApp.fetch(TV2_SEALED_FEED,{muteHttpExceptions:true,followRedirects:true});if(r.getResponseCode()===200)html=r.getContentText('UTF-8')}catch(e){reviews.push('相場フィード取得失敗')}
-  const page=html.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ');
+ return tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
   (state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category)).forEach(lot=>{
-    const q=tv2FindQuote_(state,lot),old=q?Number(q.price):null,candidates=[];if(html&&html.includes(date)){const p=normalize_(page).indexOf(normalize_(lot.product));if(p>=0){const around=page.slice(Math.max(0,p-500),p+2500);TV2_STORES.forEach(store=>{const m=around.match(new RegExp(store+'[^¥￥0-9]{0,120}[¥￥]?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{3,6})'));if(m)candidates.push({store,price:Number(m[1].replace(/,/g,''))})})}}
-    if(!candidates.length){if(q){q.fresh=false;q.trend='stale'}report.review++;reviews.push(lot.product+': 3店の当日完全一致なし');return}
-    const best=candidates.reduce((a,b)=>b.price>a.price?b:a),next=q||{lotId:lot.id,product:lot.product,condition:lot.condition,history:[]};next.history=Array.isArray(next.history)?next.history:[];const yesterday=tv2PreviousDate_(date),previousDay=[...next.history].reverse().find(h=>String(h.date||'')===yesterday&&Number(h.value)>0),previousDayPrice=previousDay?Number(previousDay.value):null;next.previousPrice=previousDayPrice;next.price=best.price;next.checkedAt=date;next.source=best.store+' '+date;next.fresh=true;next.trend=previousDayPrice==null?'stale':best.price>previousDayPrice?'up':best.price<previousDayPrice?'down':'same';if(!next.history.some(h=>h.date===date&&Number(h.value)===best.price))next.history.push({date,value:best.price,source:next.source});next.history=next.history.slice(-400);if(!q)state.marketQuotes.push(next);if(old===best.price)report.unchanged++;else{report.updated++;changed=true}
+    // The aggregator page does not bind a price to an exact product, condition,
+    // and store. Nearby text can be another product or shrink condition.
+    // Keep the prior quote until a source with explicit identity is integrated.
+    const q=tv2FindQuote_(state,lot);
+    if(q){q.fresh=false;q.trend='stale'}
+    report.review++;
+    reviews.push(lot.product+': 同一商品・同一状態の店舗価格を検証できず前回価格維持');
   });
   health.lastMarketRunAt=now.toISOString();health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
  });
 }
-function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}\nfunction tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||''))||(state.marketQuotes||[]).find(q=>normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
+function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}
+function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
 function tv2Health_(state){state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};state.automation.health=state.automation.health&&typeof state.automation.health==='object'?state.automation.health:{};return state.automation.health}
 function tv2Config_(){const p=PropertiesService.getScriptProperties(),url=String(p.getProperty(TV2_SYNC_URL_PROP)||''),token=String(p.getProperty(TV2_SYNC_TOKEN_PROP)||p.getProperty('TV_V2_SYNC_TOKEN')||'');if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url))throw new Error('TV2_SYNC_URL が未設定です');if(token.length<24)throw new Error('TV2_SYNC_TOKEN が未設定です');return{url,token}}
 function tv2ParseResponse_(raw){const text=String(raw||'').trim();if(!text)throw new Error('V2 API empty response');let json=text;const m=text.match(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(\s*([\s\S]*)\s*\)\s*;?$/);if(m)json=m[1].trim();try{return JSON.parse(json)}catch(e){throw new Error('V2 API response is not JSON/JSONP')}}
