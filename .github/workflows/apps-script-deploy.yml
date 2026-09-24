@@ -1,0 +1,34 @@
+name: Apps Script Automation Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'automation/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node --test test/*.test.js
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CLASPRC_JSON != '' && secrets.CLASP_JSON_AUTOMATION != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install --no-save @google/clasp
+      - name: Configure clasp
+        run: |
+          printf '%s' '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+          printf '%s' '${{ secrets.CLASP_JSON_AUTOMATION }}' > automation/.clasp.json
+      - name: Push automation source
+        working-directory: automation
+        run: npx clasp push --force
+      - name: Create immutable version
+        working-directory: automation
+        run: npx clasp version "GitHub ${GITHUB_SHA}"
