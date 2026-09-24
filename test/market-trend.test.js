@@ -1,0 +1,4 @@
+import assert from'node:assert/strict';import{applyMarketQuoteBatch}from'../v2/market-quote-write.js';
+const base={schemaVersion:2,revision:1,lastMutationId:'x',transactions:[],inventoryLots:[],lotteries:[],marketQuotes:[{product:'BOX A',condition:'あり',price:1000,checkedAt:'2026-09-23',source:'AMTAF',history:[{date:'2026-09-23',value:1000}]}],auditLog:[]};
+for(const [price,trend] of [[1200,'up'],[1000,'same'],[800,'down']]){const next=applyMarketQuoteBatch(base,[{product:'BOX A',condition:'あり',price,checkedAt:'2026-09-24',source:'AMTAF'}],'m-'+trend);const q=next.marketQuotes[0];assert.equal(q.trend,trend);assert.equal(q.previousPrice,1000);assert.equal(q.history.at(-1).value,price)}
+console.log('market trend: ok');
