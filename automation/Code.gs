@@ -80,7 +80,7 @@ function runTorecaVaultLotterySync() {
             if (parsed.receivePeriod) item.receivePeriod = parsed.receivePeriod;
             if (parsed.shippingSchedule) item.shippingSchedule = parsed.shippingSchedule;
             if (parsed.status === '当選' && !['受取済み','未受取'].includes(item.receiptStatus)) item.receiptStatus = '未受取';
-            if (parsed.status === '落選') item.receiptStatus = '対象外';
+            if (parsed.status === '落選' && item.receiptStatus !== '受取済み') item.receiptStatus = '対象外';
             item.gmailMessageId = messageId;
             item.updatedAt = now.toISOString();
             report.updated++;
@@ -156,7 +156,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|結果発表)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: cleanLotteryTitle_(title),
+    title: resultDate ? cleanStoreName_(store) : '詳細不明',
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
