@@ -7,10 +7,10 @@ const text=x=>String(x||'').trim();
 const norm=x=>text(x).normalize('NFKC').toLocaleLowerCase('ja').replace(/\s+/g,' ');
 const key=x=>text(x.applicationId||x.entryId||x.referenceId)||[norm(x.store),norm(x.title)].join('::');
 const statusRank={応募前:0,応募済:1,落選:2,当選:2,購入済:3};
-const finalStatus=x=>['当選','落選','購入済'].includes(text(x));
+const contradictoryResult=(a,b)=>['当選','落選'].includes(text(a))&&['当選','落選'].includes(text(b))&&text(a)!==text(b);
 function mergeLottery(old,item){
  const oldRank=statusRank[old.status]??-1,newRank=statusRank[item.status]??-1;
- const protectOld=oldRank>newRank||(finalStatus(old.status)&&finalStatus(item.status)&&old.status!==item.status);
+ const protectOld=oldRank>newRank||contradictoryResult(old.status,item.status);
  const out={...old,...item,id:old.id||item.id||('lottery-'+crypto.randomUUID())};
  if(protectOld){
   out.status=old.status;
