@@ -55,3 +55,5 @@ python3 -m http.server 4173
 5. メール解析・相場判定は、曖昧な入力を推測で確定せず review に残す。
 
 このREADMEと `docs/` を読めば、過去のチャットを参照しなくても現在の構成・制約・復旧方法を追える状態を維持してください。
+
+追加のX投稿を反映するには Apps Script のスクリプトプロパティに `TV2_X_BEARER_TOKEN` と `TV2_VISION_API_KEY` を設定し、`installTv2Automation()` を実行します。画像内の価格は厳密に照合できる場合だけ更新し、読み取れない投稿は要確認として保持します。X APIとOCRは利用枠・課金設定が必要です。手順は `docs/OPERATIONS.md` を参照してください。
