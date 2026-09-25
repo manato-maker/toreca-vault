@@ -8,6 +8,7 @@
 
 - 運用・復旧・本番の見分け方: [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 - システム構成とデータの流れ: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- 継続作業と変更履歴: [`docs/HANDOVER.md`](docs/HANDOVER.md)
 - ブラウザ側のデータ定義: [`js/schema.js`](js/schema.js)
 - 自動化の唯一の本番ソース: [`automation/Code.gs`](automation/Code.gs)
 
@@ -23,9 +24,9 @@ Google Apps Script が Gmail と Google Drive を使って動きます。定期�
 
 **2026-09-15に自動化ソースを完全1本化しました。** Apps Script の薄いランナーも `automation/Code.gs` を直接取得します。旧 `Code-v4.gs` は廃止済みです。今後、自動化を変更するときは `automation/Code.gs` だけを変更してください。
 
-相場同期は現在カード単品が対象で、カードラッシュを主ソース、アルテマを補助ソースとして使います。BOX・パック、X/Twitter画像からの商品判定、シュリンク有無別価格は今後の拡張領域です。
+相場同期はカード単品のほか、商品名と状態が明確なポケモンカードBOX・バラパックを対象にします。BOXは大阪日本橋の買取ミミ・AMTAF・アリウムの当日価格の最高値を使い、X投稿の出典URLを記録します。画像からの曖昧な商品判定は自動確定せず要確認に残します。
 
-V2の定期処理は `automation/V2Automation.gs` の `installTv2Automation` が設定します。Gmailは直近の実行から2日重ねて再検索し、メッセージIDで重複反映を防ぎます。カード相場は型番と商品名が一致するカードラッシュCSVの買取価格だけを更新します。BOX・パックおよび一致しないカードは前回価格を保ち、要確認に記録します。変更を本番へ届けた後、トリガー実行とV2の再読込で確認してください。
+V2の定期処理は `automation/V2Automation.gs` の `installTv2Automation` が設定します。Gmailは直近の実行から2日重ねて再検索し、メッセージIDで重複反映を防ぎます。カード相場は型番と商品名が一致するカードラッシュCSVの買取価格だけを更新します。BOX・パックは当日掲載・X出典・商品名・状態が一致した価格だけ反映し、それ以外は前回価格を保ち要確認に記録します。変更を本番へ届けた後、トリガー実行とV2の再読込で確認してください。
 
 ## V2 本番状態（2026-09-23）
 
