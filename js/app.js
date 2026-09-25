@@ -4,6 +4,7 @@ import{assets,storeStats}from'./calculations.js';
 import{id,importLegacy}from'./schema.js';
 import{applyPurchase,applySale,applyOpening}from'./inventory.js';
 import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disableV2ReadOnly}from'./v2-readonly.js';
+import{requiresVaultV2}from'../v2/browser-sync.js';
 import{acceptanceSnapshot,pendingMigrationSnapshot}from'../v2/acceptance.js';
 import{commitV2Transaction,commitV2CardIdentity,commitV2CardIdentityBatch}from'../v2/ui-write.js';
 import{commitV2LotteryBatch}from'../v2/lottery-write.js';
@@ -14,7 +15,7 @@ import{isV2WriteEnabled,enableV2WriteForSession,disableV2Write}from'../v2/write-
 import{canUseV2Entry,v2EntryPayload}from'../v2/ui-entry.js';
 
 const jstToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-let state=load(),remoteRevision='',remoteSaveTimer=null,remoteSaving=false,receiptTargetId='',v2ReadOnly=false,v2AssetsCache=null,v2ProfitCache=null,v2AutomationHealth={};const initialHash=location.hash.slice(1).split('/');let route=initialHash[0]||'dashboard';let subtype=route==='inventory'&&['boxes','packs','cards'].includes(initialHash[1])?initialHash[1]:route==='ledger'&&initialHash[1]?initialHash[1]:'purchases';let calendarMonth=jstToday().slice(0,7);let selectedCalendarDate=jstToday(),reviewExpanded=false,pendingExpanded=false;
+let state=load(),remoteRevision='',remoteSaveTimer=null,remoteSaving=false,receiptTargetId='',v2ReadOnly=requiresVaultV2(),v2AssetsCache=null,v2ProfitCache=null,v2AutomationHealth={};const initialHash=location.hash.slice(1).split('/');let route=initialHash[0]||'dashboard';let subtype=route==='inventory'&&['boxes','packs','cards'].includes(initialHash[1])?initialHash[1]:route==='ledger'&&initialHash[1]?initialHash[1]:'purchases';let calendarMonth=jstToday().slice(0,7);let selectedCalendarDate=jstToday(),reviewExpanded=false,pendingExpanded=false;
 const yen=new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0});
 const dateFmt=new Intl.DateTimeFormat('ja-JP',{month:'short',day:'numeric',weekday:'short'});
 const nav=[['dashboard','⌂','資産'],['calendar','□','予定'],['ledger','¥','収支'],['activity','↗','履歴']];
@@ -109,6 +110,7 @@ addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).spl
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
 async function bootRemote(){
  if(hasV2ReadOnly()){v2ReadOnly=true;render();try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
+ if(requiresVaultV2()){v2ReadOnly=true;render();setSyncStatus('V2再接続が必要です。ローカル在庫は表示しません','warning');return}
  if(getSyncConfig().url)pullAndApply().catch(err=>console.warn('起動時同期に失敗しました',err));
 }
 bootRemote();
