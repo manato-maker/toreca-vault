@@ -112,10 +112,13 @@ function runTv2MarketAuto(){
     const name=tv2SealedName_(lot.product||lot.productKey);
     const matches=condition&&name?feed.products.filter(p=>[p.name,p.official].some(s=>tv2SealedName_(s)===name)):[];
     const offers=matches.length===1?(matches[0].offers[condition]||[]):[];
-    const best=offers.sort((a,b)=>b.price-a.price)[0];
-    if(!best){const q=tv2FindQuote_(state,lot);if(q){q.fresh=false;q.trend='stale'}
-      report.review++;reviews.push(lot.product+': 同一商品・同一状態の当日X出典を確認できず前回価格維持');return}
     const quote=tv2FindQuote_(state,lot);
+    const saved=condition&&quote&&quote.category===lot.category&&quote.shopOffers&&typeof quote.shopOffers==='object'?quote.shopOffers:{};
+    const latest=Object.assign({},saved);
+    offers.forEach(offer=>{const prior=latest[offer.shop];if(!prior||String(prior.date||'')<=feed.date)latest[offer.shop]={shop:offer.shop,price:offer.price,url:offer.url,date:feed.date}});
+    const best=condition&&Object.values(latest).filter(o=>o&&Number.isFinite(Number(o.price))&&Number(o.price)>0&&/^https:\/\/x\.com\/[^/]+\/status\/\d+$/.test(String(o.url||''))).sort((a,b)=>b.price-a.price)[0];
+    if(!best){const q=tv2FindQuote_(state,lot);if(q){q.fresh=false;q.trend='stale'}
+      report.review++;reviews.push(lot.product+': 同一商品・同一状態の店舗別X出典を確認できず前回価格維持');return}
     if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;return}
     const previous=quote?Number(quote.price):best.price;
     if(Number.isFinite(previous)&&previous>0&&(best.price>previous*1.5||best.price<previous*0.5)){
@@ -124,8 +127,8 @@ function runTv2MarketAuto(){
     }
     const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
     target.previousPrice=Number.isFinite(previous)?previous:best.price;
-    target.price=best.price;target.checkedAt=date;
-    target.source=best.shop+' '+date+' '+best.url+' ('+condition+')';target.fresh=true;
+    target.price=best.price;target.checkedAt=date;target.shopOffers=latest;
+    target.source=best.shop+' '+best.date+' '+best.url+' ('+condition+')';target.fresh=best.date===date;
     target.trend=best.price>target.previousPrice?'up':best.price<target.previousPrice?'down':'same';
     target.history=Array.isArray(target.history)?target.history:[];
     if(!target.history.some(h=>String(h.checkedAt||h.date)===date&&Number(h.price??h.value)===best.price))
@@ -143,7 +146,8 @@ function tv2SealedName_(s){return normalize_(String(s||'').replace(/&amp;/g,'&')
 function tv2SealedCondition_(lot){const c=normalize_(lot.condition);if(lot.category==='BOX')return c==='あり'||c==='シュリンクあり'||c==='シュリンク有'?'shrink':c==='なし'||c==='シュリンクなし'||c==='シュリンク無'?'no_shrink':'';if(lot.category==='パック')return c===''||c==='未開封'||c==='バラパック'?'loose_pack':'';return''}
 function tv2ParseSealedFeed_(html,date){
   const text=String(html||'');
-  if(!new RegExp('掲載日\\s*<b>'+date+'<\\/b>\\s*\\/\\s*スナップショット\\s*'+date).test(text))return{products:[],error:'BOX相場の掲載日・スナップショットが当日ではありません'};
+  const stamp=text.match(/掲載日\s*<b>(\d{4}-\d{2}-\d{2})<\/b>\s*\/\s*スナップショット\s*(\d{4}-\d{2}-\d{2})/);
+  if(!stamp||stamp[1]!==stamp[2]||stamp[1]>date)return{products:[],error:'BOX相場の掲載日・スナップショットを確認できません'};
   const starts=[...text.matchAll(/<div class="card(?:\s[^"]*)?"[^>]*>/g)],products=[];
   const stores={cardshop_allium:'アリウム',amtaf_shop:'AMTAF',mimi_kaitori:'買取ミミ'};
   for(let i=0;i<starts.length;i++){
@@ -165,7 +169,7 @@ function tv2ParseSealedFeed_(html,date){
     }
     products.push({name,official,offers});
   }
-  return{products,error:''};
+  return{products,error:'',date:stamp[1]};
 }
 function tv2EnsureMarketSchedule_(){
   if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
