@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'automation/**'
+      - '.github/workflows/apps-script-deploy.yml'
+      - 'scripts/patch-cardrush-buyback.mjs'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -41,6 +43,9 @@ jobs:
           cp .apps-script-automation/Code.js /tmp/tv-code-before.js 2>/dev/null || cp .apps-script-automation/コード.js /tmp/tv-code-before.js
           grep -q 'function fetchCardrushRows_' /tmp/tv-code-before.js
           grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
+          if test -s .apps-script-automation/Code.js; then code_path=.apps-script-automation/Code.js; else code_path=.apps-script-automation/コード.js; fi
+          node scripts/patch-cardrush-buyback.mjs "$code_path" automation/Code.gs
+          cp "$code_path" /tmp/tv-code-expected.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Push only patched automation into existing project
         run: npx clasp push --force
@@ -50,7 +55,7 @@ jobs:
           mkdir .apps-script-automation
           npx clasp pull
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
-          cmp -s /tmp/tv-code-before.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-before.js .apps-script-automation/コード.js
+          cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Create immutable version
         working-directory: automation
