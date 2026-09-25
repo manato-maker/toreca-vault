@@ -30,6 +30,31 @@ export async function commitV2CardIdentity(lotId,cardSet,config=getVaultV2Config
  if(!lot||lot.set!==String(cardSet).trim()||reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('カード番号の保存確認に失敗しました');
  return{payload:reread.payload,revision:reread.revision};
 }
+export async function commitV2CardIdentityBatch(rows,config=getVaultV2Config()){
+ if(!Array.isArray(rows)||!rows.length||rows.length>100)throw new Error('カード番号の復元データが不正です');
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);
+ let next=before.payload;const changed=[];
+ const used=new Set();
+ for(const row of rows){
+  const legacyId=String(row?.legacyInventoryId||''),product=String(row?.product||''),set=String(row?.set||'').trim();
+  if(!legacyId||!product||used.has(legacyId))throw new Error('旧在庫IDまたは商品名が重複・未設定です');used.add(legacyId);
+  const matches=next.inventoryLots.filter(x=>x.legacyInventoryId===legacyId&&x.category==='カード'&&x.product===product);
+  if(matches.length!==1)throw new Error('復元対象の在庫を一意に特定できません: '+product);
+  const lot=matches[0];
+  if(lot.set===set)continue;
+  if(lot.set)throw new Error('既存番号と異なるため停止しました: '+product);
+  const mutationId=makeId('card-recovery');next=setCardIdentity(next,lot.id,set,mutationId);
+  changed.push({lotId:lot.id,set,mutationId});
+ }
+ if(!changed.length)return{payload:before.payload,revision:before.revision,updated:0};
+ next.revision=Number(before.revision)+1;next.lastMutationId=changed.at(-1).mutationId;
+ for(const item of changed){const a=next.auditLog.find(x=>x.mutationId===item.mutationId);if(a)a.revision=next.revision}
+ validateState(next);
+ await saveV2(config.url,config.token,next,before.revision);
+ const reread=await loadVaultV2(config);
+ if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==next.lastMutationId||changed.some(item=>reread.payload.inventoryLots.find(x=>x.id===item.lotId)?.set!==item.set||!reread.payload.auditLog.some(a=>a.mutationId===item.mutationId)))throw new Error('カード番号の一括保存確認に失敗しました');
+ return{payload:reread.payload,revision:reread.revision,updated:changed.length};
+}
 
 export async function commitV2Batch(items,config=getVaultV2Config()){
  const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);

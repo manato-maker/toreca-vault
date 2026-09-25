@@ -55,7 +55,7 @@ export function applyTransaction(state,input,mutationId){
 export function setCardIdentity(state,lotId,cardSet,mutationId){
   validateState(state);
   const value=String(cardSet||'').trim();
-  if(!mutationId||!value||value.length>80||!/[A-Za-z0-9]{1,12}\s*\d{1,3}\/\d{1,3}/.test(value))throw new Error('収録名とカード番号（例: M6a 127/103）を入力してください');
+  if(!mutationId||!value||value.length>80||!/[A-Za-z0-9]{1,12}\s*\d{1,3}\/(?:\d{1,3}|[A-Za-z]{1,4}-P)\b/i.test(value))throw new Error('収録名とカード番号（例: M6a 127/103、PROMO 001/SV-P）を入力してください');
   const next=clone(state),lot=next.inventoryLots.find(x=>x.id===lotId&&x.category==='カード');
   if(!lot)throw new Error('対象カードの在庫が見つかりません');
   if(next.auditLog.some(x=>x.mutationId===mutationId))return next;
