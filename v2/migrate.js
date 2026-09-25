@@ -15,7 +15,7 @@ export function migrateV1(root){
  for(const o of src.openings||[])out.transactions.push({...structuredClone(o),id:o.id,type:'opening',productKey:productKey(o),condition:condition(o,'BOX')});
  for(const [legacyCategory,name] of [['BOX','boxes'],['パック','packs'],['カード','cards']])for(const x of src[name]||[]){
    if(q(x)<=0)continue;const category=migratedCategory(x)||legacyCategory;
-   out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:migratedCondition(x,category),quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
+   out.inventoryLots.push({id:'migrated-'+x.id,product:x.product,productKey:productKey(x),category,condition:migratedCondition(x,category),set:category==='カード'?String(x.set||'').trim():'',quantity:q(x),unitCost:unitCost(x),acquiredAt:x.date||'',sourceTransactionId:x.sourceId||'',legacyInventoryId:x.id});
  }
  out.lotteries=structuredClone(src.lotteries||[]);
  out.marketQuotes=[...(src.boxes||[]),...(src.packs||[]),...(src.cards||[])].filter(x=>q(x)>0&&num(x.marketPrice??x.buybackPrice)!==null).map(x=>({product:x.product,productKey:productKey(x),category:migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX'),condition:migratedCondition(x,migratedCategory(x)||((src.cards||[]).includes(x)?'カード':(src.packs||[]).includes(x)?'パック':'BOX')),price:num(x.marketPrice??x.buybackPrice),checkedAt:x.marketCheckedAt||'',source:x.marketSource||'',history:structuredClone(x.marketHistory||[]),legacyInventoryId:x.id}));
