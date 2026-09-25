@@ -9,6 +9,7 @@ const state = {
 };
 const context = vm.createContext({
   tv2Mutate_: (_kind, fn) => fn(state),
+  TZ: 'Asia/Tokyo', Utilities: { formatDate: () => '2026-09-25' },
   normalize_: value => String(value || '').toLowerCase(),
   // Even a misleading aggregator result must never be consulted.
   UrlFetchApp: { fetch: () => { throw new Error('untrusted feed accessed'); } }

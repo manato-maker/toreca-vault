@@ -33,6 +33,8 @@ Google Apps Script プロジェクト名は `Toreca Vault 抽選自動化`。App
 
 現在はカード単品のみ。カードラッシュ公開CSVを主に使い、完全一致が取れない場合にアルテマを補助的に確認します。BOX・パックは `unsupported` として扱います。X/Twitter画像価格表やシュリンク別価格は、実装済みと誤認しないでください。
 
+V2の `runTv2MarketAuto` はカードラッシュCSVから商品名・型番が一意に一致し、状態が良品または未指定のカードだけ価格を更新します。CSVの取得失敗、型番なし、その他の状態、BOX・パックは価格を維持して `automation.health.marketNeedsReview` に記録します。Gmail同期は2日重ねて再検索し、検索が2000スレッドを超えた場合は保存せず失敗します。定期処理の設定はV2プロジェクトの `installTv2Automation` で行い、実行ログに加えてV2 JSONの `automation.health` と revision を確認します。
+
 ## 障害時チェック順
 
 1. Apps Script の実行ログにエラーがないか。

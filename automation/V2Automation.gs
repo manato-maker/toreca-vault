@@ -15,10 +15,20 @@ function installTv2Automation(){
 }
 function runTv2LotteryAuto(){
   return tv2Mutate_('gmail-auto',state=>{
-    const now=new Date(),health=tv2Health_(state),since=health.lastGmailRunAt?new Date(health.lastGmailRunAt):new Date(now.getTime()-3*86400000);
+    const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
+    // Revisit recent mail because delivery and trigger execution can be delayed.
+    // Message IDs make this overlap idempotent.
+    const since=last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000);
     const processed=new Set(health.gmailMessageIds||[]),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
-    GmailApp.search('newer_than:4d',0,200).forEach(th=>th.getMessages().forEach(message=>{
+    const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
+    for(let offset=0;offset<2000;offset+=100){
+      const page=GmailApp.search(query,offset,100);
+      threads.push(...page);
+      if(page.length<100)break;
+      if(offset===1900)throw new Error('Gmail検索が2000スレッドを超えました。対象期間を確認してください');
+    }
+    threads.forEach(th=>th.getMessages().forEach(message=>{
       if(message.getDate()<=since)return;const id=message.getId();if(processed.has(id))return;
       const text=[message.getSubject(),message.getPlainBody()].join('\n');
       if(!CARD_WORDS.test(text)||(!RESULT_WORDS.test(text)&&!APPLICATION_WORDS.test(text)))return;report.scanned++;
@@ -53,6 +63,38 @@ function runTv2LotteryAuto(){
 }
 function runTv2MarketAuto(){
  return tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
+  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
+  let rows=null;
+  if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
+  const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),seen=new Set();
+  cards.forEach(lot=>{
+    const key=normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||'');
+    if(seen.has(key))return;seen.add(key);
+    const model=extractModel_([lot.set,lot.product].filter(Boolean).join(' '));
+    // The public buyback list describes standard condition. Other card conditions
+    // cannot be priced from it without guessing a discount.
+    if(!rows||!model||!['良品',''].includes(String(lot.condition||''))){
+      report.review++;reviews.push(lot.product+': 型番・状態・価格ソースを確認できず前回価格維持');return;
+    }
+    const name=String(lot.product||'').replace(model,'').trim();
+    const result=name?findCardrushBuyback_(rows,name,model):null;
+    if(!result||!Number.isFinite(result.price)||result.price<=0){
+      report.review++;reviews.push(lot.product+': 完全一致の買取価格なし・前回価格維持');return;
+    }
+    const quote=tv2FindQuote_(state,lot);
+    if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;return}
+    const old=quote?Number(quote.price):result.price;
+    const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
+    target.previousPrice=Number.isFinite(old)?old:result.price;
+    target.price=result.price;target.checkedAt=date;target.source='カードラッシュ';target.fresh=true;
+    target.trend=result.price>target.previousPrice?'up':result.price<target.previousPrice?'down':'same';
+    target.history=Array.isArray(target.history)?target.history:[];
+    if(!target.history.some(h=>String(h.checkedAt||h.date)===date&&Number(h.price??h.value)===result.price))
+      target.history.push({date,value:result.price,source:target.source});
+    target.history=target.history.slice(-400);
+    if(!quote)state.marketQuotes.push(target);
+    if(quote&&old===result.price)report.unchanged++;else report.updated++;
+  });
   (state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category)).forEach(lot=>{
     // The aggregator page does not bind a price to an exact product, condition,
     // and store. Nearby text can be another product or shrink condition.

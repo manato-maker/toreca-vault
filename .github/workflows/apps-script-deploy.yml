@@ -30,10 +30,28 @@ jobs:
           test -n "$CLASPRC_JSON"
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
-          printf '{"scriptId":"%s","rootDir":"."}' "$TV2_SCRIPT_ID" > automation/.clasp.json
-      - name: Push automation source
-        working-directory: automation
+          printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Pull existing project and preserve API files
+        run: |
+          mkdir -p .apps-script-automation
+          npx clasp pull
+          test -s .apps-script-automation/Code.js -o -s .apps-script-automation/コード.js
+          test -s .apps-script-automation/appsscript.json
+          cp .apps-script-automation/appsscript.json /tmp/tv-manifest-before.json
+          cp .apps-script-automation/Code.js /tmp/tv-code-before.js 2>/dev/null || cp .apps-script-automation/コード.js /tmp/tv-code-before.js
+          grep -q 'function fetchCardrushRows_' /tmp/tv-code-before.js
+          grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
+          cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
+      - name: Push only patched automation into existing project
         run: npx clasp push --force
+      - name: Verify remote source
+        run: |
+          mv .apps-script-automation .apps-script-automation-before
+          mkdir .apps-script-automation
+          npx clasp pull
+          cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
+          cmp -s /tmp/tv-code-before.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-before.js .apps-script-automation/コード.js
+          cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
