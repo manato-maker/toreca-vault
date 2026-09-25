@@ -60,6 +60,7 @@ export function setCardIdentity(state,lotId,cardSet,mutationId){
   if(!lot)throw new Error('対象カードの在庫が見つかりません');
   if(next.auditLog.some(x=>x.mutationId===mutationId))return next;
   lot.set=value;
+  lot.identityNeedsReview=false;
   const tx=next.transactions.find(x=>x.id===lot.sourceTransactionId&&x.type==='purchase');if(tx)tx.set=value;
   const quote=next.marketQuotes.find(x=>x.lotId===lot.id);if(quote){quote.fresh=false;quote.trend='stale'}
   next.revision=Number(next.revision)+1;next.lastMutationId=mutationId;
