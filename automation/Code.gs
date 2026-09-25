@@ -335,12 +335,19 @@ function fetchCardrushRows_() {
   return Utilities.parseCsv(response.getContentText('UTF-8'));
 }
 
-function findCardrushBuyback_(rows, product, model) {
+function findCardrushBuyback_(rows, product, model, variant) {
   const pn = normalize_(product);
   const mn = normalize_(model);
+  const vn = normalize_(variant || '');
+  // These numbers have ordinary, mirror, and/or Master Ball prints at very
+  // different prices. A number alone does not identify the owned print.
+  if (['225/742', '025/165'].includes(String(model).toUpperCase()) && !vn) return null;
   const matches = rows.filter(row => {
     const text = normalize_(row.join(' '));
-    return text.includes(pn) && text.includes(mn);
+    if (!text.includes(pn) || !text.includes(mn)) return false;
+    if (vn === normalize_('モンスターボールミラー')) return text.includes(vn) && !text.includes(normalize_('マスターボール'));
+    if (vn === normalize_('ミラー')) return text.includes(vn) && !text.includes(normalize_('モンスターボール')) && !text.includes(normalize_('マスターボール'));
+    return !vn && !/ミラー/.test(text);
   }).map(row => {
     const prices = row.map(cell => {
       const s = String(cell || '').normalize('NFKC').replace(/[,，円¥￥\s]/g, '');

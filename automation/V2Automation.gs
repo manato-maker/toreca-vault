@@ -80,7 +80,7 @@ function runTv2MarketAuto(){
       report.review++;reviews.push(lot.product+': 型番・状態・価格ソースを確認できず前回価格維持');return;
     }
     const name=String(lot.product||'').replace(model,'').trim();
-    const result=name?findCardrushBuyback_(rows,name,model):null;
+    const result=name?findCardrushBuyback_(rows,name,model,lot.variant):null;
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;reviews.push(lot.product+': 完全一致の買取価格なし・前回価格維持');return;
     }

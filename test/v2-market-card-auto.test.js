@@ -38,3 +38,12 @@ const reviewed=vm.runInContext('runTv2MarketAuto()',reviewContext);
 assert.equal(reviewed.report.updated,2,'different lots with the same name are checked independently');
 assert.equal(reviewed.report.review,1,'inferred identity must not receive an automatic quote');
 assert.deepEqual(pikachuState.marketQuotes.map(q=>q.lotId),['p1','p3']);
+
+const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
+const matcher=code.slice(code.indexOf('function findCardrushBuyback_('),code.indexOf('function fetchAltemaBuyback_('));
+const prices=vm.createContext({normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,'')});
+vm.runInContext(matcher,prices);
+const rows=[['ピカチュウ(ミラー)','225/742','500'],['ピカチュウ','225/742','300'],['ピカチュウ(マスターボールミラー)','025/165','45000'],['ピカチュウ(モンスターボールミラー)','025/165','800'],['ピカチュウ','025/165','30']];
+assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','225/742','ミラー')?.price,500);
+assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','モンスターボールミラー')?.price,800);
+assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165'),null,'number alone must not pick an arbitrary print');

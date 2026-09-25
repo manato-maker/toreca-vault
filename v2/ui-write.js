@@ -37,14 +37,30 @@ export async function commitV2CardIdentityBatch(rows,config=getVaultV2Config()){
  const used=new Set();
  for(const row of rows){
   const legacyId=String(row?.legacyInventoryId||''),product=String(row?.product||''),set=String(row?.set||'').trim();
+  if(row?.variant&&!['ミラー','モンスターボールミラー'].includes(row.variant))throw new Error('カードの仕様違いが不正です: '+product);
   if(!legacyId||!product||used.has(legacyId))throw new Error('旧在庫IDまたは商品名が重複・未設定です');used.add(legacyId);
   const matches=next.inventoryLots.filter(x=>x.legacyInventoryId===legacyId&&x.category==='カード'&&x.product===product);
   if(matches.length!==1)throw new Error('復元対象の在庫を一意に特定できません: '+product);
   const lot=matches[0];
-  if(lot.set===set)continue;
+  if(lot.set===set){
+   // A revised recovery file can confirm an earlier provisional number and print.
+   if(row.variant&&lot.variant&&lot.variant!==row.variant)throw new Error('既存の仕様違いと異なるため停止しました: '+product);
+   if((row.variant&&!lot.variant)||(lot.identityNeedsReview===true&&row.inferred!==true)){
+    const mutationId=makeId('card-variant');next=structuredClone(next);
+    const target=next.inventoryLots.find(x=>x.id===lot.id);
+    if(row.variant)target.variant=String(row.variant);
+    if(row.inferred!==true)target.identityNeedsReview=false;
+    const quote=next.marketQuotes.find(x=>x.lotId===lot.id);if(quote){quote.fresh=false;quote.trend='stale'}
+    next.revision++;next.lastMutationId=mutationId;
+    next.auditLog.push({mutationId,lotId:lot.id,revision:next.revision,kind:'card-variant'});
+    changed.push({lotId:lot.id,set,mutationId});
+   }
+   continue;
+  }
   if(lot.set)throw new Error('既存番号と異なるため停止しました: '+product);
   const mutationId=makeId('card-recovery');next=setCardIdentity(next,lot.id,set,mutationId);
   if(row.inferred===true)next.inventoryLots.find(x=>x.id===lot.id).identityNeedsReview=true;
+  if(row.variant)next.inventoryLots.find(x=>x.id===lot.id).variant=String(row.variant);
   changed.push({lotId:lot.id,set,mutationId});
  }
  if(!changed.length)return{payload:before.payload,revision:before.revision,updated:0};
