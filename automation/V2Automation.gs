@@ -150,7 +150,8 @@ function runTv2MarketAuto(){
  return outcome;
 }
 function tv2SealedName_(s){return normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'')}
-function tv2SealedCondition_(lot){const c=normalize_(lot.condition);if(lot.category==='BOX')return c==='あり'||c==='シュリンクあり'||c==='シュリンク有'?'shrink':c==='なし'||c==='シュリンクなし'||c==='シュリンク無'?'no_shrink':'';if(lot.category==='パック')return c===''||c==='未開封'||c==='バラパック'?'loose_pack':'';return''}
+function tv2IsPremiumDeck_(name){return tv2SealedName_(name)==='30thcelebrationプレミアムデッキセットエーフィブラッキー'}
+function tv2SealedCondition_(lot){const c=normalize_(lot.condition);if(lot.category==='BOX'&&tv2IsPremiumDeck_(lot.product||lot.productKey))return c==='なし'||c==='シュリンクなし'?'': 'shrink';if(lot.category==='BOX')return c==='あり'||c==='シュリンクあり'||c==='シュリンク有'?'shrink':c==='なし'||c==='シュリンクなし'||c==='シュリンク無'?'no_shrink':'';if(lot.category==='パック')return c===''||c==='未開封'||c==='バラパック'?'loose_pack':'';return''}
 function tv2ParseSealedFeed_(html,date){
   const text=String(html||'');
   const stamp=text.match(/掲載日\s*<b>(\d{4}-\d{2}-\d{2})<\/b>\s*\/\s*スナップショット\s*(\d{4}-\d{2}-\d{2})/);
@@ -158,10 +159,10 @@ function tv2ParseSealedFeed_(html,date){
   const starts=[...text.matchAll(/<div class="card(?:\s[^"]*)?"[^>]*>/g)],products=[];
   const stores={cardshop_allium:'アリウム',amtaf_shop:'AMTAF',mimi_kaitori:'買取ミミ'};
   for(let i=0;i<starts.length;i++){
-    const head=starts[i][0];if(!/data-cat="box"/.test(head))continue;
+    const head=starts[i][0];if(!/data-cat="box"/.test(head)&&!(/data-cat="sealed_other"/.test(head)&&tv2IsPremiumDeck_((head.match(/data-name="([^"]+)"/)||[])[1])))continue;
     const block=text.slice(starts[i].index,starts[i+1]?.index||text.length),name=(head.match(/data-name="([^"]+)"/)||[])[1]||'';
     const official=(block.match(/<span class="official">([^<]+)<\/span>/)||[])[1]||'';
-    if(!name||!official)continue;
+    if(!name||(!official&&!tv2IsPremiumDeck_(name)))continue;
     const rows=[...block.matchAll(/<div class="crow\b[^>]*data-cond="(shrink|no_shrink|loose_pack)"[^>]*>/g)],offers={};
     for(let j=0;j<rows.length;j++){
       const condition=rows[j][1],section=block.slice(rows[j].index,rows[j+1]?.index||block.length);
@@ -174,7 +175,7 @@ function tv2ParseSealedFeed_(html,date){
           offers[condition].push({shop:stores[handle],price,url:source[1]});
       }
     }
-    products.push({name,official,offers});
+    products.push({name,official:official||name,offers});
   }
   return{products,error:'',date:stamp[1]};
 }

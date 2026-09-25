@@ -22,7 +22,7 @@ export function v2ViewModel(state){
  const boxes=[],packs=[],cards=[];
  for(const l of state.inventoryLots||[]){
    const q=quoteFor(quotes,l);
-   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
+   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||'',condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
    if(l.category==='BOX')boxes.push(base);else if(l.category==='パック')packs.push(base);else if(l.category==='カード')cards.push({...base,buybackPrice:q?.price??null});
  }
  const newestFirst=(a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.id||'').localeCompare(String(a.id||''));

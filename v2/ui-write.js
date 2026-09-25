@@ -1,4 +1,4 @@
-import{applyTransaction,validateState}from'./core.js';
+import{applyTransaction,setCardIdentity,validateState}from'./core.js';
 import{loadVaultV2,getVaultV2Config}from'./browser-sync.js';
 import{saveV2}from'./api-client.js';
 import{assertV2WriteEnabled}from'./write-gate.js';
@@ -21,6 +21,14 @@ export async function commitV2Transaction(type,data,config=getVaultV2Config()){
  if(stored.length!==1||audits.length!==1)throw new Error('V2保存後の一意性検証に失敗しました');
  if(reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('V2保存後のrevision検証に失敗しました');
  return{transaction:stored[0],payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
+}
+export async function commitV2CardIdentity(lotId,cardSet,config=getVaultV2Config()){
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);
+ const mutationId=makeId('card-identity'),next=setCardIdentity(before.payload,lotId,cardSet,mutationId);
+ await saveV2(config.url,config.token,next,before.revision);
+ const reread=await loadVaultV2(config),lot=reread.payload.inventoryLots.find(x=>x.id===lotId);
+ if(!lot||lot.set!==String(cardSet).trim()||reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('カード番号の保存確認に失敗しました');
+ return{payload:reread.payload,revision:reread.revision};
 }
 
 export async function commitV2Batch(items,config=getVaultV2Config()){

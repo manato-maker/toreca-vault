@@ -40,7 +40,7 @@ export function applyTransaction(state,input,mutationId){
   if(!CATEGORIES.has(input.category))throw new Error('category が不正です');
   const next=clone(state),t=clone(input);
   if(t.type==='purchase'){
-    next.inventoryLots.push({id:'lot-'+t.id,product:t.product,productKey:t.productKey||t.product,category:t.category,condition:t.condition||t.shrinkStatus||'',quantity:qty(t),unitCost:knownMoney(t.unitCost??t.price),acquiredAt:t.date||'',sourceTransactionId:t.id});
+    next.inventoryLots.push({id:'lot-'+t.id,product:t.product,productKey:t.productKey||t.product,category:t.category,condition:t.condition||t.shrinkStatus||'',set:t.category==='カード'?String(t.set||'').trim():'',quantity:qty(t),unitCost:knownMoney(t.unitCost??t.price),acquiredAt:t.date||'',sourceTransactionId:t.id});
   }else if(t.type==='sale'){
     t.acquisitionCost=consumeFIFO(next.inventoryLots,t);
     next.inventoryLots=next.inventoryLots.filter(l=>qty(l)>0);
@@ -50,6 +50,20 @@ export function applyTransaction(state,input,mutationId){
   }
   next.transactions.push(t);next.revision=money(next.revision)+1;next.lastMutationId=mutationId;
   next.auditLog.push({mutationId,transactionId:t.id,revision:next.revision});
+  validateState(next);return next;
+}
+export function setCardIdentity(state,lotId,cardSet,mutationId){
+  validateState(state);
+  const value=String(cardSet||'').trim();
+  if(!mutationId||!value||value.length>80||!/[A-Za-z0-9]{1,12}\s*\d{1,3}\/\d{1,3}/.test(value))throw new Error('収録名とカード番号（例: M6a 127/103）を入力してください');
+  const next=clone(state),lot=next.inventoryLots.find(x=>x.id===lotId&&x.category==='カード');
+  if(!lot)throw new Error('対象カードの在庫が見つかりません');
+  if(next.auditLog.some(x=>x.mutationId===mutationId))return next;
+  lot.set=value;
+  const tx=next.transactions.find(x=>x.id===lot.sourceTransactionId&&x.type==='purchase');if(tx)tx.set=value;
+  const quote=next.marketQuotes.find(x=>x.lotId===lot.id);if(quote){quote.fresh=false;quote.trend='stale'}
+  next.revision=Number(next.revision)+1;next.lastMutationId=mutationId;
+  next.auditLog.push({mutationId,lotId:lot.id,revision:next.revision,kind:'card-identity'});
   validateState(next);return next;
 }
 export function realizedProfit(state){
