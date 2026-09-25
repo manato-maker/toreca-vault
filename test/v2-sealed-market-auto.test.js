@@ -41,7 +41,7 @@ assert.equal(unusual.report.review,2);
 assert.equal(state.marketQuotes[0].price,1000);
 assert.equal(state.marketQuotes[0].fresh,false);
 state.marketQuotes[0].price=12000;
-const nextFeed=feed.replace('掲載日 <b>2026-09-25</b> / スナップショット 2026-09-25','掲載日 <b>2026-09-26</b> / スナップショット 2026-09-26').replace(cell('AMTAF','AMTAF_SHOP',12000),'').replace(cell('買取ミミ','mimi_kaitori',11500),cell('買取ミミ','mimi_kaitori',10500));
+const nextFeed=feed.replace('掲載日 <b>2026-09-25</b> / スナップショット 2026-09-25','掲載日 <b>2026-09-26</b> / スナップショット 2026-09-26').replace(cell('AMTAF','AMTAF_SHOP',12000),'').replace(cell('買取ミミ','mimi_kaitori',11500),cell('買取ミミ','mimi_kaitori',10500).replace('/status/123','/status/223'));
 context.Utilities.formatDate=()=> '2026-09-26';
 context.UrlFetchApp.fetch=()=>({getResponseCode:()=>200,getContentText:()=>nextFeed});
 vm.runInContext('runTv2MarketAuto()',context);
@@ -49,7 +49,7 @@ assert.equal(state.marketQuotes[0].price,12000,'missing shop retains its last ob
 assert.equal(state.marketQuotes[0].shopOffers['AMTAF'].date,'2026-09-25');
 assert.equal(state.marketQuotes[0].shopOffers['買取ミミ'].price,10500);
 assert.equal(state.marketQuotes[0].fresh,false,'older winning shop quote is marked stale');
-const replaced=nextFeed.replace(cell('AMTAF','AMTAF_SHOP',12000),'').replace(cell('買取ミミ','mimi_kaitori',10500),cell('買取ミミ','mimi_kaitori',12500));
+const replaced=nextFeed.replace(cell('買取ミミ','mimi_kaitori',10500).replace('/status/123','/status/223'),cell('買取ミミ','mimi_kaitori',12500).replace('/status/123','/status/323'));
 context.UrlFetchApp.fetch=()=>({getResponseCode:()=>200,getContentText:()=>replaced});
 vm.runInContext('runTv2MarketAuto()',context);
 assert.equal(state.marketQuotes[0].price,12500,'newer quote for the same shop replaces its older quote');

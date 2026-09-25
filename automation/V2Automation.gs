@@ -12,6 +12,7 @@ function installTv2Automation(){
   ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(15).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   PropertiesService.getScriptProperties().setProperty('TV2_MARKET_SCHEDULE_V2','15');
+  tv2EnsurePickupSchedule_();
   return {lottery,market};
 }
 function runTv2LotteryAuto(){
@@ -104,6 +105,9 @@ function runTv2MarketAuto(){
     feed=tv2ParseSealedFeed_(response.getContentText('UTF-8'),date);
   }catch(err){feed={products:[],error:'BOX相場取得失敗: '+String(err)}}}
   if(feed.error)reviews.push(feed.error);
+  const pickup=tv2FetchPickupPosts_(sealed,health);
+  if(pickup.errors.length){reviews.push(...pickup.errors);report.review+=pickup.errors.length}
+  health.xPickupStatus=pickup.status;
   const sealedSeen=new Set();
   sealed.forEach(lot=>{
     const key=normalize_(lot.productKey||lot.product)+'|'+lot.category+'|'+String(lot.condition||'');
@@ -112,10 +116,12 @@ function runTv2MarketAuto(){
     const name=tv2SealedName_(lot.product||lot.productKey);
     const matches=condition&&name?feed.products.filter(p=>[p.name,p.official].some(s=>tv2SealedName_(s)===name)):[];
     const offers=matches.length===1?(matches[0].offers[condition]||[]):[];
+    const pickupOffers=condition&&name?pickup.offers.filter(o=>o.category===lot.category&&o.condition===condition&&o.name===name):[];
     const quote=tv2FindQuote_(state,lot);
     const saved=condition&&quote&&quote.category===lot.category&&quote.shopOffers&&typeof quote.shopOffers==='object'?quote.shopOffers:{};
     const latest=Object.assign({},saved);
-    offers.forEach(offer=>{const prior=latest[offer.shop];if(!prior||String(prior.date||'')<=feed.date)latest[offer.shop]={shop:offer.shop,price:offer.price,url:offer.url,date:feed.date}});
+    offers.filter(offer=>!pickup.uncertainShops.includes(offer.shop)).forEach(offer=>{const next={shop:offer.shop,price:offer.price,url:offer.url,date:feed.date,postId:tv2PostId_(offer.url)};if(tv2OfferNewer_(next,latest[offer.shop]))latest[offer.shop]=next});
+    pickupOffers.sort((a,b)=>tv2ComparePostId_(a.postId,b.postId)).forEach(offer=>{if(tv2OfferNewer_(offer,latest[offer.shop]))latest[offer.shop]=offer});
     const best=condition&&Object.values(latest).filter(o=>o&&Number.isFinite(Number(o.price))&&Number(o.price)>0&&/^https:\/\/x\.com\/[^/]+\/status\/\d+$/.test(String(o.url||''))).sort((a,b)=>b.price-a.price)[0];
     if(!best){const q=tv2FindQuote_(state,lot);if(q){q.fresh=false;q.trend='stale'}
       report.review++;reviews.push(lot.product+': 同一商品・同一状態の店舗別X出典を確認できず前回価格維持');return}
@@ -128,7 +134,7 @@ function runTv2MarketAuto(){
     const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
     target.previousPrice=Number.isFinite(previous)?previous:best.price;
     target.price=best.price;target.checkedAt=date;target.shopOffers=latest;
-    target.source=best.shop+' '+best.date+' '+best.url+' ('+condition+')';target.fresh=best.date===date;
+    target.source=best.shop+' '+best.date+' '+best.url+' ('+condition+')';target.fresh=best.date===date&&!pickup.uncertainShops.includes(best.shop);
     target.trend=best.price>target.previousPrice?'up':best.price<target.previousPrice?'down':'same';
     target.history=Array.isArray(target.history)?target.history:[];
     if(!target.history.some(h=>String(h.checkedAt||h.date)===date&&Number(h.price??h.value)===best.price))
@@ -140,6 +146,7 @@ function runTv2MarketAuto(){
   health.lastMarketRunAt=now.toISOString();health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
  });
  tv2EnsureMarketSchedule_();
+ tv2EnsurePickupSchedule_();
  return outcome;
 }
 function tv2SealedName_(s){return normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'')}
@@ -171,6 +178,75 @@ function tv2ParseSealedFeed_(html,date){
   }
   return{products,error:'',date:stamp[1]};
 }
+function tv2PostId_(url){return(String(url||'').match(/\/status\/(\d+)/)||[])[1]||''}
+function tv2ComparePostId_(a,b){const x=String(a||''),y=String(b||'');return x.length-y.length||x.localeCompare(y)}
+function tv2OfferNewer_(incoming,prior){if(!incoming||!incoming.date)return false;if(!prior)return true;
+ const a=incoming.postId||tv2PostId_(incoming.url),b=prior.postId||tv2PostId_(prior.url);
+ if(a&&b)return tv2ComparePostId_(a,b)>0;
+ return String(incoming.date)>String(prior.date);
+}
+// X API credentials stay in Script Properties. Missing credentials preserve the daily comparison feed.
+function tv2XGet_(path,token){const response=UrlFetchApp.fetch('https://api.x.com/2/'+path,{headers:{Authorization:'Bearer '+token},muteHttpExceptions:true});
+ if(response.getResponseCode()!==200)throw new Error('X API HTTP '+response.getResponseCode());
+ const result=JSON.parse(response.getContentText('UTF-8'));if(result.errors&&result.errors.length)throw new Error('X API returned errors');return result}
+function tv2VisionText_(url,key){if(!/^https:\/\/pbs\.twimg\.com\/media\/[A-Za-z0-9_\-.?=&%]+$/.test(url))throw new Error('X画像URLが不正');
+ const image=UrlFetchApp.fetch(url,{muteHttpExceptions:true});if(image.getResponseCode()!==200)throw new Error('X画像 HTTP '+image.getResponseCode());
+ const body={requests:[{image:{content:Utilities.base64Encode(image.getBlob().getBytes())},features:[{type:'DOCUMENT_TEXT_DETECTION'}],imageContext:{languageHints:['ja']}}]};
+ const r=UrlFetchApp.fetch('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(key),{method:'post',contentType:'application/json',payload:JSON.stringify(body),muteHttpExceptions:true});
+ if(r.getResponseCode()!==200)throw new Error('Vision OCR HTTP '+r.getResponseCode());const result=JSON.parse(r.getContentText('UTF-8')).responses?.[0]||{};
+ if(result.error)throw new Error('Vision OCR 解析失敗');return String(result.fullTextAnnotation?.text||result.textAnnotations?.[0]?.description||'')}
+function tv2PickupLineOffer_(line,lot){const name=tv2SealedName_(lot.product||lot.productKey),condition=tv2SealedCondition_(lot);
+ if(!name||!condition||!line||line.length>140||!tv2SealedName_(line).includes(name))return null;
+ const normalized=normalize_(line),shrink=/(?:シュリンク|シュリ)(?:あり|有)/.test(normalized),noShrink=/(?:シュリンク|シュリ)(?:なし|無)/.test(normalized);
+ if(condition==='shrink'&&(!shrink||noShrink)||condition==='no_shrink'&&(!noShrink||shrink)||condition==='loose_pack'&&!/(?:バラパック|バラ売り|単品パック)/.test(normalized))return null;
+ const prices=[...String(line).matchAll(/(?:[¥￥]\s*([\d,]{3,})|((?:\d{1,3}(?:,\d{3})+|\d{4,}|\d{3}\s*円))\s*円?)/g)].map(m=>Number((m[1]||m[2]).replace(/[,円\s]/g,''))).filter(n=>Number.isFinite(n)&&n>0);
+ if(prices.length!==1)return null;return{category:lot.category,name,condition,price:prices[0]}}
+function tv2PickupOffersFromText_(text,lots){const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean),out=[];
+ for(let i=0;i<lines.length;i++){
+  const next=/^[¥￥]?\s*[\d,]{3,}\s*円?$/.test(lines[i+1]||'')?lines[i]+' '+lines[i+1]:lines[i];
+  const names=[...new Set(lots.map(lot=>tv2SealedName_(lot.product||lot.productKey)).filter(name=>name&&tv2SealedName_(next).includes(name)))];
+  if(names.length>1&&/[¥￥]|\d{1,3},\d{3}|\d{3,}\s*円/.test(next))throw new Error('画像の同一行に複数商品があり価格を確定できません');
+  for(const lot of lots){const offer=tv2PickupLineOffer_(next,lot);if(offer&&!out.some(x=>x.category===offer.category&&x.name===offer.name&&x.condition===offer.condition&&x.price===offer.price))out.push(offer)}
+ }return out}
+function tv2FetchPickupPosts_(lots,health){if(typeof PropertiesService==='undefined')return{offers:[],errors:[],uncertainShops:[],status:'unconfigured'};
+ const p=PropertiesService.getScriptProperties(),token=String(p.getProperty('TV2_X_BEARER_TOKEN')||''),vision=String(p.getProperty('TV2_VISION_API_KEY')||'');
+ if(!lots.length)return{offers:[],errors:[],uncertainShops:[],status:'no-inventory'};
+ if(!token)return{offers:[],errors:['X追加投稿は未接続: TV2_X_BEARER_TOKEN が未設定'],uncertainShops:[],status:'unconfigured'};
+ const shops=[['cardshop_allium','アリウム'],['AMTAF_SHOP','AMTAF'],['mimi_kaitori','買取ミミ']],offers=[],errors=[],uncertainShops=[];
+ const ids=health.xUserIds&&typeof health.xUserIds==='object'?health.xUserIds:{},seen=health.xLastSeen&&typeof health.xLastSeen==='object'?health.xLastSeen:{};
+ for(const [handle,shop] of shops){try{
+  if(!ids[handle]){const user=tv2XGet_('users/by/username/'+encodeURIComponent(handle),token).data;if(!user||String(user.username).toLowerCase()!==handle.toLowerCase()||!/^\d+$/.test(user.id))throw new Error('店舗アカウントの照合に失敗');ids[handle]=user.id}
+  const base='users/'+ids[handle]+'/tweets?max_results=10&post.fields=created_at,attachments&expansions=attachments.media_keys&media.fields=url,type';
+  const media={},all=[];let cursor='',more=false;
+  for(let page=0;page<5;page++){
+   const path=base+(seen[handle]?'&since_id='+seen[handle]:'&start_time='+encodeURIComponent(new Date(Date.now()-2*86400000).toISOString()))+(cursor?'&pagination_token='+encodeURIComponent(cursor):'');
+   const result=tv2XGet_(path,token);all.push(...(result.data||[]));(result.includes?.media||[]).forEach(m=>{media[m.media_key]=m});
+   cursor=result.meta?.next_token||'';more=Boolean(cursor);if(!more)break;
+  }
+  if(more)throw new Error('未読投稿が50件を超えたため更新を保留');
+  const posts=all.filter(post=>/^\d+$/.test(post.id)&&tv2ComparePostId_(post.id,seen[handle])>0).sort((a,b)=>tv2ComparePostId_(a.id,b.id));
+  let failed=false;
+  for(const post of posts){const instant=new Date(post.created_at),date=isNaN(instant.getTime())?'':Utilities.formatDate(instant,TZ,'yyyy-MM-dd');if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){failed=true;break}
+   if(!/買取|金額に変更/.test(String(post.text||''))){seen[handle]=post.id;continue}
+   let extracted=tv2PickupOffersFromText_(post.text,lots),hadPhoto=false;
+   for(const key of post.attachments?.media_keys||[]){const photo=media[key];if(photo?.type!=='photo'||!photo.url)continue;
+    hadPhoto=true;
+    if(!vision){errors.push(shop+' '+post.id+': 画像のOCR未設定・要確認');failed=true;uncertainShops.push(shop);continue}
+    try{extracted=extracted.concat(tv2PickupOffersFromText_(tv2VisionText_(photo.url,vision),lots))}catch(err){errors.push(shop+' '+post.id+': '+String(err));failed=true;uncertainShops.push(shop)}
+   }
+   if(failed)break;
+   if(hadPhoto&&!extracted.length&&/金額に変更/.test(post.text)){errors.push(shop+' '+post.id+': 画像の商品・状態・価格を確定できず要確認。'+ 'https://x.com/'+handle+'/status/'+post.id);uncertainShops.push(shop)}
+   for(const item of extracted){const duplicate=offers.find(o=>o.shop===shop&&o.name===item.name&&o.category===item.category&&o.condition===item.condition&&o.postId===post.id);
+    if(duplicate&&duplicate.price!==item.price){errors.push(shop+' '+post.id+': 同一商品・状態で価格が複数・要確認');uncertainShops.push(shop);offers.splice(offers.indexOf(duplicate),1);continue}
+    if(!duplicate)offers.push(Object.assign(item,{shop,date,postId:post.id,url:'https://x.com/'+handle+'/status/'+post.id}));
+   }
+   seen[handle]=post.id;
+  }
+ }catch(err){errors.push(shop+': X追加投稿取得失敗 '+String(err));uncertainShops.push(shop)}}
+ health.xUserIds=ids;health.xLastSeen=seen;
+ health.xUncertainShops=[...new Set(uncertainShops)];
+ return{offers:offers.filter(o=>!uncertainShops.includes(o.shop)),errors,uncertainShops:health.xUncertainShops,status:errors.length?'review':'ok'}
+}
 function tv2EnsureMarketSchedule_(){
   if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
   const props=PropertiesService.getScriptProperties();
@@ -179,6 +255,15 @@ function tv2EnsureMarketSchedule_(){
   ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(15).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   old.forEach(t=>ScriptApp.deleteTrigger(t));
   props.setProperty('TV2_MARKET_SCHEDULE_V2','15');
+}
+function runTv2PickupAuto(){return runTv2MarketAuto()}
+function tv2EnsurePickupSchedule_(){if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
+ const p=PropertiesService.getScriptProperties(),enabled=Boolean(p.getProperty('TV2_X_BEARER_TOKEN')&&p.getProperty('TV2_VISION_API_KEY'));
+ const existing=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2PickupAuto');
+ if(!enabled){existing.forEach(t=>ScriptApp.deleteTrigger(t));return}
+ if(existing.length===2)return;
+ existing.forEach(t=>ScriptApp.deleteTrigger(t));
+ [19,22].forEach(hour=>ScriptApp.newTrigger('runTv2PickupAuto').timeBased().atHour(hour).nearMinute(0).everyDays(1).inTimezone(TZ).create());
 }
 function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}
 function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
