@@ -109,4 +109,4 @@
 - 発見: PR #62 のCIとApps Script配布 #19は成功したが、既存デプロイは `automation/V2Automation.gs` のみを置換し、`automation/Code.gs` 内の `findCardrushBuyback_` の変更を既存の `Code.js` に適用していなかった。GitHubの成功だけで本番の仕様違い照合が更新済みと判断できない。
 - 変更: `scripts/patch-cardrush-buyback.mjs` で既存Apps ScriptのAPIとmanifestを維持しつつ、カードラッシュ照合関数だけをリポジトリ正本に差し替える。配布後にリモートから再取得してパッチ済みファイルと比較する。workflowとパッチャーの変更でも配布が起動するようにする。新チャットは接続済みGitHubプラグインから同じmain/Actionsを使い、認証情報は受け渡さない。
 - 検証: リモートAPI模擬ファイルの前後を比較し、関数以外の不変と再実行の同一性を確認。`npm test` 169件、`npm run check` 通過。
-- 本番状態: PR作成・CI・配布待ち。GitHub接続は現在のチャットで動作確認済み。新チャットのプラグイン利用可否は、そのチャットで確認する。本人端末のV2復元JSON取り込みは未実行。
+- 本番状態: [PR #63](https://github.com/manato-maker/toreca-vault/pull/63) をマージ。[CI #476](https://github.com/manato-maker/toreca-vault/actions/runs/36152815173) と [Apps Script配布 #20](https://github.com/manato-maker/toreca-vault/actions/runs/36152868555) 成功。配布ジョブで既存API・manifestの保全と関数のリモート再取得一致を確認。GitHub接続は現在のチャットで動作確認済み。新チャットのプラグイン利用可否は、そのチャットで確認する。本人端末のV2復元JSON取り込みと実相場更新は未確認。
