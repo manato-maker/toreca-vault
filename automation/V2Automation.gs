@@ -70,8 +70,9 @@ function runTv2MarketAuto(){
   if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
   const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),seen=new Set();
   cards.forEach(lot=>{
-    const key=normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||'');
+    const key=String(lot.id||normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||''));
     if(seen.has(key))return;seen.add(key);
+    if(lot.identityNeedsReview===true){report.review++;reviews.push(lot.product+': カード番号は買取価格からの推定・現物確認まで前回価格維持');return}
     const model=extractModel_([lot.set,lot.product].filter(Boolean).join(' '));
     // The public buyback list describes standard condition. Other card conditions
     // cannot be priced from it without guessing a discount.
@@ -267,7 +268,7 @@ function tv2EnsurePickupSchedule_(){if(typeof ScriptApp==='undefined'||typeof Pr
  [19,22].forEach(hour=>ScriptApp.newTrigger('runTv2PickupAuto').timeBased().atHour(hour).nearMinute(0).everyDays(1).inTimezone(TZ).create());
 }
 function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}
-function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
+function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>!q.lotId&&normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
 function tv2Health_(state){state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};state.automation.health=state.automation.health&&typeof state.automation.health==='object'?state.automation.health:{};return state.automation.health}
 function tv2Config_(){const p=PropertiesService.getScriptProperties(),url=String(p.getProperty(TV2_SYNC_URL_PROP)||''),token=String(p.getProperty('TV_V2_SYNC_TOKEN')||''),alternate=String(p.getProperty(TV2_SYNC_TOKEN_PROP)||'');if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url))throw new Error('TV2_SYNC_URL が未設定です');const tokens=[...new Set([token,alternate].filter(t=>t.length>=24))];if(!tokens.length)throw new Error('V2同期トークンが未設定です');return{url,tokens}}
 function tv2ParseResponse_(raw){const text=String(raw||'').trim();if(!text)throw new Error('V2 API empty response');let json=text;const m=text.match(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(\s*([\s\S]*)\s*\)\s*;?$/);if(m)json=m[1].trim();try{return JSON.parse(json)}catch(e){throw new Error('V2 API response is not JSON/JSONP')}}

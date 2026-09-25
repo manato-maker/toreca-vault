@@ -44,6 +44,7 @@ export async function commitV2CardIdentityBatch(rows,config=getVaultV2Config()){
   if(lot.set===set)continue;
   if(lot.set)throw new Error('既存番号と異なるため停止しました: '+product);
   const mutationId=makeId('card-recovery');next=setCardIdentity(next,lot.id,set,mutationId);
+  if(row.inferred===true)next.inventoryLots.find(x=>x.id===lot.id).identityNeedsReview=true;
   changed.push({lotId:lot.id,set,mutationId});
  }
  if(!changed.length)return{payload:before.payload,revision:before.revision,updated:0};
