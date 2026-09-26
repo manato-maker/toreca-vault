@@ -28,7 +28,8 @@ for (const fn of ['runTorecaVaultLotterySync','runTorecaVaultMarketSync']) {
   const marker = 'function ' + fn + '() {';
   const hook = "if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();";
   const ri = remote.indexOf(marker), ci = canonical.indexOf(marker);
-  if (ri < 0 || ci < 0) throw new Error(fn + ': function missing');
+  if (ci < 0) throw new Error(fn + ': canonical function missing');
+  if (ri < 0) continue;
   if (!canonical.slice(ci, ci + 240).includes(hook)) throw new Error(fn + ': canonical hook missing');
   if (!remote.slice(ri, ri + 240).includes(hook)) {
     const at = ri + marker.length;
