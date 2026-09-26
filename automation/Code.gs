@@ -2,7 +2,7 @@ const DATA_FILE_ID = PropertiesService.getScriptProperties().getProperty('TV_DAT
 const TZ = 'Asia/Tokyo';
 const MAX_IDS = 3000;
 const RESULT_WORDS = /(当選|ご当選|落選|残念|抽選結果)/;
-const APPLICATION_WORDS = /(抽選申込完了|申込みが完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/;
+const APPLICATION_WORDS = /(抽選申込完了|申込受付完了|申込みが完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/;
 const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘|遊戯王|YU[- ]?GI[- ]?OH|遊戯王OCG)/i;
 
 function installTorecaVaultAutomation() {
@@ -150,13 +150,16 @@ function matchLottery_(lotteries, text) {
 }
 
 function upsertApplication_(lotteries, text, message, now) {
-  const applicationNo = extractApplicationNo_(text);
+  let applicationNo = extractApplicationNo_(text);
+  const isToysRUs = /toysrus|トイザらス|las\.toysrus\.co\.jp/i.test([text, String(message.getFrom ? message.getFrom() : '')].join('\n'));
+  if (!applicationNo && isToysRUs) applicationNo = 'mail-' + message.getId();
   if (!applicationNo) return { kind: 'review', reason: '申込番号を抽出できない' };
   if (lotteries.some(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo))) {
     return { kind: 'duplicate' };
   }
-  const title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
-  let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗)\s*[:：]/m);
+  let title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
+  if (!title && isToysRUs) { const m = String(message.getSubject ? message.getSubject() : '').match(/[『「]\s*([^』」]+)[』」]/); if (m) title = m[1].trim(); }
+  let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗|受取登録店舗)\s*[:：は]*\s*[「『]?/m).replace(/[」』]$/,'').trim();
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|結果発表)/);
