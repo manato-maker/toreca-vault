@@ -65,6 +65,60 @@ function runTv2LotteryAuto(){
   });
 }
 
+
+function runTv2LotteryBackfill14Days(){
+ return tv2Mutate_('gmail-backfill-14d',state=>{
+  const now=new Date(),since=new Date(now.getTime()-14*86400000),health=tv2Health_(state),seenIds=[],reviews=[];let changed=false;
+  const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString(),since:since.toISOString()};
+  const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
+  for(let offset=0;offset<3000;offset+=100){
+   const page=GmailApp.search(query,offset,100);threads.push(...page);
+   if(page.length<100)break;
+   if(offset===2900)throw new Error('Gmail 14日検索が3000スレッドを超えました');
+  }
+  threads.forEach(th=>th.getMessages().forEach(message=>{
+   if(message.getDate()<=since)return;
+   const id=message.getId(),subject=String(message.getSubject()||''),from=String(message.getFrom()||'');
+   if(/^Toreca Vault\s/.test(subject))return;
+   const text=[subject,message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text);
+   const isResult=RESULT_WORDS.test(subject)||(/(当選|ご当選|落選|残念)/.test(text)&&/(抽選|購入権|当選)/.test(text));
+   if(!CARD_WORDS.test(text)||(!isResult&&!isApplication))return;
+   report.scanned++;seenIds.push(id);
+   if(isApplication){
+    const r=upsertApplication_(state.lotteries,text,message,now);
+    if(r.kind==='created'){report.created++;changed=true}
+    else if(r.kind==='duplicate')report.duplicate++;
+    else{report.review++;reviews.push({messageId:id,reason:r.reason,subject})}
+    return;
+   }
+   const match=matchLottery_(state.lotteries,text);
+   if(match.kind==='outside'){report.outside++;return}
+   if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject});return}
+   const parsed=parseResult_(text,message.getDate());
+   if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject});return}
+   const item=match.item,old=JSON.stringify(item);
+   const conflict=(parsed.status==='落選'&&(['当選','購入済'].includes(item.status)||item.receiptStatus==='受取済み'))||(parsed.status==='当選'&&item.status==='落選');
+   if(conflict){report.review++;reviews.push({messageId:id,reason:'既存の当落・購入・受取状態と結果メールが競合',subject});return}
+   if(['応募済','応募済み'].includes(item.status))item.status=parsed.status;
+   item.resultDate=parsed.resultDate||item.resultDate;
+   if(parsed.receiveDeadline)item.receiveDeadline=parsed.receiveDeadline;
+   if(parsed.status==='当選'&&!['受取済み','未受取'].includes(item.receiptStatus))item.receiptStatus='未受取';
+   if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
+   item.updatedAt=now.toISOString();
+   if(JSON.stringify(item)!==old){report.updated++;changed=true}else report.duplicate++;
+  }));
+  const seen=new Set(seenIds),processed=new Set(health.gmailMessageIds||[]);
+  seenIds.forEach(id=>processed.add(id));
+  health.gmailMessageIds=[...processed].slice(-3000);
+  health.lastGmailRunAt=now.toISOString();
+  health.gmailNeedsReview=[...(health.gmailNeedsReview||[]).filter(x=>!seen.has(String(x.messageId||''))),...reviews].slice(-200);
+  health.gmailReview=reviews.length;
+  health.gmailStatus=reviews.length?'review':'ok';
+  const result={changed:true,report,reviewItems:reviews};
+  console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
+ });
+}
+
 function tv2IsApplicationMessage_(message,text){
  const subject=String(message&&message.getSubject?message.getSubject():'');
  return APPLICATION_WORDS.test(subject)||(APPLICATION_WORDS.test(String(text||''))&&!RESULT_WORDS.test(subject));
