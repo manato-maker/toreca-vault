@@ -109,11 +109,11 @@ function runTv2MarketAuto(){
     const model=extractModel_([lot.set,lot.product].filter(Boolean).join(' '));
     // The public buyback list describes standard condition. Other card conditions
     // cannot be priced from it without guessing a discount.
-    if(!rows||!model||!['良品',''].includes(String(lot.condition||''))){
-      report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態・価格ソースを確認できず前回価格維持');return;
+    if(!model||!['良品','美品',''].includes(String(lot.condition||''))){
+      report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
     const name=String(lot.product||'').replace(model,'').trim(),variant=tv2CardVariant_(lot);
-    let result=name?findCardrushBuyback_(rows,name,model,variant):null;
+    let result=rows&&name?findCardrushBuyback_(rows,name,model,variant):null;
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
