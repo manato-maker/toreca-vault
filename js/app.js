@@ -124,7 +124,7 @@ async function recognizeReceiptPhoto(file){
 }
 
 function openReceiptDialog(item){
- if(v2ReadOnly&&!lotteryWriteReady()){toast('設定からV2書込を有効化してください');return}
+ if(v2ReadOnly&&!v2Connected()){toast('V2接続を確認してください');return}
  receiptTargetId=item.id;
  document.querySelector('#receipt-product').value=item.receiptProduct||item.title||'';
  document.querySelector('#receipt-store').value=item.receiptStore||item.store||'';
@@ -185,6 +185,12 @@ document.querySelector('#receipt-form').addEventListener('submit',async e=>{
   if(file)payload.receiptPhoto=await compressReceiptPhoto(file);
   if(addPurchase&&total<=0)throw new Error('購入履歴へ追加する場合は購入合計金額を確認してください');
   if(v2ReadOnly){
+   if(!v2Connected())throw new Error('V2接続を確認してください');
+   if(!isV2WriteEnabled(Number(remoteRevision))){
+    if(!confirm('V2正本へ保存するため、この操作のV2書込を有効化しますか？'))return;
+    enableV2WriteForSession('V2書込を有効化',Number(remoteRevision));
+    setSyncStatus(`V2書込有効 · rev ${remoteRevision}`,'warning');
+   }
    const saved=await commitV2LotteryReceiptPurchase(payload),check=acceptanceSnapshot(saved.payload);if(!check.ok)throw new Error('保存後の受入チェックに失敗しました');
    const applied=applyV2ReadOnlyToUi(state,{state:(await import('../v2/view-model.js')).v2ViewModel(saved.payload),assets:check.assets,realizedProfit:check.realizedProfit,revision:saved.revision});
    state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||v2AutomationHealth;remoteRevision=String(saved.revision);advanceV2WriteRevision(Number(remoteRevision));render();setSyncStatus(`受取・購入反映済み · rev ${remoteRevision} · 書込継続中`,'success');
