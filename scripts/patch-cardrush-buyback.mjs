@@ -6,6 +6,9 @@ if (!remotePath || !canonicalPath) throw new Error('remote and canonical source 
 let remote = fs.readFileSync(remotePath, 'utf8');
 const canonical = fs.readFileSync(canonicalPath, 'utf8');
 
+// Remove any disposable verification branch left by an interrupted deploy.
+remote = remote.replace(/\n  \/\/ TEMP_FINALIZER_20260927_START[\s\S]*?\n  \/\/ TEMP_FINALIZER_20260927_END/g, '');
+
 function replaceRange(remoteSource, canonicalSource, start, end, label, required = []) {
   function bounds(source, sourceLabel) {
     const a = source.indexOf(start), b = source.indexOf(end, a + start.length);
