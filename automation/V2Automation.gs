@@ -143,6 +143,46 @@ function runTv2SingleCardRefresh20260926(){
  console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
 }
 
+
+function runTv2FinalCompletion20260927(){
+  const purchase=runTv2GeoStartDeckPurchase20260926();
+  const market=runTv2MarketAuto();
+  const loaded=tv2Load_(),state=loaded.payload,health=tv2Health_(state);
+  const txId='chat-purchase-20260926-geo-kashiba-startdeck100-battlecollection-891-1';
+  const purchaseVerified=(state.transactions||[]).filter(t=>String(t.id||'')===txId&&String(t.category||'')==='BOX'&&String(t.condition||'')==='未開封'&&Number(t.quantity)===1&&Number(t.price)===891).length===1;
+  const today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
+  let checkedToday=0;
+  const sources={};
+  cards.forEach(l=>{
+    const q=tv2FindQuote_(state,l);
+    if(q&&String(q.checkedAt||'')===today){
+      checkedToday++;
+      const s=String(q.source||'');
+      const k=/カードラッシュ/.test(s)?'cardrush':/アルテマ/.test(s)?'altema':s?'other':'unknown';
+      sources[k]=(sources[k]||0)+1;
+    }
+  });
+  const reasonCounts={};
+  (health.marketNeedsReview||[]).forEach(raw=>{
+    const s=String(raw||'');
+    const reason=s.includes(':')?s.slice(s.indexOf(':')+1).trim():s;
+    reasonCounts[reason]=(reasonCounts[reason]||0)+1;
+  });
+  return{
+    ok:purchaseVerified&&cards.length>0&&checkedToday>0,
+    revision:loaded.revision,
+    geoPurchaseVerified:purchaseVerified,
+    single:{
+      total:cards.length,
+      checkedToday,
+      sourceCounts:sources,
+      report:market&&market.report?market.report:{},
+      reviewReasonCounts:reasonCounts
+    }
+  };
+}
+
 function runTv2MarketAuto(){
  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
