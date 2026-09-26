@@ -306,35 +306,6 @@ function runTv2ChatSale(command){
 }
 
 
-function runTv2Recovery20260926(){
- const requestId='20260926-30th-celebration-mimi-24100-1',txId='chat-sale-'+requestId;
- const before=tv2Load_();
- const existing=(before.payload.transactions||[]).filter(t=>String(t.id||'')===txId);
- let sale;
- if(existing.length===1){
-   sale={duplicate:true,transactionId:txId,unchanged:true,revision:before.revision};
- }else{
-   if(existing.length>1)throw new Error('復旧停止: 同一売却IDがV2正本に複数あります');
-   const candidates=(before.payload.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&String(l.category||'')==='BOX'&&normalize_(String(l.productKey||'')+' '+String(l.product||'')).includes('30thcelebration')&&!tv2IsPremiumDeck_(l.product||l.productKey));
-   const identities=[...new Map(candidates.map(l=>[normalize_(l.productKey||l.product),{key:normalize_(l.productKey||l.product),product:String(l.productKey||l.product||''),display:String(l.product||l.productKey||'')}])).values()];
-   if(identities.length!==1)throw new Error('復旧停止: 30th CELEBRATIONの販売対象在庫を一意に特定できません '+JSON.stringify(candidates.map(l=>({id:l.id,product:l.product,productKey:l.productKey,condition:l.condition,quantity:l.quantity}))));
-   const matched=candidates.filter(l=>normalize_(l.productKey||l.product)===identities[0].key);
-   const available=matched.reduce((n,l)=>n+Number(l.quantity||0),0);
-   if(available<1)throw new Error('復旧停止: 30th CELEBRATIONの在庫がありません');
-   const conditions=[...new Set(matched.map(l=>String(l.condition||'')))];
-   if(conditions.length!==1)throw new Error('復旧停止: 30th CELEBRATION在庫の状態が複数あります '+JSON.stringify(matched.map(l=>({id:l.id,product:l.product,condition:l.condition,quantity:l.quantity}))));
-   const command={type:'sale',product:identities[0].product,category:'BOX',condition:conditions[0],quantity:1,unitPrice:24100,store:'買取ミミ',date:'2026-09-26',requestId};
-   sale=runTv2ChatSale(command);
- }
- const market=runTv2MarketAuto();
- const loaded=tv2Load_();
- const matches=(loaded.payload.transactions||[]).filter(t=>String(t.id||'')===txId);
- if(matches.length!==1)throw new Error('復旧後検証失敗: 対象売却がV2正本に1件存在しません');
- const tx=matches[0];
- if(String(tx.store||tx.soldTo||'')!=='買取ミミ'||Number(tx.price)!==24100||Number(tx.quantity)!==1||String(tx.date||'')!=='2026-09-26')throw new Error('復旧後検証失敗: 対象売却の内容が一致しません');
- const result={ok:true,sale,market,verified:{transactionId:txId,product:tx.product,quantity:tx.quantity,price:tx.price,store:tx.store||tx.soldTo,date:tx.date,condition:tx.condition,acquisitionCost:tx.acquisitionCost},revision:loaded.revision};
- console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
-}
 
 function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
