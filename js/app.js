@@ -89,6 +89,40 @@ function render(){if(!titles[route])route='dashboard';document.querySelector('#p
 const pendingPresets={};
 function applyPendingPreset(type){const preset=pendingPresets[type];if(!preset)return;for(const [name,value] of Object.entries(preset)){const el=document.querySelector('#entry-form [name="'+name+'"]');if(el)el.value=String(value)}}
 function openForm(type){if(type==='dashboard')type='purchases';if(hasV2ReadOnly()&&!v2Connected()){toast('V2接続確認が完了していません');return}if(v2ReadOnly&&!isV2WriteEnabled(Number(remoteRevision))){toast('V2確認モードは読み取り専用です');return}if(type==='calendar')type='lotteries';if(type==='ledger')type=subtype==='sales'?'sales':'purchases';if(type==='inventory')type=['boxes','packs','cards','products'].includes(subtype)?subtype:'boxes';if(type==='activity')type='openings';const f=fields[type];if(!f)return;document.querySelector('#entry-form').dataset.type=type;document.querySelector('#form-title').textContent=`${({lotteries:'抽選',purchases:'購入',sales:'売却',boxes:'BOX',packs:'パック',cards:'カード',openings:'開封',products:'商品'}[type])}を追加`;document.querySelector('#form-fields').innerHTML=f.map(([name,label,kind,extra])=>{const full=extra===1?' full':'';if(kind==='select')return`<div class="field${full}"><label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${extra.map(o=>`<option>${o}</option>`).join('')}</select></div>`;if(kind==='textarea')return`<div class="field${full}"><label for="f-${name}">${label}</label><textarea id="f-${name}" name="${name}"></textarea></div>`;return`<div class="field${full}"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${kind}" ${kind==='number'?'min="0" inputmode="numeric"':''} ${name==='quantity'?'value="1"':''} ${name==='date'?'value="'+today()+'"':''} ${['title','product','name'].includes(name)?'required':''}></div>`}).join('');applyPendingPreset(type);document.querySelector('#entry-dialog').showModal()}
+
+let receiptOcrLoader=null;
+function receiptCategoryFor(item){const s=String(item?.receiptCategory||item?.category||item?.title||'');if(/スタートデッキ|デッキセット|カードセット|BOX|ボックス/i.test(s))return'BOX';if(/パック/.test(s))return'パック';if(/\d{1,3}\/\d{1,3}|カード/.test(s)&&!/セット/.test(s))return'カード';return'BOX'}
+function setReceiptOcrStatus(text,tone=''){const el=document.querySelector('#receipt-ocr-status');if(!el)return;el.textContent=text;el.dataset.tone=tone}
+function loadReceiptOcr(){
+ if(globalThis.Tesseract)return Promise.resolve(globalThis.Tesseract);
+ if(receiptOcrLoader)return receiptOcrLoader;
+ receiptOcrLoader=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';s.crossOrigin='anonymous';s.onload=()=>globalThis.Tesseract?resolve(globalThis.Tesseract):reject(new Error('OCRエンジンを読み込めませんでした'));s.onerror=()=>reject(new Error('OCRエンジンの読み込みに失敗しました'));document.head.appendChild(s)});return receiptOcrLoader;
+}
+function receiptDateFromOcr(text){
+ const s=String(text||'').normalize('NFKC');
+ const m=s.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})\s*日?/);
+ if(!m)return'';const y=m[1],mo=String(Number(m[2])).padStart(2,'0'),d=String(Number(m[3])).padStart(2,'0');return y+'-'+mo+'-'+d;
+}
+function receiptAmountFromOcr(text){
+ const lines=String(text||'').normalize('NFKC').split(/\r?\n/).map(x=>x.trim()).filter(Boolean),candidates=[];
+ for(const line of lines){
+  const nums=[...line.matchAll(/[¥￥]?\s*([0-9][0-9,]{1,8})\s*円?/g)].map(m=>Number(m[1].replace(/,/g,''))).filter(n=>Number.isFinite(n)&&n>=100&&n<=10000000);
+  if(!nums.length)continue;
+  let score=0;if(/合\s*計|total|お支払|支払額|請求額/i.test(line))score+=12;if(/税込|クレジット|決済/i.test(line))score+=4;if(/小計/.test(line))score+=2;if(/内税|外税|消費税|ポイント|釣銭|お釣|預り|預かり|電話|TEL/i.test(line))score-=8;
+  for(const amount of nums)candidates.push({amount,score,line});
+ }
+ candidates.sort((a,b)=>b.score-a.score||b.amount-a.amount);return candidates[0]||null;
+}
+function parseReceiptOcr(text){
+ const amount=receiptAmountFromOcr(text),date=receiptDateFromOcr(text);
+ return{amount:amount?.amount||0,amountLine:amount?.line||'',date};
+}
+async function recognizeReceiptPhoto(file){
+ const Tesseract=await loadReceiptOcr();setReceiptOcrStatus('OCR準備中…');
+ const worker=await Tesseract.createWorker('jpn+eng',1,{logger:m=>{if(m?.status==='recognizing text'&&Number.isFinite(m.progress))setReceiptOcrStatus('OCR '+Math.round(m.progress*100)+'%')}});
+ try{const result=await worker.recognize(file);return String(result?.data?.text||'')}finally{await worker.terminate()}
+}
+
 function openReceiptDialog(item){
  if(v2ReadOnly&&!lotteryWriteReady()){toast('設定からV2書込を有効化してください');return}
  receiptTargetId=item.id;
