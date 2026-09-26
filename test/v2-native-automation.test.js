@@ -1,1 +1,3 @@
 import assert from'node:assert/strict';import fs from'node:fs';const code=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');for(const re of [/TV2_SYNC_URL/,/TV2_SYNC_TOKEN/,/schemaVersion\)!==2/,/runTv2LotteryAuto/,/runTv2MarketAuto/,/const conflict=/,/TV2_STORES=\['買取ミミ','AMTAF','アリウム'\]/,/expectedRevision:before\.revision/,/V2保存後検証失敗/])assert.match(code,re);assert.doesNotMatch(code,/DriveApp\.getFileById/);console.log('v2 native automation: ok');
+
+for(const re of [/function runTv2ChatSale\(command\)/,/chat-sale-/,/V2正本の対象在庫が不足しています/,/source:'chat'/,/requestId/])assert.match(code,re);console.log('v2 chat sale command: ok');
