@@ -57,12 +57,13 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
     extractModel_:x=>(String(x).match(/\d{3}\/(?:\d{3}|SV-P)/)||[])[0]||'',
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
-    fetchAltemaBuyback_:(name,model)=>name==='ピカチュウ'&&model==='001/SV-P'?{price:1300,source:'アルテマ'}:null
+    fetchCardrushRetail_:(name,model)=>name==='ピカチュウ'&&model==='001/SV-P'?{price:4480,source:'カードラッシュ販売価格'}:null,
+    fetchAltemaBuyback_:()=>null
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
   const fallbackResult=vm.runInContext('runTv2MarketAuto()',fallbackContext);
   assert.equal(fallbackResult.report.cardUpdated,1,'cardrush fetch failure falls back for a standard card');
-  assert.equal(fallbackState.marketQuotes[0].price,1300);
-  assert.equal(fallbackState.marketQuotes[0].source,'アルテマ');
+  assert.equal(fallbackState.marketQuotes[0].price,4480);
+  assert.equal(fallbackState.marketQuotes[0].source,'カードラッシュ販売価格');
 }
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
