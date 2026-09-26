@@ -180,9 +180,20 @@ document.addEventListener('click',async e=>{const a=e.target.closest('[data-acti
 document.querySelector('#receipt-form').addEventListener('submit',async e=>{
  e.preventDefault();const item=state.lotteries.find(x=>x.id===receiptTargetId);if(!item)return;
  try{
-  const file=document.querySelector('#receipt-photo').files[0],patch={id:item.id,status:'購入済',receiptStatus:'受取済み',receivedDate:document.querySelector('#receipt-date').value||today(),shrinkStatus:document.querySelector('#receipt-shrink').value};
-  if(file)patch.receiptPhoto=await compressReceiptPhoto(file);
-  await applyLotteryManualPatches([patch],'受取済みに変更しました');document.querySelector('#receipt-dialog').close();
+  const file=document.querySelector('#receipt-photo').files[0],quantity=Number(document.querySelector('#receipt-quantity').value||1),total=Number(document.querySelector('#receipt-total').value||0),addPurchase=document.querySelector('#receipt-add-purchase').checked;
+  const payload={id:item.id,product:document.querySelector('#receipt-product').value.trim(),store:document.querySelector('#receipt-store').value.trim(),receivedDate:document.querySelector('#receipt-date').value||today(),total,quantity,category:document.querySelector('#receipt-category').value,shrinkStatus:document.querySelector('#receipt-shrink').value,addPurchase};
+  if(file)payload.receiptPhoto=await compressReceiptPhoto(file);
+  if(addPurchase&&total<=0)throw new Error('購入履歴へ追加する場合は購入合計金額を確認してください');
+  if(v2ReadOnly){
+   const saved=await commitV2LotteryReceiptPurchase(payload),check=acceptanceSnapshot(saved.payload);if(!check.ok)throw new Error('保存後の受入チェックに失敗しました');
+   const applied=applyV2ReadOnlyToUi(state,{state:(await import('../v2/view-model.js')).v2ViewModel(saved.payload),assets:check.assets,realizedProfit:check.realizedProfit,revision:saved.revision});
+   state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||v2AutomationHealth;remoteRevision=String(saved.revision);advanceV2WriteRevision(Number(remoteRevision));render();setSyncStatus(`受取・購入反映済み · rev ${remoteRevision} · 書込継続中`,'success');
+  }else{
+   item.status='購入済';item.receiptStatus='受取済み';item.receivedDate=payload.receivedDate;item.shrinkStatus=payload.shrinkStatus;if(payload.receiptPhoto)item.receiptPhoto=payload.receiptPhoto;item.receiptAmount=total;item.receiptProduct=payload.product;item.receiptStore=payload.store;item.receiptQuantity=quantity;item.receiptCategory=payload.category;
+   if(addPurchase){const txId='lottery-receipt-purchase-'+item.id;if(!state.purchases.some(x=>x.id===txId))state=applyPurchase(state,{id:txId,date:payload.receivedDate,store:payload.store,product:payload.product,quantity,price:total/quantity,total,category:payload.category,condition:payload.category==='BOX'?'未開封':'',memo:'抽選受取｜レシート確認'})}
+   save(state);render();
+  }
+  document.querySelector('#receipt-dialog').close();toast(addPurchase?'受取済み・購入履歴へ反映しました':'受取済みに変更しました');
  }catch(err){setSyncStatus('受取更新失敗 · '+String(err.message||err),'warning');alert(err.message)}
 });
 let entrySubmitting=false;
