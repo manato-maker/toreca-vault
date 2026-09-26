@@ -40,9 +40,7 @@ function runTv2LotteryAuto(){
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
         newIds.push(id);return;
       }
-      const applicationNo=extractApplicationNo_(text);
-   if(applicationNo)tv2EnsureApplicationByNo_(state,applicationNo,now);
-   const match=matchLottery_(state.lotteries,text);
+      const match=matchLottery_(state.lotteries,text);
       if(match.kind==='outside')report.outside++;else if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject:message.getSubject()})}else{
         const parsed=parseResult_(text,message.getDate());if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject:message.getSubject()})}
         else{
@@ -115,6 +113,8 @@ function runTv2LotteryBackfill14Days(){
     else{report.review++;reviews.push({messageId:id,reason:r.reason,subject})}
     return;
    }
+   const applicationNo=extractApplicationNo_(text);
+   if(applicationNo)tv2EnsureApplicationByNo_(state,applicationNo,now);
    const match=matchLottery_(state.lotteries,text);
    if(match.kind==='outside'){report.outside++;return}
    if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject});return}
