@@ -340,11 +340,3 @@ function tv2ProcessChatTradeDrafts_(){
 }
 
 
-function runTv2StatusSnapshot(){
- const loaded=tv2Load_(),state=loaded.payload||{},requestId='20260926-30th-celebration-mimi-24100-1';
- const transaction=(state.transactions||[]).find(t=>String(t.requestId||'')===requestId)||null;
- const health=state.automation&&state.automation.health?state.automation.health:{};
- const snapshot={revision:Number(loaded.revision),transaction,lastMarketRunAt:health.lastMarketRunAt||'',marketReview:Number(health.marketReview||0),marketStatus:health.marketStatus||'',marketNeedsReview:Array.isArray(health.marketNeedsReview)?health.marketNeedsReview.length:0,lastGmailRunAt:health.lastGmailRunAt||'',gmailReview:Number(health.gmailReview||0),gmailStatus:health.gmailStatus||''};
- GmailApp.sendEmail('manato.pt@gmail.com','[Toreca Vault V2 Status]',JSON.stringify(snapshot));
- return snapshot;
-}
