@@ -33,8 +33,8 @@ function runTv2LotteryAuto(){
     }
     threads.forEach(th=>th.getMessages().forEach(message=>{
       if(message.getDate()<=since)return;const id=message.getId();if(processed.has(id))return;
-      const text=[message.getSubject(),message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text);
-      if(!CARD_WORDS.test(text)||(!RESULT_WORDS.test(text)&&!isApplication))return;report.scanned++;
+      const text=[message.getSubject(),message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text),isResult=tv2IsResultMessage_(message,text);
+      if(!CARD_WORDS.test(text)||(!isResult&&!isApplication))return;report.scanned++;
       if(isApplication){
         const before=state.lotteries.length,r=upsertApplication_(state.lotteries,text,message,now);
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
@@ -127,7 +127,7 @@ function tv2ResolveGeoResult_(state,message,text,now){
 
 function runTv2LotteryBackfill14Days(){
  return tv2Mutate_('gmail-backfill-14d',state=>{
-  const now=new Date(),since=new Date(now.getTime()-14*86400000),health=tv2Health_(state),seenIds=[],reviews=[];let changed=false;
+  const now=new Date(),since=new Date(now.getTime()-14*86400000),health=tv2Health_(state),seenIds=[],windowIds=[],reviews=[];let changed=false;
   const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString(),since:since.toISOString()};
   const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
   for(let offset=0;offset<3000;offset+=100){
@@ -137,10 +137,9 @@ function runTv2LotteryBackfill14Days(){
   }
   threads.forEach(th=>th.getMessages().forEach(message=>{
    if(message.getDate()<=since)return;
-   const id=message.getId(),subject=String(message.getSubject()||''),from=String(message.getFrom()||'');
+   const id=message.getId(),subject=String(message.getSubject()||''),from=String(message.getFrom()||'');windowIds.push(id);
    if(/^Toreca Vault\s/.test(subject))return;
-   const text=[subject,message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text);
-   const isResult=RESULT_WORDS.test(subject)||(/(当選|ご当選|落選|残念)/.test(text)&&/(抽選|購入権|当選)/.test(text));
+   const text=[subject,message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text),isResult=tv2IsResultMessage_(message,text);
    if(!CARD_WORDS.test(text)||(!isResult&&!isApplication))return;
    report.scanned++;seenIds.push(id);
    if(isApplication){
@@ -176,7 +175,7 @@ function runTv2LotteryBackfill14Days(){
    item.updatedAt=now.toISOString();
    if(JSON.stringify(item)!==old){report.updated++;changed=true}else report.duplicate++;
   }));
-  const seen=new Set(seenIds),processed=new Set(health.gmailMessageIds||[]);
+  const seen=new Set(windowIds),processed=new Set(health.gmailMessageIds||[]);
   seenIds.forEach(id=>processed.add(id));
   health.gmailMessageIds=[...processed].slice(-3000);
   health.lastGmailRunAt=now.toISOString();
@@ -190,7 +189,13 @@ function runTv2LotteryBackfill14Days(){
 
 function tv2IsApplicationMessage_(message,text){
  const subject=String(message&&message.getSubject?message.getSubject():'');
+ if(/(?:抽選申込完了|申込受付完了|抽選販売応募完了|応募完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/.test(subject))return true;
  return APPLICATION_WORDS.test(subject)||(APPLICATION_WORDS.test(String(text||''))&&!RESULT_WORDS.test(subject));
+}
+
+function tv2IsResultMessage_(message,text){
+ const subject=String(message&&message.getSubject?message.getSubject():'');
+ return RESULT_WORDS.test(subject);
 }
 
 
