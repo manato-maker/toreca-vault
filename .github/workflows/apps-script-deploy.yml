@@ -57,16 +57,31 @@ jobs:
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
-      - name: List Apps Script deployments
-        run: npx clasp deployments | tee /tmp/tv-deployments.txt
-      - name: Probe Apps Script web deployments
+      - name: Create temporary finalizer deployment
         run: |
-          awk '/^- AK/{print $2}' /tmp/tv-deployments.txt | while read id; do
-            echo "PROBE $id"
-            curl -sS -L --max-time 20 -o /tmp/body -w 'HTTP=%{http_code} TYPE=%{content_type}\n' "https://script.google.com/macros/s/$id/exec?action=load" || true
-            head -c 300 /tmp/body 2>/dev/null || true
-            echo
+          npx clasp deployments | awk '/^- AK/{print $2}' | sort > /tmp/before-deployments.txt
+          npx clasp deploy -d "Temporary finalizer ${GITHUB_SHA}"
+          npx clasp deployments | tee /tmp/after-deployments.txt
+          awk '/^- AK/{print $2}' /tmp/after-deployments.txt | sort > /tmp/after-ids.txt
+          comm -13 /tmp/before-deployments.txt /tmp/after-ids.txt | head -n1 > /tmp/finalizer-id.txt
+          test -s /tmp/finalizer-id.txt
+          echo "Temporary deployment created"
+      - name: Execute final V2 completion
+        run: |
+          id=$(cat /tmp/finalizer-id.txt)
+          url="https://script.google.com/macros/s/$id/exec?action=__tv2_finalize_20260927"
+          ok=0
+          for n in 1 2 3 4 5 6 7 8; do
+            code=$(curl -sS -L --max-time 60 -o /tmp/finalizer-body.json -w '%{http_code}' "$url" || true)
+            if [ "$code" = "200" ] && jq -e '.ok == true' /tmp/finalizer-body.json >/dev/null 2>&1; then ok=1; break; fi
+            sleep 4
           done
+          echo "FINALIZER_RESULT=$(cat /tmp/finalizer-body.json)"
+          test "$ok" = "1"
+      - name: Remove temporary finalizer deployment
+        if: always()
+        run: |
+          if test -s /tmp/finalizer-id.txt; then npx clasp undeploy "$(cat /tmp/finalizer-id.txt)" || true; fi
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
