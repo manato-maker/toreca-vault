@@ -90,7 +90,7 @@ function runTv2SingleCardRefresh20260926(){
  const today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
  const checked=cards.filter(x=>x.checkedAt===today).length;
  if(!cards.length)throw new Error('V2正本にシングルカード在庫がありません');
- if(!checked)throw new Error('シングルカード相場が本日1件も確認できていません');
+ if(!checked)throw new Error('シングルカード相場が本日1件も確認できていません '+JSON.stringify({market,reviews:(health.marketNeedsReview||[]).filter(x=>cards.some(c=>String(x).includes(c.product))),cards:cards.map(x=>({product:x.product,set:x.set,variant:x.variant,condition:x.condition,checkedAt:x.checkedAt,source:x.source}))}));
  const result={ok:true,market,cards,checkedToday:checked,totalCards:cards.length,reviews:(health.marketNeedsReview||[]).filter(x=>cards.some(c=>String(x).includes(c.product)))};
  console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
 }
