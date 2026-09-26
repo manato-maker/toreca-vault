@@ -2,8 +2,8 @@ const DATA_FILE_ID = PropertiesService.getScriptProperties().getProperty('TV_DAT
 const TZ = 'Asia/Tokyo';
 const MAX_IDS = 3000;
 const RESULT_WORDS = /(当選|ご当選|落選|残念|抽選結果)/;
-const APPLICATION_WORDS = /(抽選申込完了|申込みが完了|申込完了|申込み完了)/;
-const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘)/i;
+const APPLICATION_WORDS = /(抽選申込完了|申込みが完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/;
+const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘|遊戯王|YU[- ]?GI[- ]?OH|遊戯王OCG)/i;
 
 function installTorecaVaultAutomation() {
   if (!DATA_FILE_ID) throw new Error('TV_DATA_FILE_ID が未設定です');
@@ -156,12 +156,13 @@ function upsertApplication_(lotteries, text, message, now) {
     return { kind: 'duplicate' };
   }
   const title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
-  const store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗)\s*[:：]/m);
+  let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗)\s*[:：]/m);
+  if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|結果発表)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: resultDate ? cleanLotteryTitle_(title) : '詳細不明',
+    title: cleanLotteryTitle_(title),
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -176,7 +177,7 @@ function upsertApplication_(lotteries, text, message, now) {
 }
 
 function extractApplicationNo_(text) {
-  const m = String(text).normalize('NFKC').match(/(?:申込番号|受付番号)\s*[:：]?\s*(\d{7,12})/);
+  const m = String(text).normalize('NFKC').match(/(?:(?:お)?申込(?:み)?番号(?:\s*[（(]ご注文番号[）)])?|ご注文番号|受付番号)\s*[:：]?\s*(\d{7,12})/);
   return m ? m[1] : '';
 }
 
