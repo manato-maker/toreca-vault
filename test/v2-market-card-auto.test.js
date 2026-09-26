@@ -47,3 +47,22 @@ const rows=[['ピカチュウ(ミラー)','225/742','500'],['ピカチュウ','2
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','225/742','ミラー')?.price,500);
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','モンスターボールミラー')?.price,800);
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165'),null,'number alone must not pick an arbitrary print');
+
+{
+  const fallbackState={inventoryLots:[{id:'f1',category:'カード',product:'ピカチュウ',set:'PROMO 001/SV-P',condition:'美品',quantity:1}],marketQuotes:[]};
+  const fallbackContext=vm.createContext({
+    tv2Mutate_:(_kind,fn)=>fn(fallbackState),TZ:'Asia/Tokyo',
+    Utilities:{formatDate:()=> '2026-09-26'},
+    normalize_:x=>String(x||'').toLowerCase(),
+    extractModel_:x=>(String(x).match(/\d{3}\/(?:\d{3}|SV-P)/)||[])[0]||'',
+    fetchCardrushRows_:()=>{throw new Error('feed down')},
+    findCardrushBuyback_:()=>null,
+    fetchAltemaBuyback_:(name,model)=>name==='ピカチュウ'&&model==='001/SV-P'?{price:1300,source:'アルテマ'}:null
+  });
+  vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
+  const fallbackResult=vm.runInContext('runTv2MarketAuto()',fallbackContext);
+  assert.equal(fallbackResult.report.cardUpdated,1,'cardrush fetch failure falls back for a standard card');
+  assert.equal(fallbackState.marketQuotes[0].price,1300);
+  assert.equal(fallbackState.marketQuotes[0].source,'アルテマ');
+}
+assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
