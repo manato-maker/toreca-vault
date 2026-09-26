@@ -7,7 +7,7 @@ import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disa
 import{requiresVaultV2}from'../v2/browser-sync.js?v=20260926-v3';
 import{acceptanceSnapshot,pendingMigrationSnapshot}from'../v2/acceptance.js';
 import{commitV2Transaction,commitV2CardIdentity,commitV2CardIdentityBatch}from'../v2/ui-write.js';
-import{commitV2LotteryBatch,commitV2LotteryManualPatches}from'../v2/lottery-write.js';
+import{commitV2LotteryBatch,commitV2LotteryManualPatches,commitV2LotteryReceiptPurchase}from'../v2/lottery-write.js';
 import{commitV2MarketQuoteBatch}from'../v2/market-quote-write.js';
 import{gmailLotteryImport}from'../data/gmail-lotteries.js';
 import{currentBoxMarketQuotes,currentBoxMarketMeta}from'../data/current-box-market.js';
