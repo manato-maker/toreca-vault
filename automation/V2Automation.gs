@@ -16,6 +16,7 @@ function installTv2Automation(){
   return {lottery,market};
 }
 function runTv2LotteryAuto(){
+  tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
     // Revisit recent mail because delivery and trigger execution can be delayed.
@@ -64,6 +65,7 @@ function runTv2LotteryAuto(){
   });
 }
 function runTv2MarketAuto(){
+ tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
   let rows=null;
@@ -307,7 +309,7 @@ function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),category=String(input.category||'BOX').trim(),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
  const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
- if(!product||!requestId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
+ if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
  return tv2Mutate_('chat-purchase',state=>{
   const txId='chat-purchase-'+requestId,existing=(state.transactions||[]).filter(t=>t.id===txId);
@@ -320,4 +322,19 @@ function runTv2ChatPurchase(command){
   state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,quantity,price:unitCost,date,store,source:'chat',requestId});
   return{duplicate:false,transactionId:txId,lotId,changed:true};
  });
+}
+
+function tv2ProcessChatTradeDrafts_(){
+ const subject='[Toreca Vault Command]';
+ const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const results=[];
+ drafts.forEach(draft=>{
+  const raw=String(draft.getMessage().getPlainBody()||'').trim();
+  let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
+  if(!command||!['sale','purchase'].includes(String(command.type||'')))throw new Error('Toreca Vaultコマンド種別が不正です');
+  const result=command.type==='sale'?runTv2ChatSale(command):runTv2ChatPurchase(command);
+  draft.deleteDraft();
+  results.push(result);
+ });
+ return results;
 }
