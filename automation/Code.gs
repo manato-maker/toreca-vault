@@ -162,7 +162,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|結果発表)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: cleanLotteryTitle_(title),
+    title: resultDate ? cleanLotteryTitle_(title) : '詳細不明',
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -173,6 +173,7 @@ function upsertApplication_(lotteries, text, message, now) {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   });
+  if (store === 'KONAMI STYLE' && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
   return { kind: 'created' };
 }
 
