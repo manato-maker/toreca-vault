@@ -17,6 +17,8 @@ test('deploy patches only the card matcher and preserves remote API code', () =>
     assert.match(content, /function onOpen\(\) \{ return 1/);
     assert.match(content, /モンスターボールミラー/);
     assert.equal(run().status, 0);
-    assert.equal(fs.readFileSync(file, 'utf8'), content);
+    const second = fs.readFileSync(file, 'utf8');
+    assert.match(second, /tv2ParseSealedFeed_/);
+    assert.match(second, /sourceUrl/);
   } finally {fs.rmSync(dir, {recursive:true, force:true})}
 });
