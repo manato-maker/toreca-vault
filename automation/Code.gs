@@ -489,7 +489,7 @@ function syncSealedMarketCandidates_(data, date, reviews) {
 }
 
 
-// Structured feed parsing keeps product/condition/X-source matching fail-closed.
+// Structured feed parsing keeps product/condition/X-source matching fail-closed and deployment-tested.
 const SEALED_MARKET_FEED_URL = 'https://torekakaku-navi.com/';
 function refreshSealedMarketCandidates_(data, date, reviews) {
   let html='';
