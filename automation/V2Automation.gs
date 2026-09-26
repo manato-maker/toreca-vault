@@ -88,6 +88,43 @@ function tv2EnsureApplicationByNo_(state, applicationNo, now){
  return null;
 }
 
+
+function tv2ResolveGeoResult_(state,message,text,now){
+ const from=String(message&&message.getFrom?message.getFrom():'');
+ const subject=String(message&&message.getSubject?message.getSubject():'');
+ if(!/geonet\.jp/i.test(from)||!/当選ならびにご購入手続き/.test(subject))return null;
+ const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const afterLabel=label=>{
+  const i=lines.findIndex(x=>x===label);
+  return i>=0&&i+1<lines.length?lines[i+1]:'';
+ };
+ const title=afterLabel('[当選した商品]');
+ const store=afterLabel('[受取店舗名]');
+ if(!title||!store)return{kind:'review',reason:'GEO当選メールから商品名または受取店舗名を抽出できない'};
+ const titleKey=productKey_(title),storeKey=storeKey_(store);
+ const matches=(state.lotteries||[]).filter(x=>{
+  const tk=productKey_(x.title||''),sk=storeKey_(x.store||'');
+  const geoSk=sk.replace(/^geo/i,'ゲオ'),geoTarget=storeKey.replace(/^geo/i,'ゲオ');
+  return tk&&productMatches_(titleKey,tk)&&(sk===storeKey||geoSk===geoTarget);
+ });
+ if(matches.length>1)return{kind:'review',reason:'GEO当選メールに一致する登録済み抽選が複数あります'};
+ const parsed=parseResult_(text,message.getDate());
+ if(parsed.status!=='当選')return{kind:'review',reason:'GEO当選メールの当選判定に失敗'};
+ let item=matches[0];
+ if(!item){
+  item={id:'lottery-geo-'+message.getId(),title:cleanLotteryTitle_(title),store:cleanStoreName_(store),status:'当選',resultDate:parsed.resultDate||'',receiptStatus:'未受取',receivedDate:'',memo:'自動登録｜GEO当選メール',gmailMessageId:message.getId(),createdAt:now.toISOString(),updatedAt:now.toISOString()};
+  state.lotteries.push(item);
+  return{kind:'created',item};
+ }
+ const old=JSON.stringify(item);
+ if(['応募済','応募済み'].includes(item.status))item.status='当選';
+ item.resultDate=parsed.resultDate||item.resultDate;
+ if(item.receiptStatus!=='受取済み')item.receiptStatus='未受取';
+ item.gmailMessageId=message.getId();
+ item.updatedAt=now.toISOString();
+ return{kind:JSON.stringify(item)===old?'duplicate':'updated',item};
+}
+
 function runTv2LotteryBackfill14Days(){
  return tv2Mutate_('gmail-backfill-14d',state=>{
   const now=new Date(),since=new Date(now.getTime()-14*86400000),health=tv2Health_(state),seenIds=[],reviews=[];let changed=false;
@@ -111,6 +148,14 @@ function runTv2LotteryBackfill14Days(){
     if(r.kind==='created'){report.created++;changed=true}
     else if(r.kind==='duplicate')report.duplicate++;
     else{report.review++;reviews.push({messageId:id,reason:r.reason,subject})}
+    return;
+   }
+   const geo=tv2ResolveGeoResult_(state,message,text,now);
+   if(geo){
+    if(geo.kind==='created'){report.created++;changed=true}
+    else if(geo.kind==='updated'){report.updated++;changed=true}
+    else if(geo.kind==='duplicate')report.duplicate++;
+    else{report.review++;reviews.push({messageId:id,reason:geo.reason,subject})}
     return;
    }
    const applicationNo=extractApplicationNo_(text);
