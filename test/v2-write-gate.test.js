@@ -1,7 +1,10 @@
 import test from'node:test';import assert from'node:assert/strict';
-const mem=new Map();globalThis.sessionStorage={getItem:k=>mem.get(k)??null,setItem:(k,v)=>mem.set(k,String(v)),removeItem:k=>mem.delete(k)};
+const local=new Map(),session=new Map();
+globalThis.localStorage={getItem:k=>local.get(k)??null,setItem:(k,v)=>local.set(k,String(v)),removeItem:k=>local.delete(k)};
+globalThis.sessionStorage={getItem:k=>session.get(k)??null,setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)};
 const gate=await import('../v2/write-gate.js');
 test('V2 writes are disabled by default',()=>{gate.disableV2Write();assert.equal(gate.isV2WriteEnabled(),false);assert.throws(()=>gate.assertV2WriteEnabled(),/有効化/)});
 test('wrong phrase cannot enable V2 writes',()=>{gate.disableV2Write();assert.throws(()=>gate.enableV2WriteForSession('yes',1),/一致/);assert.equal(gate.isV2WriteEnabled(),false)});
 test('invalid revision cannot enable V2 writes',()=>{gate.disableV2Write();assert.throws(()=>gate.enableV2WriteForSession('V2書込を有効化','x'),/revision/);assert.equal(gate.isV2WriteEnabled(),false)});
-test('gate is bound to the verified revision',()=>{gate.disableV2Write();assert.equal(gate.enableV2WriteForSession('V2書込を有効化',7),true);assert.equal(gate.assertV2WriteEnabled(7),true);assert.throws(()=>gate.assertV2WriteEnabled(8),/revision/);gate.disableV2Write();assert.equal(gate.isV2WriteEnabled(),false)});
+test('write enablement persists across session reset and revision changes',()=>{gate.disableV2Write();assert.equal(gate.enableV2WriteForSession('V2書込を有効化',7),true);session.clear();assert.equal(gate.assertV2WriteEnabled(7),true);assert.equal(gate.assertV2WriteEnabled(8),true);assert.equal(gate.advanceV2WriteRevision(8),true);assert.equal(local.get('toreca-vault:v2:write-revision'),'8');gate.disableV2Write();assert.equal(gate.isV2WriteEnabled(),false)});
+test('legacy session enablement migrates to persistent device setting',()=>{gate.disableV2Write();session.set('toreca-vault:v2:write-enabled','yes');session.set('toreca-vault:v2:write-revision','12');assert.equal(gate.isV2WriteEnabled(99),true);assert.equal(local.get('toreca-vault:v2:write-enabled'),'yes');assert.equal(local.get('toreca-vault:v2:write-revision'),'12');gate.disableV2Write()});
