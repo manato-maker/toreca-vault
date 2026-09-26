@@ -154,3 +154,10 @@
 - 検証: 下書き取得・種別確認・成功後削除の契約テストを追加。Actionsで配布結果を確認する。
 - 本番状態: mainへ実装済み。Apps Script配布結果の確認待ち。
 - 残件: 最初の実データ処理とV2 revision・在庫減算を確認する。
+
+
+## 2026-09-26 — market parser repair
+- BOX/pack market feed now uses structured product + condition + shop + X-source matching instead of proximity text parsing.
+- Full tests passed; Apps Script deploy 36228092071 succeeded with remote-source verification.
+- Active legacy lottery/market functions now invoke the V2 chat-trade draft queue; deploy 36228126252 succeeded with remote-source verification.
+- Sale command remains pending until a time trigger consumes it; verify canonical state before reporting completion.
