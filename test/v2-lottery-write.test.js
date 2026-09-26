@@ -1,4 +1,4 @@
-import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{applyLotteryBatch,applyLotteryManualPatches}from'../v2/lottery-write.js';
+import test from'node:test';import assert from'node:assert/strict';import{emptyV2}from'../v2/core.js';import{applyLotteryBatch,applyLotteryManualPatches,applyLotteryReceiptPurchase}from'../v2/lottery-write.js';
 test('lottery batch changes only lotteries and revision metadata',()=>{const s=emptyV2();s.revision=4;s.transactions=[{id:'t1'}];s.inventoryLots=[];s.marketQuotes=[{product:'x',price:1}];const n=applyLotteryBatch(s,[{applicationId:'A1',title:'抽選A',store:'店',status:'応募済'}],'m1');assert.equal(n.revision,5);assert.equal(n.lotteries.length,1);assert.deepEqual(n.transactions,s.transactions);assert.deepEqual(n.inventoryLots,s.inventoryLots);assert.deepEqual(n.marketQuotes,s.marketQuotes)});
 test('same application id updates instead of duplicating',()=>{const s=emptyV2();s.lotteries=[{id:'l1',applicationId:'A1',title:'抽選A',store:'店',status:'応募済'}];const n=applyLotteryBatch(s,[{applicationId:'A1',title:'抽選A',store:'店',status:'落選',resultDate:'2026-09-23'}],'m2');assert.equal(n.lotteries.length,1);assert.equal(n.lotteries[0].status,'落選');assert.equal(n.lotteries[0].id,'l1')});
 test('older application mail cannot downgrade a final result',()=>{const s=emptyV2();s.lotteries=[{id:'l1',applicationId:'A1',title:'抽選A',store:'店',status:'落選'}];const n=applyLotteryBatch(s,[{applicationId:'A1',title:'抽選A',store:'店',status:'応募済'}],'m3');assert.equal(n.lotteries[0].status,'落選')});
@@ -10,3 +10,20 @@ test('win can progress to purchased with received state',()=>{const s=emptyV2();
 
 test('manual result correction can override a conflicting result without touching other V2 data',()=>{const s=emptyV2();s.revision=10;s.transactions=[{id:'t1'}];s.marketQuotes=[{product:'x',price:1}];s.lotteries=[{id:'l1',title:'抽選A',store:'店',status:'当選',receiptStatus:'未受取'}];const n=applyLotteryManualPatches(s,[{id:'l1',status:'落選'}],'manual1');assert.equal(n.revision,11);assert.equal(n.lotteries[0].status,'落選');assert.equal(n.lotteries[0].receiptStatus,'対象外');assert.deepEqual(n.transactions,s.transactions);assert.deepEqual(n.marketQuotes,s.marketQuotes)});
 test('manual receipt update marks a win as purchased and received',()=>{const s=emptyV2();s.lotteries=[{id:'l1',title:'抽選A',store:'店',status:'当選',receiptStatus:'未受取'}];const n=applyLotteryManualPatches(s,[{id:'l1',status:'購入済',receiptStatus:'受取済み',receivedDate:'2026-09-27',shrinkStatus:'未選択'}],'manual2');assert.equal(n.lotteries[0].status,'購入済');assert.equal(n.lotteries[0].receiptStatus,'受取済み');assert.equal(n.lotteries[0].receivedDate,'2026-09-27')});
+
+test('receipt confirmation creates one purchase and inventory lot atomically',()=>{
+ const s=emptyV2();s.revision=12;s.lotteries=[{id:'lot1',title:'30th CELEBRATION',store:'店舗A',status:'当選',receiptStatus:'未受取'}];
+ const n=applyLotteryReceiptPurchase(s,{id:'lot1',product:'30th CELEBRATION',store:'店舗A',receivedDate:'2026-09-27',total:7980,quantity:1,category:'BOX',shrinkStatus:'シュリンクあり',addPurchase:true},'receipt1');
+ assert.equal(n.revision,13);assert.equal(n.lastMutationId,'receipt1');assert.equal(n.lotteries[0].status,'購入済');assert.equal(n.lotteries[0].receiptStatus,'受取済み');assert.equal(n.transactions.length,1);assert.equal(n.transactions[0].id,'lottery-receipt-purchase-lot1');assert.equal(n.transactions[0].price,7980);assert.equal(n.inventoryLots.length,1);assert.equal(n.inventoryLots[0].unitCost,7980);assert.equal(n.inventoryLots[0].condition,'あり');
+});
+test('repeating the same receipt does not duplicate the purchase transaction',()=>{
+ const s=emptyV2();s.lotteries=[{id:'lot1',title:'商品',store:'店',status:'当選',receiptStatus:'未受取'}];
+ const a=applyLotteryReceiptPurchase(s,{id:'lot1',product:'商品',store:'店',receivedDate:'2026-09-27',total:1200,quantity:2,category:'パック',addPurchase:true},'r1');
+ const b=applyLotteryReceiptPurchase(a,{id:'lot1',product:'商品',store:'店',receivedDate:'2026-09-27',total:1200,quantity:2,category:'パック',addPurchase:true},'r2');
+ assert.equal(b.transactions.length,1);assert.equal(b.inventoryLots.length,1);assert.equal(b.transactions[0].price,600);
+});
+test('receipt can be saved without creating a purchase transaction',()=>{
+ const s=emptyV2();s.lotteries=[{id:'lot1',title:'商品',store:'店',status:'当選',receiptStatus:'未受取'}];
+ const n=applyLotteryReceiptPurchase(s,{id:'lot1',product:'商品',store:'店',receivedDate:'2026-09-27',total:0,quantity:1,category:'BOX',addPurchase:false},'r3');
+ assert.equal(n.transactions.length,0);assert.equal(n.lotteries[0].status,'購入済');assert.equal(n.lotteries[0].receiptStatus,'受取済み');
+});
