@@ -35,3 +35,31 @@ export async function commitV2LotteryBatch(items,config=getVaultV2Config()){
  if(JSON.stringify(reread.payload.transactions)!==JSON.stringify(before.payload.transactions)||JSON.stringify(reread.payload.inventoryLots)!==JSON.stringify(before.payload.inventoryLots)||JSON.stringify(reread.payload.marketQuotes)!==JSON.stringify(before.payload.marketQuotes))throw new Error('安全停止: 保存後に抽選以外が変化');
  return{revision:reread.revision,lotteries:reread.payload.lotteries,unchanged:false};
 }
+
+
+const manualFields=new Set(['status','receiptStatus','receivedDate','shrinkStatus','receiptPhoto','memo']);
+export function applyLotteryManualPatches(state,patches,mutationId){
+ validateState(state);if(!mutationId)throw new Error('mutationId が必要です');if(!Array.isArray(patches)||!patches.length)throw new Error('変更対象がありません');
+ const next=clone(state),byId=new Map((next.lotteries||[]).map(x=>[text(x.id),x]));let updated=0;
+ for(const raw of patches){
+  const id=text(raw&&raw.id),item=byId.get(id);if(!id||!item)throw new Error('抽選データが見つかりません: '+id);
+  const before=JSON.stringify(item);
+  for(const [k,v] of Object.entries(raw||{}))if(manualFields.has(k))item[k]=v;
+  if(raw.status==='落選'){item.receiptStatus='対象外';item.receivedDate=''}
+  else if(raw.status==='当選'&&item.receiptStatus!=='受取済み')item.receiptStatus='未受取';
+  else if(raw.status==='購入済'){item.receiptStatus='受取済み';if(!text(item.receivedDate))item.receivedDate=new Date().toISOString().slice(0,10)}
+  item.updatedAt=new Date().toISOString();
+  if(JSON.stringify(item)!==before)updated++;
+ }
+ if(!updated)return clone(state);
+ next.revision=Number(state.revision)+1;next.lastMutationId=mutationId;next.auditLog.push({mutationId,revision:next.revision,lotteriesManuallyUpdated:updated});validateState(next);return next;
+}
+export async function commitV2LotteryManualPatches(patches,config=getVaultV2Config()){
+ const before=await loadVaultV2(config),mutationId='lottery-manual-'+crypto.randomUUID(),next=applyLotteryManualPatches(before.payload,patches,mutationId);
+ if(JSON.stringify(before.payload.transactions)!==JSON.stringify(next.transactions)||JSON.stringify(before.payload.inventoryLots)!==JSON.stringify(next.inventoryLots)||JSON.stringify(before.payload.marketQuotes)!==JSON.stringify(next.marketQuotes))throw new Error('安全停止: 抽選以外のV2データが変化');
+ if(Number(next.revision)===Number(before.payload.revision)&&next.lastMutationId===before.payload.lastMutationId)return{revision:before.revision,payload:before.payload,updated:0,unchanged:true};
+ await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
+ if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('抽選手動保存後のrevision検証に失敗しました');
+ if(JSON.stringify(reread.payload.transactions)!==JSON.stringify(before.payload.transactions)||JSON.stringify(reread.payload.inventoryLots)!==JSON.stringify(before.payload.inventoryLots)||JSON.stringify(reread.payload.marketQuotes)!==JSON.stringify(before.payload.marketQuotes))throw new Error('安全停止: 保存後に抽選以外が変化');
+ return{revision:reread.revision,payload:reread.payload,updated:patches.length,unchanged:false};
+}
