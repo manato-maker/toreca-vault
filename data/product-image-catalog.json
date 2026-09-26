@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogType": "package-image-reference",
   "purpose": "Recognition-time reference catalog; not model training data",
-  "updatedAt": "2026-09-20",
+  "updatedAt": "2026-09-27",
   "sourcePolicy": {
     "primary": [
       "manufacturer official product pages",
@@ -40,7 +40,7 @@
         "通常の拡張パックより高価格帯の6枚入りキラカード仕様"
       ],
       "officialProductUrl": "https://www.30th.pokemon-card.com/product/m6a",
-      "verifiedAt": "2026-09-20",
+      "verifiedAt": "2026-09-27",
       "status": "confirmed"
     },
     {
@@ -66,7 +66,7 @@
         "三兄弟（ルフィ・エース・サボ）と3rd Anniversary要素"
       ],
       "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op13/",
-      "verifiedAt": "2026-09-20",
+      "verifiedAt": "2026-09-27",
       "status": "confirmed"
     },
     {
@@ -93,19 +93,20 @@
         "4周年・エルバフ編の商品として公式掲載"
       ],
       "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op17/",
-      "verifiedAt": "2026-09-20",
+      "verifiedAt": "2026-09-27",
       "status": "needs_review",
       "reviewReason": "公式商品ページの存在・名称・コード・発売日は確認済みだが、今回の取得ではページがタイムアウトし公式画像URLを確定できず"
     }
   ],
   "changeSummary": {
-    "baseline": "初版作成（既存の独立カタログなし）",
-    "newProducts": [
-      "pokemon-m6a-30th-celebration",
-      "onepiece-op13-carrying-on-his-will",
-      "onepiece-op17-worlds-strongest-warriors"
+    "baseline": "2026-09-20版との比較",
+    "newProducts": [],
+    "designChanges": [
+      {
+        "id": "pokemon-expansion-box-spec-change-2026-09",
+        "note": "2026年9月下旬以降に出荷される一部拡張パックBOXで、点線に沿って開封する外装へ変更。内容物の変更なし。公式告知に対象商品一覧がないため商品単位では未適用"
+      }
     ],
-    "designChanges": [],
     "easilyConfused": [
       {
         "ids": [
@@ -119,11 +120,35 @@
           "onepiece-op17-worlds-strongest-warriors"
         ],
         "note": "いずれも周年弾のONE PIECEブースター。正面のOPコードを最優先し、周年表現だけで判定しない"
+      },
+      {
+        "ids": [
+          "pokemon-m6a-30th-celebration"
+        ],
+        "note": "ポケモン拡張パックBOXは旧外装と新しい点線開封式外装が併存し得るため、外装形状だけで別商品と判定しない"
       }
     ],
     "insufficientInformation": [
       "M6aのBOX単体公式画像URL",
-      "OP-17のPACK/BOX公式画像URLと詳細な正面識別特徴"
+      "OP-17のPACK/BOX公式画像URLと詳細な正面識別特徴",
+      "ポケモンBOX外装仕様変更の対象商品コード一覧"
     ]
-  }
+  },
+  "recognitionNotices": [
+    {
+      "id": "pokemon-expansion-box-spec-change-2026-09",
+      "game": "ポケモンカードゲーム",
+      "scope": "2026年9月下旬以降に出荷される一部拡張パック商品のBOX",
+      "changeType": "BOX外装仕様変更",
+      "recognitionImpact": [
+        "従来BOXと新BOXが流通上併存する可能性がある",
+        "新BOXは点線に沿って開封する外装仕様",
+        "変更は外装のみで、商品内容は変更なし"
+      ],
+      "officialNoticeUrl": "https://www.pokemon-card.com/info/003599.html",
+      "verifiedAt": "2026-09-27",
+      "status": "confirmed",
+      "note": "公式告知は対象商品を個別列挙していないため、特定の商品コードへ一律適用せず認識時の横断注意事項として扱う"
+    }
+  ]
 }
