@@ -24,6 +24,15 @@ remote = replaceRange(remote, canonical,
   'function findCardrushBuyback_(', 'function fetchAltemaBuyback_(', 'card buyback',
   ['モンスターボールミラー','225/742']);
 
+remote = replaceRange(remote, canonical,
+  'const RESULT_WORDS =', 'function installTorecaVaultAutomation()', 'lottery constants',
+  ['APPLICATION_WORDS','CARD_WORDS','遊戯王']);
+
+remote = replaceRange(remote, canonical,
+  'function matchLottery_(', 'function sendReport_(', 'lottery parsing',
+  ['注文番号','受取登録店舗','当選されました','KONAMI STYLE']);
+
+
 for (const fn of ['runTorecaVaultLotterySync','runTorecaVaultMarketSync']) {
   const marker = 'function ' + fn + '() {';
   const hook = "if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();";
