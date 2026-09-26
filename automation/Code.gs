@@ -362,6 +362,46 @@ function findCardrushBuyback_(rows, product, model, variant) {
   return unique.length === 1 ? { name: product, model, price: unique[0], source: 'カードラッシュ' } : null;
 }
 
+
+function fetchCardrushRetail_(product, model, variant) {
+  const url = 'https://www.cardrush-pokemon.jp/product-list?keyword=' + encodeURIComponent([product, model].filter(Boolean).join(' '));
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  if (response.getResponseCode() !== 200) return null;
+  const html = response.getContentText('UTF-8');
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&yen;|&#165;/gi, '円')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ');
+  const pn = normalize_(product), mn = normalize_(model), vn = normalize_(variant || '');
+  const candidates = [];
+  let from = 0;
+  while (true) {
+    const pos = text.toUpperCase().indexOf(String(model).toUpperCase(), from);
+    if (pos < 0) break;
+    from = pos + String(model).length;
+    const near = text.slice(Math.max(0, pos - 110), Math.min(text.length, pos + 170));
+    const nn = normalize_(near);
+    if (!nn.includes(pn) || !nn.includes(mn)) continue;
+    if (/状態A-|状態B|状態C|PSA\d|CGC\d|鑑定済|表面加工エラー|未開封/i.test(near)) continue;
+    if (vn === normalize_('マスターボールミラー')) {
+      if (!nn.includes(vn)) continue;
+    } else if (vn === normalize_('モンスターボールミラー')) {
+      if (!nn.includes(vn) || nn.includes(normalize_('マスターボール'))) continue;
+    } else if (vn === normalize_('ミラー')) {
+      if (!nn.includes(vn) || nn.includes(normalize_('モンスターボール')) || nn.includes(normalize_('マスターボール'))) continue;
+    } else if (/ミラー/.test(near)) continue;
+    const after = text.slice(pos, Math.min(text.length, pos + 180));
+    const priceMatch = after.match(/([0-9][0-9,]{1,8})円\s*\(税込\)/);
+    if (priceMatch) candidates.push(Number(priceMatch[1].replace(/,/g, '')));
+  }
+  const unique = [...new Set(candidates.filter(x => Number.isFinite(x) && x > 0))];
+  return unique.length === 1 ? { name: product, model, price: unique[0], source: 'カードラッシュ販売価格' } : null;
+}
+
 function fetchAltemaBuyback_(product, model) {
   const query = encodeURIComponent(product + ' ' + model);
   const searchUrl = 'https://altema.jp/pokemoncard/?s=' + query;
