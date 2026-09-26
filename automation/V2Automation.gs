@@ -305,6 +305,20 @@ function runTv2ChatSale(command){
  });
 }
 
+
+function runTv2Recovery20260926(){
+ const command={type:'sale',product:'30th CELEBRATION COLLECTION',category:'BOX',quantity:1,unitPrice:24100,store:'買取ミミ',date:'2026-09-26',requestId:'20260926-30th-celebration-mimi-24100-1'};
+ const sale=runTv2ChatSale(command);
+ const market=runTv2MarketAuto();
+ const loaded=tv2Load_(),txId='chat-sale-'+command.requestId;
+ const matches=(loaded.payload.transactions||[]).filter(t=>String(t.id||'')===txId);
+ if(matches.length!==1)throw new Error('復旧後検証失敗: 対象売却がV2正本に1件存在しません');
+ const tx=matches[0];
+ if(String(tx.store||tx.soldTo||'')!==command.store||Number(tx.price)!==command.unitPrice||Number(tx.quantity)!==command.quantity||String(tx.date||'')!==command.date)throw new Error('復旧後検証失敗: 対象売却の内容が一致しません');
+ const result={ok:true,sale,market,verified:{transactionId:txId,product:tx.product,quantity:tx.quantity,price:tx.price,store:tx.store||tx.soldTo,date:tx.date,acquisitionCost:tx.acquisitionCost},revision:loaded.revision};
+ console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
+}
+
 function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),category=String(input.category||'BOX').trim(),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
