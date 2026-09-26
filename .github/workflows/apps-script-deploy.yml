@@ -57,6 +57,8 @@ jobs:
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
+      - name: Process pending Toreca Vault commands
+        run: npx clasp run runTv2LotteryAuto
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
