@@ -125,17 +125,38 @@ function tv2ResolveGeoResult_(state,message,text,now){
  return{kind:JSON.stringify(item)===old?'duplicate':'updated',item};
 }
 
+
+function tv2LotteryBackfillMessages_(since){
+ const after=Utilities.formatDate(since,TZ,'yyyy/MM/dd');
+ const queries=[
+  'after:'+after+' from:noreply@livepocket.jp',
+  'after:'+after+' from:info@geonet.jp',
+  'after:'+after+' from:no-reply@online.family.co.jp',
+  'after:'+after+' from:info@las.toysrus.co.jp',
+  'after:'+after+' from:order_pc@konamistyle.jp',
+  'after:'+after+' from:no-reply@select-type.com'
+ ];
+ const messages=[],seen=new Set();
+ queries.forEach(query=>{
+  for(let offset=0;offset<500;offset+=100){
+   const threads=GmailApp.search(query,offset,100);
+   threads.forEach(th=>th.getMessages().forEach(message=>{
+    const id=message.getId();
+    if(!seen.has(id)){seen.add(id);messages.push(message)}
+   }));
+   if(threads.length<100)break;
+   if(offset===400)throw new Error('対象メール検索が送信元ごとに500スレッドを超えました');
+  }
+ });
+ return messages;
+}
+
 function runTv2LotteryBackfill14Days(){
  return tv2Mutate_('gmail-backfill-14d',state=>{
   const now=new Date(),since=new Date(now.getTime()-14*86400000),health=tv2Health_(state),seenIds=[],windowIds=[],reviews=[];let changed=false;
   const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString(),since:since.toISOString()};
-  const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
-  for(let offset=0;offset<3000;offset+=100){
-   const page=GmailApp.search(query,offset,100);threads.push(...page);
-   if(page.length<100)break;
-   if(offset===2900)throw new Error('Gmail 14日検索が3000スレッドを超えました');
-  }
-  threads.forEach(th=>th.getMessages().forEach(message=>{
+  const messages=tv2LotteryBackfillMessages_(since);
+  messages.forEach(message=>{
    if(message.getDate()<=since)return;
    const id=message.getId(),subject=String(message.getSubject()||''),from=String(message.getFrom()||'');windowIds.push(id);
    if(/^Toreca Vault\s/.test(subject))return;
@@ -174,7 +195,7 @@ function runTv2LotteryBackfill14Days(){
    if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
    item.updatedAt=now.toISOString();
    if(JSON.stringify(item)!==old){report.updated++;changed=true}else report.duplicate++;
-  }));
+  });
   const seen=new Set(windowIds),processed=new Set(health.gmailMessageIds||[]);
   seenIds.forEach(id=>processed.add(id));
   health.gmailMessageIds=[...processed].slice(-3000);
@@ -189,7 +210,7 @@ function runTv2LotteryBackfill14Days(){
 
 
 function runTv2LotteryBackfillFinal20260926(){
- const build='20260926-final-v1';
+ const build='20260926-final-v2-targeted';
  const result=runTv2LotteryBackfill14Days();
  const loaded=tv2Load_(),health=tv2Health_(loaded.payload);
  const reviews=Array.isArray(health.gmailNeedsReview)?health.gmailNeedsReview:[];
