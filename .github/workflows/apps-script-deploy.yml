@@ -57,12 +57,6 @@ jobs:
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
-      - name: Apply pending sale directly to V2
-        run: npx clasp run runTv2ChatSale -p '[{"type":"sale","product":"30th CELEBRATION COLLECTION","category":"BOX","quantity":1,"unitPrice":24100,"store":"買取ミミ","date":"2026-09-26","requestId":"20260926-30th-celebration-mimi-24100-1"}]'
-      - name: Refresh V2 market data
-        run: npx clasp run runTv2MarketAuto
-      - name: Send V2 verification snapshot
-        run: npx clasp run runTv2StatusSnapshot
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
