@@ -115,6 +115,7 @@ function runTv2MarketAuto(){
     const name=String(lot.product||'').replace(model,'').trim(),variant=tv2CardVariant_(lot);
     // Direct Cardrush page fallback is intentionally fail-closed.
     let result=rows&&name?findCardrushBuyback_(rows,name,model,variant):null;
+    // Official Cardrush buyback fallback must remain buyback-only.
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchCardrushMediaBuyback_(name,model,variant);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
