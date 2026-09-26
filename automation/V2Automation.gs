@@ -71,30 +71,55 @@ function tv2IsApplicationMessage_(message,text){
 }
 
 
+
+function tv2CardVariant_(lot){
+ const text=normalize_([lot&&lot.variant,lot&&lot.set,lot&&lot.product].filter(Boolean).join(' '));
+ if(text.includes(normalize_('マスターボールミラー')))return'マスターボールミラー';
+ if(text.includes(normalize_('モンスターボールミラー')))return'モンスターボールミラー';
+ if(text.includes(normalize_('ミラー')))return'ミラー';
+ return'';
+}
+
+
+function runTv2SingleCardRefresh20260926(){
+ const market=runTv2MarketAuto(),loaded=tv2Load_(),health=tv2Health_(loaded.payload);
+ const cards=(loaded.payload.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード').map(l=>{
+   const q=tv2FindQuote_(loaded.payload,l),variant=tv2CardVariant_(l);
+   return{product:l.product,set:l.set||'',variant,condition:l.condition||'',price:q?Number(q.price):null,checkedAt:q?String(q.checkedAt||''):'',source:q?String(q.source||''):'',fresh:q?Boolean(q.fresh):false};
+ });
+ const today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+ const checked=cards.filter(x=>x.checkedAt===today).length;
+ if(!cards.length)throw new Error('V2正本にシングルカード在庫がありません');
+ if(!checked)throw new Error('シングルカード相場が本日1件も確認できていません');
+ const result={ok:true,market,cards,checkedToday:checked,totalCards:cards.length,reviews:(health.marketNeedsReview||[]).filter(x=>cards.some(c=>String(x).includes(c.product)))};
+ console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
+}
+
 function runTv2MarketAuto(){
  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
-  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
   let rows=null;
   if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
   const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),seen=new Set();
   cards.forEach(lot=>{
     const key=String(lot.id||normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||''));
     if(seen.has(key))return;seen.add(key);
-    if(lot.identityNeedsReview===true){report.review++;reviews.push(lot.product+': カード番号は買取価格からの推定・現物確認まで前回価格維持');return}
+    if(lot.identityNeedsReview===true){report.review++;report.cardReview++;reviews.push(lot.product+': カード番号は買取価格からの推定・現物確認まで前回価格維持');return}
     const model=extractModel_([lot.set,lot.product].filter(Boolean).join(' '));
     // The public buyback list describes standard condition. Other card conditions
     // cannot be priced from it without guessing a discount.
     if(!rows||!model||!['良品',''].includes(String(lot.condition||''))){
-      report.review++;reviews.push(lot.product+': 型番・状態・価格ソースを確認できず前回価格維持');return;
+      report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態・価格ソースを確認できず前回価格維持');return;
     }
-    const name=String(lot.product||'').replace(model,'').trim();
-    const result=name?findCardrushBuyback_(rows,name,model,lot.variant):null;
+    const name=String(lot.product||'').replace(model,'').trim(),variant=tv2CardVariant_(lot);
+    let result=name?findCardrushBuyback_(rows,name,model,variant):null;
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
-      report.review++;reviews.push(lot.product+': 完全一致の買取価格なし・前回価格維持');return;
+      report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
     }
     const quote=tv2FindQuote_(state,lot);
-    if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;return}
+    if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;report.cardUnchanged++;return}
     const old=quote?Number(quote.price):result.price;
     const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
     target.previousPrice=Number.isFinite(old)?old:result.price;
@@ -105,7 +130,7 @@ function runTv2MarketAuto(){
       target.history.push({date,value:result.price,source:target.source});
     target.history=target.history.slice(-400);
     if(!quote)state.marketQuotes.push(target);
-    if(quote&&old===result.price)report.unchanged++;else report.updated++;
+    if(quote&&old===result.price){report.unchanged++;report.cardUnchanged++}else{report.updated++;report.cardUpdated++}
   });
   let feed={products:[],error:''};
   const sealed=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category));
