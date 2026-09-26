@@ -126,11 +126,19 @@ async function recognizeReceiptPhoto(file){
 function openReceiptDialog(item){
  if(v2ReadOnly&&!lotteryWriteReady()){toast('設定からV2書込を有効化してください');return}
  receiptTargetId=item.id;
+ document.querySelector('#receipt-product').value=item.receiptProduct||item.title||'';
+ document.querySelector('#receipt-store').value=item.receiptStore||item.store||'';
  document.querySelector('#receipt-date').value=item.receivedDate||today();
+ document.querySelector('#receipt-total').value=item.receiptAmount||'';
+ document.querySelector('#receipt-quantity').value=item.receiptQuantity||1;
+ document.querySelector('#receipt-category').value=receiptCategoryFor(item);
  document.querySelector('#receipt-shrink').value=item.shrinkStatus||'未選択';
+ document.querySelector('#receipt-add-purchase').checked=true;
  document.querySelector('#receipt-photo').value='';
  const preview=document.querySelector('#receipt-preview');
  preview.src=item.receiptPhoto||'';preview.hidden=!item.receiptPhoto;
+ const review=document.querySelector('#receipt-ocr-review');review.hidden=true;review.textContent='';
+ setReceiptOcrStatus('端末内OCR・外部AI送信なし');
  document.querySelector('#receipt-dialog').showModal();
 }
 async function compressReceiptPhoto(file){
