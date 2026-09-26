@@ -79,3 +79,12 @@
 
 .transaction-qty{display:inline-block;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);color:var(--text);font-weight:800;letter-spacing:.01em}
 .transaction-detail{margin-top:3px;color:var(--muted);font-size:.72rem;font-weight:700;text-align:right;white-space:nowrap}
+
+.receipt-photo-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.receipt-ocr-status{color:var(--muted);font-size:.75rem;line-height:1.4}
+.receipt-ocr-status[data-tone="success"]{color:var(--accent)}
+.receipt-ocr-status[data-tone="warning"]{color:var(--warn)}
+.receipt-ocr-review{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(82,214,165,.07);color:var(--text);font-size:.78rem;line-height:1.55}
+.receipt-purchase-toggle label{display:flex;align-items:center;gap:9px;color:var(--text);font-size:.86rem}
+.receipt-purchase-toggle input{width:auto;min-height:auto}
+.receipt-purchase-toggle small{color:var(--muted);font-size:.72rem}
