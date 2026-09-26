@@ -7,7 +7,7 @@ import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disa
 import{requiresVaultV2}from'../v2/browser-sync.js?v=20260926-v3';
 import{acceptanceSnapshot,pendingMigrationSnapshot}from'../v2/acceptance.js';
 import{commitV2Transaction,commitV2CardIdentity,commitV2CardIdentityBatch}from'../v2/ui-write.js';
-import{commitV2LotteryBatch}from'../v2/lottery-write.js';
+import{commitV2LotteryBatch,commitV2LotteryManualPatches}from'../v2/lottery-write.js';
 import{commitV2MarketQuoteBatch}from'../v2/market-quote-write.js';
 import{gmailLotteryImport}from'../data/gmail-lotteries.js';
 import{currentBoxMarketQuotes,currentBoxMarketMeta}from'../data/current-box-market.js';
@@ -50,6 +50,19 @@ function dashboard(){const a=v2ReadOnly&&v2AssetsCache?v2AssetsCache:assets(stat
 function list(items,type){if(!items.length)return empty(({lotteries:'抽選',purchases:'購入記録',sales:'売却記録',boxes:'BOX',packs:'パック',cards:'カード',openings:'開封記録',products:'商品'}[type]||'記録'));return`<div class="list">${items.map(x=>{const market=['boxes','packs','cards'].includes(type)&&x.marketPrice!=null;const unit=market?yen.format(+x.marketPrice||0):'';const total=market?yen.format((+x.marketPrice||0)*(+x.quantity||1)):(x.price||x.marketPrice||x.buybackPrice?yen.format((+x.price||+x.marketPrice||+x.buybackPrice||0)*(+x.quantity||1)):'');const checked=market&&x.marketCheckedAt?` · 相場取得日 ${esc(x.marketCheckedAt)}`:'';const trend=market?(x.marketFresh===false?'stale':x.marketTrend||'same'):'';const diff=market&&x.marketPreviousPrice!=null?(+x.marketPrice||0)-(+x.marketPreviousPrice||0):0;const trendLabel=trend==='up'?`↑ +${yen.format(diff)}`:trend==='down'?`↓ ${yen.format(diff)}`:trend==='stale'?'前回価格維持':'→ 同額';return`<article class="list-item"><div><h3>${esc(x.title||x.product||x.name||'名称未設定')}${type==='cards'&&x.set&&!String(x.product||'').includes(x.set)?` ${esc(x.set)}`:''}${type==='cards'&&x.variant?` (${esc(x.variant)})`:''}</h3><div class="list-meta">${esc(x.store||x.set||x.category||'')}${x.date?` · ${esc(x.date)}`:''}${transactionQtyText(x)?` · <span class="transaction-qty">${esc(transactionQtyText(x))}</span>`:''}${x.marketSource?` · 買取: ${esc(x.marketSource)}`:''}${checked}</div>${x.status?`<span class="badge">${esc(x.status)}</span>`:''}${type==='cards'&&x.identityNeedsReview?`<span class="badge">番号は価格から推定・要確認</span>`:''}</div><div><div class="amount ${market?`market-${trend}`:'' }">${total}</div>${market?`<small class="market-${trend}">相場 ${unit}/点 · ${trendLabel}</small>`:''}${type==='cards'&&v2ReadOnly?`<button type="button" data-card-set="${esc(x.id)}">${x.set?'番号を修正':'番号を登録'}</button>`:''}${v2ReadOnly?'':`<button class="danger-link" data-delete="${type}" data-id="${esc(x.id)}">削除</button>`}</div></article>`}).join('')}</div>`}
 function tabs(options){return`<div class="tabs">${options.map(([k,l])=>`<button class="tab ${subtype===k?'active':''}" data-subtype="${k}">${l}</button>`).join('')}</div>`}
 const receiptStatus=x=>x.receiptStatus==='要確認'?'未受取':x.receiptStatus||(x.status==='購入済'?'受取済み':x.status==='当選'?'未受取':'対象外');
+function lotteryWriteReady(){return !v2ReadOnly||(v2Connected()&&isV2WriteEnabled(Number(remoteRevision)))}
+async function applyLotteryManualPatches(patches,message){
+ if(v2ReadOnly){
+  if(!v2Connected())throw new Error('V2接続を確認してください');
+  if(!isV2WriteEnabled(Number(remoteRevision)))throw new Error('設定からV2書込を有効化してください');
+  const saved=await commitV2LotteryManualPatches(patches);
+  const check=acceptanceSnapshot(saved.payload);if(!check.ok)throw new Error('保存後の受入チェックに失敗しました');
+  const applied=applyV2ReadOnlyToUi(state,{state:(await import('../v2/view-model.js')).v2ViewModel(saved.payload),assets:check.assets,realizedProfit:check.realizedProfit,revision:saved.revision});
+  state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;remoteRevision=String(saved.revision);advanceV2WriteRevision(Number(remoteRevision));render();setSyncStatus(`抽選更新済み · rev ${remoteRevision} · 書込継続中`,'success');toast(message);return;
+ }
+ for(const patch of patches){const item=state.lotteries.find(x=>x.id===patch.id);if(!item)continue;Object.assign(item,patch);if(patch.status==='落選'){item.receiptStatus='対象外';item.receivedDate=''}else if(patch.status==='当選'&&item.receiptStatus!=='受取済み')item.receiptStatus='未受取';else if(patch.status==='購入済'){item.receiptStatus='受取済み';if(!item.receivedDate)item.receivedDate=today()}}
+ save(state);render();toast(message);
+}
 function calendar(){
  const [year,month]=calendarMonth.split('-').map(Number),first=new Date(year,month-1,1),days=new Date(year,month,0).getDate(),start=first.getDay();
  const events=new Map();const add=(date,item,label,kind)=>{if(!date||date.slice(0,7)!==calendarMonth)return;const key=date.slice(0,10);if(!events.has(key))events.set(key,[]);events.get(key).push({item,label,kind})};
