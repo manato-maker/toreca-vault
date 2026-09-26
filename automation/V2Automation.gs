@@ -187,6 +187,19 @@ function runTv2LotteryBackfill14Days(){
  });
 }
 
+
+function runTv2LotteryBackfillFinal20260926(){
+ const build='20260926-final-v1';
+ const result=runTv2LotteryBackfill14Days();
+ const loaded=tv2Load_(),health=tv2Health_(loaded.payload);
+ const reviews=Array.isArray(health.gmailNeedsReview)?health.gmailNeedsReview:[];
+ const currentReview=Number(health.gmailReview||0);
+ const summary={ok:currentReview===0,build,revision:loaded.revision,gmailReview:currentReview,reviews:reviews.slice(-20),result};
+ console.log(JSON.stringify(summary));Logger.log(JSON.stringify(summary));
+ if(currentReview!==0)throw new Error('14日バックフィル最終確認: 要確認 '+currentReview+'件 '+JSON.stringify(reviews.slice(-20)));
+ return summary;
+}
+
 function tv2IsApplicationMessage_(message,text){
  const subject=String(message&&message.getSubject?message.getSubject():'');
  if(/(?:抽選申込完了|申込受付完了|抽選販売応募完了|応募完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/.test(subject))return true;
