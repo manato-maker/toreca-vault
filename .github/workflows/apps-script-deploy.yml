@@ -46,6 +46,18 @@ jobs:
           grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
           if test -s .apps-script-automation/Code.js; then code_path=.apps-script-automation/Code.js; else code_path=.apps-script-automation/コード.js; fi
           node scripts/patch-cardrush-buyback.mjs "$code_path" automation/Code.gs
+          CODE_PATH="$code_path" node - <<'NODE'
+          const fs=require('fs'),p=process.env.CODE_PATH;
+          let s=fs.readFileSync(p,'utf8');
+          const anchor="  const callback = String(p.callback || '');";
+          const branch="\n  // TEMP_FINALIZER_20260927_START\n  if (String(p.action || '') === '__tv2_finalize_20260927') {\n    try { return jsonResponse_(runTv2FinalCompletion20260927()); }\n    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }\n  }\n  // TEMP_FINALIZER_20260927_END";
+          if(!s.includes('TEMP_FINALIZER_20260927_START')){
+            const i=s.indexOf(anchor);
+            if(i<0) throw new Error('doGet callback anchor missing');
+            s=s.slice(0,i+anchor.length)+branch+s.slice(i+anchor.length);
+            fs.writeFileSync(p,s);
+          }
+          NODE
           cp "$code_path" /tmp/tv-code-expected.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Push only patched automation into existing project
@@ -85,6 +97,13 @@ jobs:
           if test -s /tmp/finalizer-id.txt; then npx clasp deploy -i "$(cat /tmp/finalizer-id.txt)" -V 2 -d "Restored version 2" || true; fi
           if test -s /tmp/tv-manifest-before.json; then
             cp /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
+            if test -s .apps-script-automation/Code.js; then code_path=.apps-script-automation/Code.js; else code_path=.apps-script-automation/コード.js; fi
+            CODE_PATH="$code_path" node - <<'NODE'
+            const fs=require('fs'),p=process.env.CODE_PATH;
+            let s=fs.readFileSync(p,'utf8');
+            s=s.replace(/\n  \/\/ TEMP_FINALIZER_20260927_START[\s\S]*?\n  \/\/ TEMP_FINALIZER_20260927_END/,'');
+            fs.writeFileSync(p,s);
+            NODE
             npx clasp push --force || true
           fi
       - name: Create immutable version
