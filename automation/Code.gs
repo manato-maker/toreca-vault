@@ -347,6 +347,7 @@ function findCardrushBuyback_(rows, product, model, variant) {
   const matches = rows.filter(row => {
     const text = normalize_(row.join(' '));
     if (!text.includes(pn) || !text.includes(mn)) return false;
+    if (vn === normalize_('マスターボールミラー')) return text.includes(vn);
     if (vn === normalize_('モンスターボールミラー')) return text.includes(vn) && !text.includes(normalize_('マスターボール'));
     if (vn === normalize_('ミラー')) return text.includes(vn) && !text.includes(normalize_('モンスターボール')) && !text.includes(normalize_('マスターボール'));
     return !vn && !/ミラー/.test(text);
