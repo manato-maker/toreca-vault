@@ -37,6 +37,10 @@ for (const fn of ['runTorecaVaultLotterySync','runTorecaVaultMarketSync']) {
 }
 
 const sealedStart = 'function refreshSealedMarketCandidates_(';
+if (remote.includes('tv2ParseSealedFeed_') && remote.includes('sourceUrl') && remote.includes('x-post')) {
+  fs.writeFileSync(remotePath, remote);
+  process.exit(0);
+}
 const remoteSealed = remote.indexOf(sealedStart), canonicalSealed = canonical.indexOf(sealedStart);
 if (remoteSealed < 0 || canonicalSealed < 0) throw new Error('sealed market parser missing');
 const sealedReplacement = canonical.slice(canonicalSealed);
