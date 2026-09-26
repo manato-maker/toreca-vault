@@ -181,7 +181,7 @@ function upsertApplication_(lotteries, text, message, now) {
 }
 
 function extractApplicationNo_(text) {
-  const m = String(text).normalize('NFKC').match(/(?:(?:お)?申込(?:み)?番号(?:\s*[（(]ご注文番号[）)])?|ご注文番号|受付番号)\s*[:：]?\s*(\d{7,12})/);
+  const m = String(text).normalize('NFKC').match(/(?:(?:お)?申込(?:み)?番号(?:\s*[（(]ご注文番号[）)])?|ご注文番号|注文番号|受付番号)\s*[（(]?\s*[:：]?\s*(\d{7,14})/);
   return m ? m[1] : '';
 }
 
@@ -206,6 +206,9 @@ function productMatches_(hay, key) {
 
 function storeMatches_(hay, key) {
   if (hay.includes(key)) return true;
+  const geoKey=key.replace(/^geo/i,'ゲオ');
+  const geoHay=hay.replace(/geo/g,'ゲオ');
+  if(geoKey!==key && geoHay.includes(geoKey))return true;
   const aliases = {
     'イエローサブマリン': ['イエローサブマリン','yellowsubmarine'],
     'bigmagicなんば店': ['bigmagicなんば店','bigmagic難波店','bigmagicなんば'],
