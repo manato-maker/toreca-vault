@@ -3,3 +3,5 @@ import assert from'node:assert/strict';import fs from'node:fs';const code=fs.rea
 for(const re of [/function runTv2ChatSale\(command\)/,/chat-sale-/,/V2正本の対象在庫が不足しています/,/source:'chat'/,/requestId/])assert.match(code,re);console.log('v2 chat sale command: ok');
 
 for(const re of [/function runTv2ChatPurchase\(command\)/,/chat-purchase-/,/type:'purchase'/,/unitCost/,/状態が複数あるため条件指定が必要です/,/result\.changed===false/])assert.match(code,re);console.log('v2 chat trade commands: ok');
+
+for(const re of [/function tv2ProcessChatTradeDrafts_\(\)/,/\[Toreca Vault Command\]/,/GmailApp\.getDrafts\(\)/,/draft\.deleteDraft\(\)/,/tv2ProcessChatTradeDrafts_\(\);/])assert.match(code,re);console.log('v2 private chat trade bridge: ok');
