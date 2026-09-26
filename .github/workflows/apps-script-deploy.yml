@@ -57,6 +57,10 @@ jobs:
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
+      - name: Finalize GEO start deck purchase
+        run: npx clasp run runTv2GeoStartDeckPurchase20260926
+      - name: Refresh and verify single-card market
+        run: npx clasp run runTv2SingleCardRefresh20260926
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
