@@ -7,7 +7,7 @@ function installTv2Automation(){
   // verified the canonical state. A failed connection must not install jobs.
   const lottery=runTv2LotteryAuto(),market=runTv2MarketAuto();
   if(lottery.skipped||market.skipped)throw new Error('V2自動化の実行がスキップされたためトリガーを作成しません');
-  ScriptApp.getProjectTriggers().forEach(t=>{if(['runTv2LotteryAuto','runTv2MarketAuto'].includes(t.getHandlerFunction()))ScriptApp.deleteTrigger(t)});
+  ScriptApp.getProjectTriggers().forEach(t=>{if(['runTv2LotteryAuto','runTv2MarketAuto','runTorecaVaultLotterySync','runTorecaVaultMarketSync'].includes(t.getHandlerFunction()))ScriptApp.deleteTrigger(t)});
   ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(15).nearMinute(0).everyDays(1).inTimezone(TZ).create();
@@ -33,9 +33,9 @@ function runTv2LotteryAuto(){
     }
     threads.forEach(th=>th.getMessages().forEach(message=>{
       if(message.getDate()<=since)return;const id=message.getId();if(processed.has(id))return;
-      const text=[message.getSubject(),message.getPlainBody()].join('\n');
-      if(!CARD_WORDS.test(text)||(!RESULT_WORDS.test(text)&&!APPLICATION_WORDS.test(text)))return;report.scanned++;
-      if(APPLICATION_WORDS.test(text)&&!RESULT_WORDS.test(text)){
+      const text=[message.getSubject(),message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text);
+      if(!CARD_WORDS.test(text)||(!RESULT_WORDS.test(text)&&!isApplication))return;report.scanned++;
+      if(isApplication){
         const before=state.lotteries.length,r=upsertApplication_(state.lotteries,text,message,now);
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
         newIds.push(id);return;
@@ -64,6 +64,54 @@ function runTv2LotteryAuto(){
     return {changed:true,report};
   });
 }
+
+function tv2IsApplicationMessage_(message,text){
+ const subject=String(message&&message.getSubject?message.getSubject():'');
+ return APPLICATION_WORDS.test(subject)||(APPLICATION_WORDS.test(String(text||''))&&!RESULT_WORDS.test(subject));
+}
+
+function runTv2GmailRepair20260926(){
+ const targets=[
+  {messageId:'1a0dce0a8b727253',applicationNo:'1051879287',store:'古本市場大東店'},
+  {messageId:'1a0dcdfd638534e7',applicationNo:'1051878825',store:'古本市場生野店'},
+  {messageId:'1a0dcdef18a77688',applicationNo:'1051878309',store:'古本市場三田店'}
+ ];
+ const repair=tv2Mutate_('gmail-review-repair',state=>{
+  const now=new Date(),health=tv2Health_(state),ids=new Set(targets.map(t=>t.messageId)),results=[];
+  const priorReviewEntries=(health.gmailNeedsReview||[]).filter(x=>ids.has(String(x.messageId||''))).length;
+  for(const target of targets){
+   const message=GmailApp.getMessageById(target.messageId);
+   if(!message)throw new Error('Gmail修復対象が見つかりません: '+target.applicationNo);
+   const text=[message.getSubject(),message.getPlainBody()].join('\n');
+   if(extractApplicationNo_(text)!==target.applicationNo)throw new Error('申込番号検証失敗: '+target.applicationNo);
+   let matches=(state.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
+   if(matches.length===0){
+    const r=upsertApplication_(state.lotteries,text,message,now);
+    if(r.kind!=='created'&&r.kind!=='duplicate')throw new Error('Gmail修復失敗 '+target.applicationNo+': '+String(r.reason||r.kind));
+    matches=(state.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
+   }
+   if(matches.length!==1)throw new Error('Gmail修復後の申込番号が一意ではありません: '+target.applicationNo);
+   const item=matches[0];
+   if(normalize_(item.store)!==normalize_(target.store))throw new Error('Gmail修復後の店舗不一致: '+target.applicationNo+' / '+String(item.store||''));
+   item.gmailMessageId=target.messageId;item.updatedAt=now.toISOString();
+   results.push({applicationNo:target.applicationNo,store:item.store,title:item.title});
+  }
+  health.gmailMessageIds=[...new Set([...(health.gmailMessageIds||[]),...targets.map(t=>t.messageId)])].slice(-3000);
+  health.gmailNeedsReview=(health.gmailNeedsReview||[]).filter(x=>!ids.has(String(x.messageId||'')));
+  health.gmailReview=Math.max(0,Number(health.gmailReview||0)-priorReviewEntries);
+  health.gmailStatus=health.gmailReview?'review':'ok';
+  return{changed:true,repaired:results};
+ });
+ const installed=installTv2Automation();
+ const loaded=tv2Load_(),verified=targets.map(target=>{
+  const matches=(loaded.payload.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
+  if(matches.length!==1||normalize_(matches[0].store)!==normalize_(target.store))throw new Error('Gmail最終検証失敗: '+target.applicationNo);
+  return{applicationNo:target.applicationNo,store:matches[0].store,title:matches[0].title};
+ });
+ const result={ok:true,repair,installed,verified,revision:loaded.revision};
+ console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
+}
+
 function runTv2MarketAuto(){
  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
