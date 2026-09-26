@@ -58,7 +58,15 @@ jobs:
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: List Apps Script deployments
-        run: npx clasp deployments
+        run: npx clasp deployments | tee /tmp/tv-deployments.txt
+      - name: Probe Apps Script web deployments
+        run: |
+          awk '/^- AK/{print $2}' /tmp/tv-deployments.txt | while read id; do
+            echo "PROBE $id"
+            curl -sS -L --max-time 20 -o /tmp/body -w 'HTTP=%{http_code} TYPE=%{content_type}\n' "https://script.google.com/macros/s/$id/exec?action=load" || true
+            head -c 300 /tmp/body 2>/dev/null || true
+            echo
+          done
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
