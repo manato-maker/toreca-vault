@@ -447,10 +447,6 @@ function fetchAltemaBuyback_(product, model) {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   const callback = String(p.callback || '');
-  if (String(p.action || '') === '__tv2_finalize_20260927') {
-    try { return jsonResponse_(runTv2FinalCompletion20260927()); }
-    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
-  }
   try {
     assertSyncToken_(p.token);
     if (String(p.action || '') !== 'load') throw new Error('unsupported action');
