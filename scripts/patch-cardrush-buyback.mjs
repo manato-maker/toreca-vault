@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const [remotePath, canonicalPath] = process.argv.slice(2);
 if (!remotePath || !canonicalPath) throw new Error('remote and canonical source paths are required');
+// Lottery parser ranges are intentionally patched before preserving remote API code.
 let remote = fs.readFileSync(remotePath, 'utf8');
 const canonical = fs.readFileSync(canonicalPath, 'utf8');
 
