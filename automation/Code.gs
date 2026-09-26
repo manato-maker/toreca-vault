@@ -497,24 +497,22 @@ function refreshSealedMarketCandidates_(data, date, reviews) {
     if(r.getResponseCode()!==200)throw new Error('HTTP '+r.getResponseCode());
     html=r.getContentText('UTF-8');
   }catch(err){reviews.push('BOX/パック相場フィード取得失敗: '+String(err));return}
-  if(!html.includes(date)){reviews.push('BOX/パック相場: 当日更新を確認できないため前回価格維持');return}
+  if(typeof tv2ParseSealedFeed_!=='function'){reviews.push('BOX/パック相場: 構造化パーサー未配布のため前回価格維持');return}
+  const feed=tv2ParseSealedFeed_(html,date);
+  if(feed.error){reviews.push(feed.error+'・前回価格維持');return}
   const rows=[];
-  const text=html.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/\s+/g,' ');
-  const stores=['アリウム','AMTAF','買取ミミ'];
-  const products=[...(data.boxes||[]),...(data.packs||[])].filter(x=>Number(x.quantity)>0);
-  products.forEach(item=>{
+  const boxes=data.boxes||[],packs=data.packs||[];
+  [...boxes,...packs].filter(x=>Number(x.quantity)>0).forEach(item=>{
     const product=String(item.product||'').trim(),condition=String(item.condition||item.shrinkStatus||'').trim();
-    if(!product||!condition)return;
-    const pn=normalize_(product);
-    const compact=normalize_(text);
-    const p=compact.indexOf(pn);
-    if(p<0)return;
-    const around=text.slice(Math.max(0,p-500),p+2500);
-    stores.forEach(store=>{
-      const re=new RegExp(store+'[^¥￥0-9]{0,120}[¥￥]?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{3,6})');
-      const m=around.match(re);if(!m)return;
-      const price=Number(m[1].replace(/,/g,''));if(!price)return;
-      rows.push({product,condition,store,price,checkedAt:date,verified:true,imageDerived:false,verifiedBy:'public-web-feed'});
+    const category=boxes.includes(item)?'BOX':'パック';
+    const sealedCondition=tv2SealedCondition_({category,condition,product});
+    const sealedName=tv2SealedName_(product);
+    if(!product||!sealedCondition||!sealedName)return;
+    const matches=feed.products.filter(p=>[p.name,p.official].some(s=>tv2SealedName_(s)===sealedName));
+    if(matches.length!==1){reviews.push(product+': 相場フィードの商品一致を一意に確認できず前回価格維持');return}
+    (matches[0].offers[sealedCondition]||[]).forEach(offer=>{
+      if(!SEALED_MARKET_STORES.has(String(offer.shop||''))||!/^https:\/\/x\.com\/[^/]+\/status\/\d+$/.test(String(offer.url||'')))return;
+      rows.push({product,condition,store:offer.shop,price:Number(offer.price),checkedAt:feed.date,verified:true,imageDerived:false,verifiedBy:'x-post',sourceUrl:offer.url});
     });
   });
   if(rows.length)data.marketCandidates=rows;
