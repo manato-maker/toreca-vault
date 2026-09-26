@@ -274,7 +274,7 @@ function tv2Config_(){const p=PropertiesService.getScriptProperties(),url=String
 function tv2ParseResponse_(raw){const text=String(raw||'').trim();if(!text)throw new Error('V2 API empty response');let json=text;const m=text.match(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(\s*([\s\S]*)\s*\)\s*;?$/);if(m)json=m[1].trim();try{return JSON.parse(json)}catch(e){throw new Error('V2 API response is not JSON/JSONP')}}
 function tv2Call_(body){const c=tv2Config_();for(const token of c.tokens){const r=UrlFetchApp.fetch(c.url,{method:'post',contentType:'text/plain;charset=utf-8',payload:JSON.stringify(Object.assign({token},body)),muteHttpExceptions:true});const j=tv2ParseResponse_(r.getContentText());if(j.ok)return j;if(/unauthorized|認証に失敗/i.test(String(j.error||'')))continue;throw new Error(j.error||'V2 API error')}throw new Error('V2 API 認証に失敗しました。同期URLとスクリプトプロパティを確認してください')}
 function tv2Load_(){const j=tv2Call_({action:'load'});if(!j.payload||Number(j.payload.schemaVersion)!==2)throw new Error('V2正本ではありません');return j}
-function tv2Mutate_(kind,fn){const lock=LockService.getScriptLock();if(!lock.tryLock(30000))return{skipped:true,reason:'locked'};try{const before=tv2Load_(),next=JSON.parse(JSON.stringify(before.payload)),result=fn(next)||{};next.revision=Number(before.revision)+1;next.lastMutationId=kind+'-'+Utilities.getUuid();next.auditLog=Array.isArray(next.auditLog)?next.auditLog:[];next.auditLog.push({mutationId:next.lastMutationId,revision:next.revision,type:kind,at:new Date().toISOString()});tv2Call_({expectedRevision:before.revision,mutationId:next.lastMutationId,payload:next});const check=tv2Load_();if(Number(check.revision)!==next.revision||check.lastMutationId!==next.lastMutationId)throw new Error('V2保存後検証失敗');return Object.assign({revision:check.revision},result)}finally{lock.releaseLock()}}
+function tv2Mutate_(kind,fn){const lock=LockService.getScriptLock();if(!lock.tryLock(30000))return{skipped:true,reason:'locked'};try{const before=tv2Load_(),next=JSON.parse(JSON.stringify(before.payload)),result=fn(next)||{};if(result.changed===false)return Object.assign({revision:Number(before.revision),unchanged:true},result);next.revision=Number(before.revision)+1;next.lastMutationId=kind+'-'+Utilities.getUuid();next.auditLog=Array.isArray(next.auditLog)?next.auditLog:[];next.auditLog.push({mutationId:next.lastMutationId,revision:next.revision,type:kind,at:new Date().toISOString()});tv2Call_({expectedRevision:before.revision,mutationId:next.lastMutationId,payload:next});const check=tv2Load_();if(Number(check.revision)!==next.revision||check.lastMutationId!==next.lastMutationId)throw new Error('V2保存後検証失敗');return Object.assign({revision:check.revision},result)}finally{lock.releaseLock()}}
 
 
 function runTv2ChatSale(command){
@@ -290,6 +290,7 @@ function runTv2ChatSale(command){
   if(existing.length===1)return{duplicate:true,transactionId:txId,changed:false};
   if(existing.length>1)throw new Error('同一チャット売却IDが重複しています');
   const key=normalize_(product),lots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category===category&&normalize_(l.productKey||l.product)===key&&(!condition||String(l.condition||'')===condition));
+  if(!condition&&new Set(lots.map(l=>String(l.condition||''))).size>1)throw new Error('V2正本の対象在庫の状態が複数あるため条件指定が必要です');
   const available=lots.reduce((n,l)=>n+Number(l.quantity||0),0);
   if(available<quantity)throw new Error('V2正本の対象在庫が不足しています');
   let remaining=quantity,cost=0,unknownCost=false;
@@ -299,5 +300,24 @@ function runTv2ChatSale(command){
   state.transactions=Array.isArray(state.transactions)?state.transactions:[];
   state.transactions.push({id:txId,type:'sale',product,productKey:product,category,condition,quantity,price:unitPrice,date,store,soldTo:store,source:'chat',requestId,acquisitionCost:unknownCost?null:cost});
   return{duplicate:false,transactionId:txId,changed:true};
+ });
+}
+
+function runTv2ChatPurchase(command){
+ const input=command&&typeof command==='object'?command:{};
+ const product=String(input.product||'').trim(),category=String(input.category||'BOX').trim(),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
+ const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
+ if(!product||!requestId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
+ if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
+ return tv2Mutate_('chat-purchase',state=>{
+  const txId='chat-purchase-'+requestId,existing=(state.transactions||[]).filter(t=>t.id===txId);
+  if(existing.length===1)return{duplicate:true,transactionId:txId,changed:false};
+  if(existing.length>1)throw new Error('同一チャット購入IDが重複しています');
+  const lotId=txId+'-lot';state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  if(state.inventoryLots.some(l=>l.id===lotId))throw new Error('同一チャット購入lotが既に存在します');
+  state.inventoryLots.push({id:lotId,product,productKey:product,category,condition,quantity,unitCost,acquiredAt:date,store,source:'chat',requestId});
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
+  state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,quantity,price:unitCost,date,store,source:'chat',requestId});
+  return{duplicate:false,transactionId:txId,lotId,changed:true};
  });
 }
