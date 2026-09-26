@@ -402,6 +402,32 @@ function runTv2ChatPurchase(command){
 }
 
 
+
+function runTv2ChatLottery(command){
+ const input=command&&typeof command==='object'?command:{};
+ const title=String(input.title||input.product||'').trim(),store=String(input.store||'').trim(),requestId=String(input.requestId||'').trim();
+ const status=String(input.status||'応募済').trim(),deadline=String(input.deadline||'').trim(),resultDate=String(input.resultDate||'').trim(),memo=String(input.memo||'').trim();
+ const applicationDate=String(input.applicationDate||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
+ if(!title||!store||!requestId||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(applicationDate))throw new Error('チャット抽選データが不正です');
+ if(!['応募前','応募済','当選','落選','購入済'].includes(status))throw new Error('チャット抽選状態が不正です');
+ if(resultDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('チャット抽選結果日が不正です');
+ return tv2Mutate_('chat-lottery',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  const id='chat-lottery-'+requestId,existing=state.lotteries.filter(x=>x.id===id);
+  if(existing.length===1)return{duplicate:true,lotteryId:id,changed:false};
+  if(existing.length>1)throw new Error('同一チャット抽選IDが重複しています');
+  const now=new Date().toISOString();
+  state.lotteries.push({
+   id,title,store,status,deadline,resultDate,
+   receiptStatus:status==='当選'?'未受取':status==='購入済'?'受取済み':'対象外',
+   receivedDate:'',shrinkStatus:'未選択',memo,
+   applicationDate,source:'chat',requestId,createdAt:now,updatedAt:now
+  });
+  return{duplicate:false,lotteryId:id,changed:true};
+ });
+}
+
+
 function tv2ProcessChatTradeDrafts_(){
  const subject='[Toreca Vault Command]';
  const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
@@ -409,8 +435,8 @@ function tv2ProcessChatTradeDrafts_(){
  drafts.forEach(draft=>{
   const raw=String(draft.getMessage().getPlainBody()||'').trim();
   let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
-  if(!command||!['sale','purchase'].includes(String(command.type||'')))throw new Error('Toreca Vaultコマンド種別が不正です');
-  const result=command.type==='sale'?runTv2ChatSale(command):runTv2ChatPurchase(command);
+  if(!command||!['sale','purchase','lottery'].includes(String(command.type||'')))throw new Error('Toreca Vaultコマンド種別が不正です');
+  const result=command.type==='sale'?runTv2ChatSale(command):command.type==='purchase'?runTv2ChatPurchase(command):runTv2ChatLottery(command);
   draft.deleteDraft();
   results.push(result);
  });
