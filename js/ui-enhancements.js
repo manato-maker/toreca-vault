@@ -4,8 +4,6 @@ const KEY='toreca-vault:v1';
 const readState=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return{}}};
 const escRx=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const injectStyles=()=>{if(document.querySelector('#transaction-presentation-styles'))return;const style=document.createElement('style');style.id='transaction-presentation-styles';style.textContent=`
-.list-item.txn-purchase{border-left:4px solid #74a9ff}.list-item.txn-sale{border-left:4px solid var(--accent)}
-.list-item.txn-purchase .amount{color:#9cc2ff}.list-item.txn-sale .amount{color:#89f1ca}
 .transaction-label{display:block;font-size:.68rem;font-weight:800;margin-bottom:2px}.transaction-breakdown{display:block;margin-top:3px;color:var(--muted);font-size:.7rem;font-weight:650;white-space:nowrap}
 .market-checked-label{color:var(--muted);font-weight:700}
 `;document.head.append(style)};
