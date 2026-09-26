@@ -40,7 +40,9 @@ function runTv2LotteryAuto(){
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
         newIds.push(id);return;
       }
-      const match=matchLottery_(state.lotteries,text);
+      const applicationNo=extractApplicationNo_(text);
+   if(applicationNo)tv2EnsureApplicationByNo_(state,applicationNo,now);
+   const match=matchLottery_(state.lotteries,text);
       if(match.kind==='outside')report.outside++;else if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject:message.getSubject()})}else{
         const parsed=parseResult_(text,message.getDate());if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject:message.getSubject()})}
         else{
@@ -65,6 +67,28 @@ function runTv2LotteryAuto(){
   });
 }
 
+
+
+function tv2EnsureApplicationByNo_(state, applicationNo, now){
+ if(!applicationNo)return null;
+ const exact=(state.lotteries||[]).filter(x=>String(x.id||'').includes(applicationNo)||String(x.memo||'').includes(applicationNo));
+ if(exact.length===1)return exact[0];
+ if(exact.length>1)return null;
+ const threads=GmailApp.search(applicationNo,0,20);
+ for(const th of threads){
+  for(const message of th.getMessages()){
+   const text=[message.getSubject(),message.getPlainBody()].join('\n');
+   if(!tv2IsApplicationMessage_(message,text))continue;
+   if(extractApplicationNo_(text)!==applicationNo)continue;
+   const r=upsertApplication_(state.lotteries,text,message,now);
+   if(r.kind==='created'||r.kind==='duplicate'){
+    const matches=(state.lotteries||[]).filter(x=>String(x.id||'').includes(applicationNo)||String(x.memo||'').includes(applicationNo));
+    if(matches.length===1)return matches[0];
+   }
+  }
+ }
+ return null;
+}
 
 function runTv2LotteryBackfill14Days(){
  return tv2Mutate_('gmail-backfill-14d',state=>{
