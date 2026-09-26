@@ -57,31 +57,31 @@ jobs:
           cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
-      - name: Create temporary finalizer deployment
+      - name: Prepare temporary finalizer version
         run: |
-          npx clasp deployments | awk '/^- AK/{print $2}' | sort > /tmp/before-deployments.txt
-          npx clasp deploy -d "Temporary finalizer ${GITHUB_SHA}"
-          npx clasp deployments | tee /tmp/after-deployments.txt
-          awk '/^- AK/{print $2}' /tmp/after-deployments.txt | sort > /tmp/after-ids.txt
-          comm -13 /tmp/before-deployments.txt /tmp/after-ids.txt | head -n1 > /tmp/finalizer-id.txt
-          test -s /tmp/finalizer-id.txt
-          echo "Temporary deployment created"
+          id=$(npx clasp deployments | awk '$3=="@2" {print $2; exit}')
+          test -n "$id"
+          echo "$id" > /tmp/finalizer-id.txt
+          npx clasp version "Temporary finalizer ${GITHUB_SHA}" | tee /tmp/finalizer-version.out
+          sed -n 's/.*Created version \([0-9][0-9]*\).*/\1/p' /tmp/finalizer-version.out | tail -n1 > /tmp/finalizer-version.txt
+          test -s /tmp/finalizer-version.txt
+          npx clasp deploy -i "$id" -V "$(cat /tmp/finalizer-version.txt)" -d "Temporary finalizer"
       - name: Execute final V2 completion
         run: |
           id=$(cat /tmp/finalizer-id.txt)
           url="https://script.google.com/macros/s/$id/exec?action=__tv2_finalize_20260927"
           ok=0
-          for n in 1 2 3 4 5 6 7 8; do
-            code=$(curl -sS -L --max-time 60 -o /tmp/finalizer-body.json -w '%{http_code}' "$url" || true)
+          for n in 1 2 3 4 5 6; do
+            code=$(curl -sS -L --max-time 120 -o /tmp/finalizer-body.json -w '%{http_code}' "$url" || true)
             if [ "$code" = "200" ] && jq -e '.ok == true' /tmp/finalizer-body.json >/dev/null 2>&1; then ok=1; break; fi
-            sleep 4
+            sleep 5
           done
           echo "FINALIZER_RESULT=$(cat /tmp/finalizer-body.json)"
           test "$ok" = "1"
-      - name: Remove temporary finalizer deployment
+      - name: Restore temporary deployment
         if: always()
         run: |
-          if test -s /tmp/finalizer-id.txt; then npx clasp undeploy "$(cat /tmp/finalizer-id.txt)" || true; fi
+          if test -s /tmp/finalizer-id.txt; then npx clasp deploy -i "$(cat /tmp/finalizer-id.txt)" -V 2 -d "Restored version 2" || true; fi
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
