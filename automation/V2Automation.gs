@@ -16,7 +16,7 @@ function installTv2Automation(){
   return {lottery,market};
 }
 function runTv2LotteryAuto(){
-  tv2ProcessChatTradeDrafts_();
+  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
     // Revisit recent mail because delivery and trigger execution can be delayed.
@@ -65,7 +65,7 @@ function runTv2LotteryAuto(){
   });
 }
 function runTv2MarketAuto(){
- tv2ProcessChatTradeDrafts_();
+ if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
   let rows=null;
