@@ -129,60 +129,6 @@ function tv2CardVariant_(lot){
 }
 
 
-function runTv2SingleCardRefresh20260926(){
- const market=runTv2MarketAuto(),loaded=tv2Load_(),health=tv2Health_(loaded.payload);
- const cards=(loaded.payload.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード').map(l=>{
-   const q=tv2FindQuote_(loaded.payload,l),variant=tv2CardVariant_(l);
-   return{product:l.product,set:l.set||'',variant,condition:l.condition||'',price:q?Number(q.price):null,checkedAt:q?String(q.checkedAt||''):'',source:q?String(q.source||''):'',fresh:q?Boolean(q.fresh):false};
- });
- const today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
- const checked=cards.filter(x=>x.checkedAt===today).length;
- if(!cards.length)throw new Error('V2正本にシングルカード在庫がありません');
- if(!checked)throw new Error('シングルカード相場が本日1件も確認できていません '+JSON.stringify({market,reviews:(health.marketNeedsReview||[]).filter(x=>cards.some(c=>String(x).includes(c.product))),cards:cards.map(x=>({product:x.product,set:x.set,variant:x.variant,condition:x.condition,checkedAt:x.checkedAt,source:x.source}))}));
- const result={ok:true,market,cards,checkedToday:checked,totalCards:cards.length,reviews:(health.marketNeedsReview||[]).filter(x=>cards.some(c=>String(x).includes(c.product)))};
- console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
-}
-
-
-function runTv2FinalCompletion20260927(){
-  const purchase=runTv2GeoStartDeckPurchase20260926();
-  const market=runTv2MarketAuto();
-  const loaded=tv2Load_(),state=loaded.payload,health=tv2Health_(state);
-  const txId='chat-purchase-20260926-geo-kashiba-startdeck100-battlecollection-891-1';
-  const purchaseVerified=(state.transactions||[]).filter(t=>String(t.id||'')===txId&&String(t.category||'')==='BOX'&&String(t.condition||'')==='未開封'&&Number(t.quantity)===1&&Number(t.price)===891).length===1;
-  const today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
-  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');
-  let checkedToday=0;
-  const sources={};
-  cards.forEach(l=>{
-    const q=tv2FindQuote_(state,l);
-    if(q&&String(q.checkedAt||'')===today){
-      checkedToday++;
-      const s=String(q.source||'');
-      const k=/カードラッシュ/.test(s)?'cardrush':/アルテマ/.test(s)?'altema':s?'other':'unknown';
-      sources[k]=(sources[k]||0)+1;
-    }
-  });
-  const reasonCounts={};
-  (health.marketNeedsReview||[]).forEach(raw=>{
-    const s=String(raw||'');
-    const reason=s.includes(':')?s.slice(s.indexOf(':')+1).trim():s;
-    reasonCounts[reason]=(reasonCounts[reason]||0)+1;
-  });
-  return{
-    ok:purchaseVerified&&cards.length>0&&checkedToday>0,
-    revision:loaded.revision,
-    geoPurchaseVerified:purchaseVerified,
-    single:{
-      total:cards.length,
-      checkedToday,
-      sourceCounts:sources,
-      report:market&&market.report?market.report:{},
-      reviewReasonCounts:reasonCounts
-    }
-  };
-}
-
 function runTv2MarketAuto(){
  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
@@ -455,18 +401,6 @@ function runTv2ChatPurchase(command){
  });
 }
 
-
-function runTv2GeoStartDeckPurchase20260926(){
- const command={type:'purchase',product:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',category:'BOX',condition:'未開封',quantity:1,unitCost:891,store:'GEO香芝店',date:'2026-09-26',requestId:'20260926-geo-kashiba-startdeck100-battlecollection-891-1'};
- const purchase=runTv2ChatPurchase(command);
- const loaded=tv2Load_(),txId='chat-purchase-'+command.requestId;
- const matches=(loaded.payload.transactions||[]).filter(t=>String(t.id||'')===txId);
- if(matches.length!==1)throw new Error('GEOスタートデッキ購入のV2反映確認に失敗しました');
- const tx=matches[0];
- if(String(tx.product||'')!==command.product||String(tx.category||'')!=='BOX'||String(tx.condition||'')!=='未開封'||Number(tx.quantity)!==1||Number(tx.price)!==891||String(tx.store||'')!=='GEO香芝店'||String(tx.date||'')!=='2026-09-26')throw new Error('GEOスタートデッキ購入内容のV2照合に失敗しました');
- const result={ok:true,purchase,verified:{transactionId:txId,product:tx.product,category:tx.category,condition:tx.condition,quantity:tx.quantity,price:tx.price,store:tx.store,date:tx.date},revision:loaded.revision};
- console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
-}
 
 function tv2ProcessChatTradeDrafts_(){
  const subject='[Toreca Vault Command]';
