@@ -11,5 +11,10 @@ export function enableV2WriteForSession(phrase,revision){
  if(!Number.isInteger(Number(revision))||Number(revision)<0)throw new Error('V2 revisionが不正です');
  sessionStorage.setItem(KEY,'yes');sessionStorage.setItem(REVISION_KEY,String(revision));return true;
 }
+export function advanceV2WriteRevision(revision){
+ if(sessionStorage.getItem(KEY)!=='yes')return false;
+ if(!Number.isInteger(Number(revision))||Number(revision)<0)throw new Error('V2 revisionが不正です');
+ sessionStorage.setItem(REVISION_KEY,String(revision));return true;
+}
 export function disableV2Write(){sessionStorage.removeItem(KEY);sessionStorage.removeItem(REVISION_KEY)}
 export function assertV2WriteEnabled(expectedRevision){if(!isV2WriteEnabled(expectedRevision))throw new Error('V2書込はこのrevisionで有効化されていません');return true}
