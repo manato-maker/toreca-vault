@@ -70,47 +70,6 @@ function tv2IsApplicationMessage_(message,text){
  return APPLICATION_WORDS.test(subject)||(APPLICATION_WORDS.test(String(text||''))&&!RESULT_WORDS.test(subject));
 }
 
-function runTv2GmailRepair20260926(){
- const targets=[
-  {messageId:'1a0dce0a8b727253',applicationNo:'1051879287',store:'古本市場大東店'},
-  {messageId:'1a0dcdfd638534e7',applicationNo:'1051878825',store:'古本市場生野店'},
-  {messageId:'1a0dcdef18a77688',applicationNo:'1051878309',store:'古本市場三田店'}
- ];
- const repair=tv2Mutate_('gmail-review-repair',state=>{
-  const now=new Date(),health=tv2Health_(state),ids=new Set(targets.map(t=>t.messageId)),results=[];
-  const priorReviewEntries=(health.gmailNeedsReview||[]).filter(x=>ids.has(String(x.messageId||''))).length;
-  for(const target of targets){
-   const message=GmailApp.getMessageById(target.messageId);
-   if(!message)throw new Error('Gmail修復対象が見つかりません: '+target.applicationNo);
-   const text=[message.getSubject(),message.getPlainBody()].join('\n');
-   if(extractApplicationNo_(text)!==target.applicationNo)throw new Error('申込番号検証失敗: '+target.applicationNo);
-   let matches=(state.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
-   if(matches.length===0){
-    const r=upsertApplication_(state.lotteries,text,message,now);
-    if(r.kind!=='created'&&r.kind!=='duplicate')throw new Error('Gmail修復失敗 '+target.applicationNo+': '+String(r.reason||r.kind));
-    matches=(state.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
-   }
-   if(matches.length!==1)throw new Error('Gmail修復後の申込番号が一意ではありません: '+target.applicationNo);
-   const item=matches[0];
-   if(normalize_(item.store)!==normalize_(target.store))throw new Error('Gmail修復後の店舗不一致: '+target.applicationNo+' / '+String(item.store||''));
-   item.gmailMessageId=target.messageId;item.updatedAt=now.toISOString();
-   results.push({applicationNo:target.applicationNo,store:item.store,title:item.title});
-  }
-  health.gmailMessageIds=[...new Set([...(health.gmailMessageIds||[]),...targets.map(t=>t.messageId)])].slice(-3000);
-  health.gmailNeedsReview=(health.gmailNeedsReview||[]).filter(x=>!ids.has(String(x.messageId||'')));
-  health.gmailReview=Math.max(0,Number(health.gmailReview||0)-priorReviewEntries);
-  health.gmailStatus=health.gmailReview?'review':'ok';
-  return{changed:true,repaired:results};
- });
- const installed=installTv2Automation();
- const loaded=tv2Load_(),verified=targets.map(target=>{
-  const matches=(loaded.payload.lotteries||[]).filter(x=>String(x.id||'').includes(target.applicationNo)||String(x.memo||'').includes(target.applicationNo));
-  if(matches.length!==1||normalize_(matches[0].store)!==normalize_(target.store))throw new Error('Gmail最終検証失敗: '+target.applicationNo);
-  return{applicationNo:target.applicationNo,store:matches[0].store,title:matches[0].title};
- });
- const result={ok:true,repair,installed,verified,revision:loaded.revision};
- console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
-}
 
 function runTv2MarketAuto(){
  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
