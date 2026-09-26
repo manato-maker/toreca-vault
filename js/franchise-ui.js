@@ -4,11 +4,13 @@ const KEY='toreca-vault:v1';
 const yen=new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY',maximumFractionDigits:0});
 const amount=x=>(+x.total||(+x.price||0)*(+x.quantity||1));
 const saleRevenue=x=>(+x.price||0)*(x.quantity==null?1:+x.quantity||0)-(+x.fee||0);
+const v2Active=()=>localStorage.getItem('toreca-vault:v2:required')==='1';
 
 function currentState(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return{}}}
 function currentMonth(){return document.querySelector('.month-tabs .tab.active')?.textContent?.trim()||''}
 function renderFranchiseBreakdown(){
   if(location.hash.split('/')[0]!=='#ledger')return;
+  if(v2Active()){document.querySelector('#franchise-breakdown')?.remove();return;}
   const view=document.querySelector('#view'),month=currentMonth();if(!view||!month)return;
   const state=currentState(),p=(state.purchases||[]).filter(x=>(x.date||'').startsWith(month)),s=(state.sales||[]).filter(x=>(x.date||'').startsWith(month));
   const rows=FRANCHISES.map(name=>{const purchases=p.filter(x=>franchiseOf(x)===name),sales=s.filter(x=>franchiseOf(x)===name),spent=purchases.reduce((n,x)=>n+amount(x),0),revenue=sales.reduce((n,x)=>n+saleRevenue(x),0),known=sales.filter(x=>x.acquisitionCost!=null),profit=known.reduce((n,x)=>n+saleRevenue(x)-(+x.acquisitionCost||0),0),pending=sales.length-known.length;return{name,spent,revenue,profit,pending}});
