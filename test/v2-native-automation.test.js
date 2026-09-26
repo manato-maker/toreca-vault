@@ -5,3 +5,5 @@ for(const re of [/function runTv2ChatSale\(command\)/,/chat-sale-/,/V2正本の�
 for(const re of [/function runTv2ChatPurchase\(command\)/,/chat-purchase-/,/type:'purchase'/,/unitCost/,/状態が複数あるため条件指定が必要です/,/result\.changed===false/])assert.match(code,re);console.log('v2 chat trade commands: ok');
 
 for(const re of [/function tv2ProcessChatTradeDrafts_\(\)/,/\[Toreca Vault Command\]/,/GmailApp\.getDrafts\(\)/,/draft\.deleteDraft\(\)/,/tv2ProcessChatTradeDrafts_\(\);/])assert.match(code,re);console.log('v2 private chat trade bridge: ok');
+
+for(const re of [/function tv2ProcessChatTradeDrafts_\(\)/,/Toreca Vault Command/,/GmailApp\.getDrafts\(\)/,/draft\.deleteDraft\(\)/])assert.match(code,re);console.log('v2 chat trade bridge: ok');
