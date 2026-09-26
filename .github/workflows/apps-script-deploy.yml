@@ -40,6 +40,7 @@ jobs:
           test -s .apps-script-automation/Code.js -o -s .apps-script-automation/コード.js
           test -s .apps-script-automation/appsscript.json
           cp .apps-script-automation/appsscript.json /tmp/tv-manifest-before.json
+          node -e "const fs=require('fs'),p='.apps-script-automation/appsscript.json',m=JSON.parse(fs.readFileSync(p,'utf8'));m.webapp={access:'ANYONE_ANONYMOUS',executeAs:'USER_DEPLOYING'};const s=JSON.stringify(m,null,2);fs.writeFileSync(p,s);fs.writeFileSync('/tmp/tv-manifest-expected.json',s);"
           cp .apps-script-automation/Code.js /tmp/tv-code-before.js 2>/dev/null || cp .apps-script-automation/コード.js /tmp/tv-code-before.js
           grep -q 'function fetchCardrushRows_' /tmp/tv-code-before.js
           grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
@@ -54,7 +55,7 @@ jobs:
           mv .apps-script-automation .apps-script-automation-before
           mkdir .apps-script-automation
           npx clasp pull
-          cmp -s /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
+          cmp -s /tmp/tv-manifest-expected.json .apps-script-automation/appsscript.json
           cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Prepare temporary finalizer version
@@ -78,10 +79,14 @@ jobs:
           done
           echo "FINALIZER_RESULT=$(cat /tmp/finalizer-body.json)"
           test "$ok" = "1"
-      - name: Restore temporary deployment
+      - name: Restore temporary deployment and manifest
         if: always()
         run: |
           if test -s /tmp/finalizer-id.txt; then npx clasp deploy -i "$(cat /tmp/finalizer-id.txt)" -V 2 -d "Restored version 2" || true; fi
+          if test -s /tmp/tv-manifest-before.json; then
+            cp /tmp/tv-manifest-before.json .apps-script-automation/appsscript.json
+            npx clasp push --force || true
+          fi
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
