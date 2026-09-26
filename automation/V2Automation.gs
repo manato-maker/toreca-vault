@@ -342,9 +342,15 @@ function runTv2ChatSale(command){
 
 
 
+function tv2NormalizeProductCategory_(product,category){
+ const name=String(product||'');
+ if(/スタートデッキ|デッキセット|構築済みデッキ/.test(name))return'BOX';
+ return String(category||'BOX').trim();
+}
+
 function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
- const product=String(input.product||'').trim(),category=String(input.category||'BOX').trim(),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
+ const product=String(input.product||'').trim(),category=tv2NormalizeProductCategory_(product,input.category),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
  const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
  if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
@@ -359,6 +365,19 @@ function runTv2ChatPurchase(command){
   state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,quantity,price:unitCost,date,store,source:'chat',requestId});
   return{duplicate:false,transactionId:txId,lotId,changed:true};
  });
+}
+
+
+function runTv2GeoStartDeckPurchase20260926(){
+ const command={type:'purchase',product:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',category:'BOX',condition:'未開封',quantity:1,unitCost:891,store:'GEO香芝店',date:'2026-09-26',requestId:'20260926-geo-kashiba-startdeck100-battlecollection-891-1'};
+ const purchase=runTv2ChatPurchase(command);
+ const loaded=tv2Load_(),txId='chat-purchase-'+command.requestId;
+ const matches=(loaded.payload.transactions||[]).filter(t=>String(t.id||'')===txId);
+ if(matches.length!==1)throw new Error('GEOスタートデッキ購入のV2反映確認に失敗しました');
+ const tx=matches[0];
+ if(String(tx.product||'')!==command.product||String(tx.category||'')!=='BOX'||String(tx.condition||'')!=='未開封'||Number(tx.quantity)!==1||Number(tx.price)!==891||String(tx.store||'')!=='GEO香芝店'||String(tx.date||'')!=='2026-09-26')throw new Error('GEOスタートデッキ購入内容のV2照合に失敗しました');
+ const result={ok:true,purchase,verified:{transactionId:txId,product:tx.product,category:tx.category,condition:tx.condition,quantity:tx.quantity,price:tx.price,store:tx.store,date:tx.date},revision:loaded.revision};
+ console.log(JSON.stringify(result));Logger.log(JSON.stringify(result));return result;
 }
 
 function tv2ProcessChatTradeDrafts_(){
