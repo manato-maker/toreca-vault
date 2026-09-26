@@ -154,7 +154,8 @@ function upsertApplication_(lotteries, text, message, now) {
   const sourceText=[text, String(message.getFrom ? message.getFrom() : '')].join('\n');
   const isToysRUs = /toysrus|トイザらス|las\.toysrus\.co\.jp/i.test(sourceText);
   const isSanyodo = /三洋堂|select-type\.com/i.test(sourceText);
-  if (!applicationNo && (isToysRUs || isSanyodo)) applicationNo = 'mail-' + message.getId();
+  const isGeo = /geonet\.jp|ゲオ|GEO/i.test(sourceText);
+  if (!applicationNo && (isToysRUs || isSanyodo || isGeo)) applicationNo = 'mail-' + message.getId();
   if (!applicationNo) return { kind: 'review', reason: '申込番号を抽出できない' };
   if (lotteries.some(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo))) {
     return { kind: 'duplicate' };
@@ -162,9 +163,11 @@ function upsertApplication_(lotteries, text, message, now) {
   let title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
   if (!title && isToysRUs) { const m = String(message.getSubject ? message.getSubject() : '').match(/[『「]\s*([^』」]+)[』」]/); if (m) title = m[1].trim(); }
   if (!title && isSanyodo) { const m = String(text).match(/^(.+?)抽選販売へご応募/m); if (m) title = m[1].trim(); }
+  if (!title && isGeo) { const m = String(text).match(/\[(?:お申し込みいただいた商品|当選した商品)\]\s*\n\s*([^\r\n]+)/); if (m) title = m[1].trim(); }
   let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗|受取登録店舗)\s*[:：は]*\s*[「『]?/m).replace(/[」』]$/,'').trim();
   if (isToysRUs) { const sm=String(text).match(/受取登録店舗は[「『]([^」』]+)[」』]/); if(sm) store=sm[1].trim(); }
   if (!store && isSanyodo) { const answers=[...String(text).matchAll(/━回答内容━+\s*\n+\s*([^\r\n]+)/g)].map(m=>m[1].trim()); if(answers.length) store=answers[answers.length-1]; }
+  if (!store && isGeo) store = 'GEO（受取店舗未確定）';
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表)/);
@@ -181,7 +184,7 @@ function upsertApplication_(lotteries, text, message, now) {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   });
-  if (store === 'KONAMI STYLE' && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
+  if ((store === 'KONAMI STYLE' || isGeo) && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
   return { kind: 'created' };
 }
 
