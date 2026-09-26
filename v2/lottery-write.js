@@ -1,6 +1,7 @@
-import{validateState}from'./core.js';
+import{validateState,applyTransaction}from'./core.js';
 import{loadVaultV2,getVaultV2Config}from'./browser-sync.js';
 import{saveV2}from'./api-client.js';
+import{assertV2WriteEnabled}from'./write-gate.js';
 
 const clone=x=>structuredClone(x);
 const text=x=>String(x||'').trim();
@@ -62,4 +63,51 @@ export async function commitV2LotteryManualPatches(patches,config=getVaultV2Conf
  if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('抽選手動保存後のrevision検証に失敗しました');
  if(JSON.stringify(reread.payload.transactions)!==JSON.stringify(before.payload.transactions)||JSON.stringify(reread.payload.inventoryLots)!==JSON.stringify(before.payload.inventoryLots)||JSON.stringify(reread.payload.marketQuotes)!==JSON.stringify(before.payload.marketQuotes))throw new Error('安全停止: 保存後に抽選以外が変化');
  return{revision:reread.revision,payload:reread.payload,updated:patches.length,unchanged:false};
+}
+
+
+const receiptCondition=(category,shrink)=>category!=='BOX'?'':({'シュリンクあり':'あり','シュリンクなし':'なし','対象外':'対象外','あり':'あり','なし':'なし'}[text(shrink)]||'未開封');
+export function applyLotteryReceiptPurchase(state,input,mutationId){
+ validateState(state);if(!mutationId)throw new Error('mutationId が必要です');
+ const data=input&&typeof input==='object'?input:{},id=text(data.id),next=clone(state),item=(next.lotteries||[]).find(x=>text(x.id)===id);
+ if(!item)throw new Error('対象の抽選データが見つかりません');
+ const receivedDate=text(data.receivedDate),product=text(data.product||item.title),store=text(data.store||item.store),category=text(data.category||'BOX'),quantity=Number(data.quantity||1),total=Number(data.total||0),addPurchase=data.addPurchase!==false;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate))throw new Error('受取日が不正です');
+ if(!product||!store)throw new Error('商品名・店舗名が必要です');
+ if(!['BOX','パック','カード'].includes(category))throw new Error('購入種別が不正です');
+ if(!Number.isInteger(quantity)||quantity<=0)throw new Error('数量は正の整数が必要です');
+ if(addPurchase&&(!Number.isFinite(total)||total<=0))throw new Error('購入合計金額を入力してください');
+ item.status='購入済';item.receiptStatus='受取済み';item.receivedDate=receivedDate;item.shrinkStatus=text(data.shrinkStatus||item.shrinkStatus||'未選択');
+ if(data.receiptPhoto)item.receiptPhoto=data.receiptPhoto;
+ item.receiptAmount=Number.isFinite(total)&&total>0?total:item.receiptAmount;
+ item.receiptProduct=product;item.receiptStore=store;item.receiptQuantity=quantity;item.receiptCategory=category;item.updatedAt=new Date().toISOString();
+ const txId='lottery-receipt-purchase-'+id;
+ if(addPurchase){
+  const price=total/quantity,existing=next.transactions.find(x=>x.id===txId);
+  if(existing){
+   const same=text(existing.product)===product&&text(existing.store)===store&&text(existing.date)===receivedDate&&Number(existing.quantity)===quantity&&Number(existing.price)===price&&text(existing.category)===category;
+   if(!same)throw new Error('この抽選の購入履歴は既に登録済みです。購入履歴への追加をOFFにして受取情報だけ更新してください');
+  }else{
+   const tx={id:txId,type:'purchase',product,productKey:product,store,date:receivedDate,quantity,price,total,category,condition:receiptCondition(category,data.shrinkStatus),sourceLotteryId:id,memo:'抽選受取｜レシート確認'};
+   const applied=applyTransaction(next,tx,mutationId+'-purchase');
+   next.transactions=applied.transactions;next.inventoryLots=applied.inventoryLots;next.auditLog=applied.auditLog;
+  }
+ }
+ next.revision=Number(state.revision)+1;next.lastMutationId=mutationId;
+ next.auditLog.push({mutationId,revision:next.revision,lotteryReceiptId:id,purchaseTransactionId:addPurchase?txId:'',kind:'lottery-receipt'});
+ for(const a of next.auditLog)if(a.mutationId===mutationId+'-purchase')a.revision=next.revision;
+ validateState(next);return next;
+}
+export async function commitV2LotteryReceiptPurchase(input,config=getVaultV2Config()){
+ const before=await loadVaultV2(config);assertV2WriteEnabled(before.revision);
+ const mutationId='lottery-receipt-'+crypto.randomUUID(),next=applyLotteryReceiptPurchase(before.payload,input,mutationId);
+ await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
+ const item=reread.payload.lotteries.find(x=>text(x.id)===text(input.id));
+ if(!item||item.status!=='購入済'||item.receiptStatus!=='受取済み')throw new Error('受取情報の保存確認に失敗しました');
+ if(input.addPurchase!==false){
+  const txId='lottery-receipt-purchase-'+text(input.id);
+  if(reread.payload.transactions.filter(x=>x.id===txId).length!==1)throw new Error('購入履歴の一意性確認に失敗しました');
+ }
+ if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('受取保存後のrevision検証に失敗しました');
+ return{revision:reread.revision,payload:reread.payload,lottery:item};
 }
