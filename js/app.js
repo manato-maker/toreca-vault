@@ -3,15 +3,15 @@ import{getSyncConfig,setSyncConfig,clearSyncConfig,pullRemote,pushRemote}from'./
 import{assets,storeStats}from'./calculations.js';
 import{id,importLegacy}from'./schema.js';
 import{applyPurchase,applySale,applyOpening}from'./inventory.js';
-import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disableV2ReadOnly}from'./v2-readonly.js';
-import{requiresVaultV2}from'../v2/browser-sync.js';
+import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disableV2ReadOnly}from'./v2-readonly.js?v=20260926-v3';
+import{requiresVaultV2}from'../v2/browser-sync.js?v=20260926-v3';
 import{acceptanceSnapshot,pendingMigrationSnapshot}from'../v2/acceptance.js';
 import{commitV2Transaction,commitV2CardIdentity,commitV2CardIdentityBatch}from'../v2/ui-write.js';
 import{commitV2LotteryBatch}from'../v2/lottery-write.js';
 import{commitV2MarketQuoteBatch}from'../v2/market-quote-write.js';
 import{gmailLotteryImport}from'../data/gmail-lotteries.js';
 import{currentBoxMarketQuotes,currentBoxMarketMeta}from'../data/current-box-market.js';
-import{isV2WriteEnabled,enableV2WriteForSession,advanceV2WriteRevision,disableV2Write}from'../v2/write-gate.js';
+import{isV2WriteEnabled,enableV2WriteForSession,advanceV2WriteRevision,disableV2Write}from'../v2/write-gate.js?v=20260926-v3';
 import{canUseV2Entry,v2EntryPayload}from'../v2/ui-entry.js';
 
 const jstToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
