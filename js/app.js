@@ -119,7 +119,7 @@ function parseReceiptOcr(text){
 }
 async function recognizeReceiptPhoto(file){
  const Tesseract=await loadReceiptOcr();setReceiptOcrStatus('OCR準備中…');
- const worker=await Tesseract.createWorker('jpn+eng',1,{logger:m=>{if(m?.status==='recognizing text'&&Number.isFinite(m.progress))setReceiptOcrStatus('OCR '+Math.round(m.progress*100)+'%')}});
+ const worker=await Tesseract.createWorker(['jpn','eng'],1,{logger:m=>{if(m?.status==='recognizing text'&&Number.isFinite(m.progress))setReceiptOcrStatus('OCR '+Math.round(m.progress*100)+'%')}});
  try{const result=await worker.recognize(file);return String(result?.data?.text||'')}finally{await worker.terminate()}
 }
 
@@ -133,7 +133,7 @@ function openReceiptDialog(item){
  document.querySelector('#receipt-quantity').value=item.receiptQuantity||1;
  document.querySelector('#receipt-category').value=receiptCategoryFor(item);
  document.querySelector('#receipt-shrink').value=item.shrinkStatus||'未選択';
- document.querySelector('#receipt-add-purchase').checked=true;
+ document.querySelector('#receipt-add-purchase').checked=item.status!=='購入済';
  document.querySelector('#receipt-photo').value='';
  const preview=document.querySelector('#receipt-preview');
  preview.src=item.receiptPhoto||'';preview.hidden=!item.receiptPhoto;
@@ -143,10 +143,10 @@ function openReceiptDialog(item){
 }
 async function compressReceiptPhoto(file){
  if(!file)return'';
- const image=await createImageBitmap(file),max=1280,scale=Math.min(1,max/Math.max(image.width,image.height));
+ const image=await createImageBitmap(file),max=1024,scale=Math.min(1,max/Math.max(image.width,image.height));
  const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);
  canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);image.close();
- return canvas.toDataURL('image/jpeg',.72);
+ return canvas.toDataURL('image/jpeg',.62);
 }
 function toast(msg){const el=document.querySelector('#toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
 function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
