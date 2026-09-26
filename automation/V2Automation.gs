@@ -123,7 +123,7 @@ function runTv2MarketAuto(){
     const old=quote?Number(quote.price):result.price;
     const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
     target.previousPrice=Number.isFinite(old)?old:result.price;
-    target.price=result.price;target.checkedAt=date;target.source='カードラッシュ';target.fresh=true;
+    target.price=result.price;target.checkedAt=date;target.source=String(result.source||'');target.fresh=true;
     target.trend=result.price>target.previousPrice?'up':result.price<target.previousPrice?'down':'same';
     target.history=Array.isArray(target.history)?target.history:[];
     if(!target.history.some(h=>String(h.checkedAt||h.date)===date&&Number(h.price??h.value)===result.price))
