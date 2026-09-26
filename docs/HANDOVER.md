@@ -143,5 +143,5 @@
 - 目的: チャットから売却だけでなく購入もV2正本へ登録できる経路を準備する。
 - 変更: `runTv2ChatPurchase(command)` を追加し、購入取引と在庫lotをrequestIdで冪等登録する。売却は状態未指定で複数状態lotがある場合に停止し、重複requestIdはrevisionを増やさない。
 - 検証: 購入関数、購入lot、状態曖昧停止、no-op revisionの契約テストを追加。Actionsで結果確認する。
-- 本番状態: mainへ実装済み。Apps Script配布の成功確認待ち。
+- 本番状態: mainへ実装済み。Apps Script配布 #22（run 36221401223）成功。売却・購入関数とも本番Apps Scriptへ配布済み。
 - 残件: ChatGPTからApps Script関数を直接実行する認証済み接続口が必要。秘密情報や売買データを公開GitHub履歴へ流す方式は採用しない。
