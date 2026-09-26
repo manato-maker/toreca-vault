@@ -9,7 +9,7 @@ test('deploy patches only the card matcher and preserves remote API code', () =>
   const dir = fs.mkdtempSync(path.join(process.cwd(), '.test-cardrush-'));
   try {
     const file = path.join(dir, 'Code.js');
-    fs.writeFileSync(file, 'function doPost() { return "remote API"; }\nfunction findCardrushBuyback_() { return null; }\nfunction fetchAltemaBuyback_() { return "remote fallback"; }\nfunction onOpen() { return 1; }\n');
+    fs.writeFileSync(file, 'function doPost() { return "remote API"; }\nfunction findCardrushBuyback_() { return null; }\nfunction fetchAltemaBuyback_() { return "remote fallback"; }\nfunction onOpen() { return 1; }\nfunction refreshSealedMarketCandidates_() { return "old feed"; }\nfunction syncSealedMarketCandidates_() { return 1; }\n');
     const run = () => spawnSync(process.execPath, [patcher.pathname, file, source.pathname], {encoding:'utf8'});
     assert.equal(run().status, 0);
     const content = fs.readFileSync(file, 'utf8');
