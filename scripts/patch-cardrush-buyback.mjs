@@ -24,8 +24,11 @@ remote = replaceRange(remote, canonical,
   'function findCardrushBuyback_(', 'function fetchAltemaBuyback_(', 'card buyback',
   ['モンスターボールミラー','225/742']);
 
-remote = replaceRange(remote, canonical,
-  'function refreshSealedMarketCandidates_(', '\nfunction syncSealedMarketCandidates_(', 'sealed market parser',
-  ['tv2ParseSealedFeed_','sourceUrl','x-post']);
+const sealedStart = 'function refreshSealedMarketCandidates_(';
+const remoteSealed = remote.indexOf(sealedStart), canonicalSealed = canonical.indexOf(sealedStart);
+if (remoteSealed < 0 || canonicalSealed < 0) throw new Error('sealed market parser missing');
+const sealedReplacement = canonical.slice(canonicalSealed);
+for (const marker of ['tv2ParseSealedFeed_','sourceUrl','x-post']) if (!sealedReplacement.includes(marker)) throw new Error('sealed market parser marker missing');
+remote = remote.slice(0, remoteSealed) + sealedReplacement;
 
 fs.writeFileSync(remotePath, remote);
