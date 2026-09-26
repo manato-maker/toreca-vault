@@ -224,7 +224,7 @@ function storeMatches_(hay, key) {
 }
 
 function parseResult_(text, receivedAt) {
-  const win = /(ご当選|当選しました|当選のお知らせ|当選者)/.test(text);
+  const win = /(ご当選|当選しました|当選されました|当選となりました|当選のお知らせ|当選者)/.test(text);
   const loss = /(落選|残念ながら|ご用意できません|当選に至りません)/.test(text);
   const result = { status: win !== loss ? (win ? '当選' : '落選') : '', resultDate: Utilities.formatDate(receivedAt, TZ, 'yyyy-MM-dd') };
   result.receiveDeadline = contextualDate_(text, /(購入期限|購入期間|お支払期限|引取期限|受取期限)/);
