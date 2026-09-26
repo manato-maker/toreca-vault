@@ -40,6 +40,14 @@ function runTv2LotteryAuto(){
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
         newIds.push(id);return;
       }
+      const geo=tv2ResolveGeoResult_(state,message,text,now);
+      if(geo){
+        if(geo.kind==='created'){report.created++;changed=true}
+        else if(geo.kind==='updated'){report.updated++;changed=true}
+        else if(geo.kind==='duplicate')report.duplicate++;
+        else{report.review++;reviews.push({messageId:id,reason:geo.reason,subject:message.getSubject()})}
+        newIds.push(id);return;
+      }
       const match=matchLottery_(state.lotteries,text);
       if(match.kind==='outside')report.outside++;else if(match.kind==='review'){report.review++;reviews.push({messageId:id,reason:match.reason,subject:message.getSubject()})}else{
         const parsed=parseResult_(text,message.getDate());if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject:message.getSubject()})}
@@ -67,6 +75,37 @@ function runTv2LotteryAuto(){
 
 
 
+
+
+function tv2ResolveGeoResult_(state,message,text,now){
+ const from=String(message&&message.getFrom?message.getFrom():'');
+ const subject=String(message&&message.getSubject?message.getSubject():'');
+ if(!/geonet\.jp/i.test(from)||!/当選ならびにご購入手続き/.test(subject))return null;
+ const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const after=label=>{const i=lines.findIndex(x=>x===label);return i>=0&&i+1<lines.length?lines[i+1]:''};
+ const title=after('[当選した商品]'),store=after('[受取店舗名]');
+ if(!title||!store)return{kind:'review',reason:'GEO当選メールから商品名または受取店舗名を抽出できない'};
+ const titleKey=productKey_(title);
+ const candidates=(state.lotteries||[]).filter(x=>{
+   const tk=productKey_(x.title||''),sk=normalize_(x.store||'');
+   return tk&&productMatches_(titleKey,tk)&&(/geo|ゲオ/.test(sk));
+ });
+ if(candidates.length>1)return{kind:'review',reason:'GEO当選メールに一致する登録済み抽選が複数あります'};
+ const parsed=parseResult_(text,message.getDate());
+ if(parsed.status!=='当選')return{kind:'review',reason:'GEO当選メールの当選判定に失敗'};
+ let item=candidates[0];
+ if(!item){
+   item={id:'lottery-geo-'+message.getId(),title:cleanLotteryTitle_(title),store:cleanStoreName_(store),status:'当選',resultDate:parsed.resultDate||'',receiptStatus:'未受取',receivedDate:'',memo:'自動登録｜GEO当選メール',gmailMessageId:message.getId(),createdAt:now.toISOString(),updatedAt:now.toISOString()};
+   state.lotteries.push(item);return{kind:'created',item};
+ }
+ const old=JSON.stringify(item);
+ item.store=cleanStoreName_(store);
+ if(['応募済','応募済み'].includes(item.status))item.status='当選';
+ item.resultDate=parsed.resultDate||item.resultDate;
+ if(item.receiptStatus!=='受取済み')item.receiptStatus='未受取';
+ item.gmailMessageId=message.getId();item.updatedAt=now.toISOString();
+ return{kind:JSON.stringify(item)===old?'duplicate':'updated',item};
+}
 
 function tv2IsApplicationMessage_(message,text){
  const subject=String(message&&message.getSubject?message.getSubject():'');
