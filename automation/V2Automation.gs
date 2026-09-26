@@ -113,6 +113,7 @@ function runTv2MarketAuto(){
       report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
     const name=String(lot.product||'').replace(model,'').trim(),variant=tv2CardVariant_(lot);
+    // Direct Cardrush page fallback is intentionally fail-closed.
     let result=rows&&name?findCardrushBuyback_(rows,name,model,variant):null;
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchCardrushRetail_(name,model,variant);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
