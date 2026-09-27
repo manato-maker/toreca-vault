@@ -471,3 +471,60 @@ function tv2ProcessChatTradeDrafts_(){
  });
  return results;
 }
+
+function runTv2RepairPlayzNamba20260927(){
+ const baseId='pending-plays-30th-box-20260920';
+ const saleId='chat-sale-20260926-30th-celebration-mimi-24100-1';
+ const result=tv2Mutate_('repair-playz-namba-20260927',state=>{
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  const baseMatches=state.transactions.filter(t=>String(t.id||'')===baseId);
+  if(baseMatches.length!==1||baseMatches[0].type!=='purchase')throw new Error('プレイズなんば元購入履歴を一意に確認できません');
+  const base=baseMatches[0],saleMatches=state.transactions.filter(t=>String(t.id||'')===saleId);
+  if(saleMatches.length!==1||saleMatches[0].type!=='sale')throw new Error('昨日の買取ミミ売却を一意に確認できません');
+  const sale=saleMatches[0],baseQty=Number(base.quantity||1);
+  if(baseQty!==1||Number(sale.quantity||0)!==1||String(sale.date||'')!=='2026-09-26'||normalize_(sale.store)!==normalize_('買取ミミ'))throw new Error('対象売却の数量・日付・店舗が想定と一致しません');
+  const oldUnit=Number(base.price||base.unitCost||0),oldTotal=oldUnit*baseQty,saleCost=Number(sale.acquisitionCost);
+  if(!Number.isFinite(oldUnit)||oldUnit<=0)throw new Error('プレイズなんば元購入金額を確認できません');
+  if(Number.isFinite(saleCost)&&saleCost!==oldTotal&&saleCost!==7200)throw new Error('売却原価がプレイズなんば購入と一致しないため自動修正を停止しました');
+  const baseKey=normalize_(base.productKey||base.product),playz=normalize_('プレイズ'),nambaA=normalize_('なんば'),nambaB=normalize_('難波');
+  const isPlayzNambaStore=s=>{const n=normalize_(s);return n.includes(playz)&&(n.includes(nambaA)||n.includes(nambaB))};
+  const receiptTx=state.transactions.filter(t=>t.type==='purchase'&&String(t.id||'').startsWith('lottery-receipt-purchase-')&&isPlayzNambaStore(t.store)&&normalize_(t.productKey||t.product)===baseKey);
+  if(receiptTx.length>1)throw new Error('プレイズなんばの受取購入履歴が複数あり、自動削除を停止しました');
+  const receiptIds=new Set(receiptTx.map(t=>String(t.id||'')));
+  const lotteryIds=new Set(receiptTx.map(t=>String(t.sourceLotteryId||'')).filter(Boolean));
+  base.price=7200;
+  if(Object.prototype.hasOwnProperty.call(base,'unitCost'))base.unitCost=7200;
+  base.total=7200;
+  sale.acquisitionCost=7200;
+  state.transactions=state.transactions.filter(t=>!receiptIds.has(String(t.id||'')));
+  state.inventoryLots=state.inventoryLots.filter(l=>{
+   const source=String(l.sourceTransactionId||'');
+   return source!==baseId&&!receiptIds.has(source);
+  });
+  const candidates=state.lotteries.filter(x=>lotteryIds.has(String(x.id||''))||(isPlayzNambaStore(x.receiptStore||x.store)&&normalize_(x.receiptProduct||x.title)===baseKey));
+  if(candidates.length>1&&!lotteryIds.size)throw new Error('プレイズなんばの受取抽選を一意に確認できません');
+  candidates.forEach(item=>{
+   item.status='購入済';item.receiptStatus='受取済み';item.receiptAmount=7200;item.receiptQuantity=1;item.receiptCategory='BOX';item.updatedAt=new Date().toISOString();
+  });
+  return{changed:true,baseId,saleId,removedReceiptTransactionId:receiptTx[0]?String(receiptTx[0].id):'',updatedLotteryIds:candidates.map(x=>x.id),oldUnitCost:oldUnit,newUnitCost:7200};
+ });
+ const check=tv2Load_(),state=check.payload||{};
+ const base=state.transactions.filter(t=>String(t.id||'')===baseId),sale=state.transactions.filter(t=>String(t.id||'')===saleId);
+ const leftoverLots=(state.inventoryLots||[]).filter(l=>String(l.sourceTransactionId||'')===baseId||String(l.sourceTransactionId||'').startsWith('lottery-receipt-purchase-')&&(normalize_(l.productKey||l.product).includes(normalize_('30th'))));
+ const receiptDup=(state.transactions||[]).filter(t=>t.type==='purchase'&&String(t.id||'').startsWith('lottery-receipt-purchase-')&&normalize_(t.store).includes(normalize_('プレイズ'))&&normalize_(t.productKey||t.product)===normalize_(base[0]&&(base[0].productKey||base[0].product)));
+ const relatedLottery=(state.lotteries||[]).filter(x=>normalize_(x.receiptStore||x.store).includes(normalize_('プレイズ'))&&normalize_(x.receiptProduct||x.title)===normalize_(base[0]&&(base[0].productKey||base[0].product)));
+ const verified=base.length===1&&Number(base[0].price)===7200&&sale.length===1&&Number(sale[0].acquisitionCost)===7200&&receiptDup.length===0&&leftoverLots.filter(l=>String(l.sourceTransactionId||'')===baseId||receiptDup.some(t=>String(t.id||'')===String(l.sourceTransactionId||''))).length===0;
+ if(!verified)throw new Error('プレイズなんば修正後の再読込検証に失敗しました');
+ const summary={ok:true,revision:Number(check.revision),basePurchase:{id:base[0].id,product:base[0].product,store:base[0].store,date:base[0].date,quantity:base[0].quantity,price:base[0].price,total:base[0].total},sale:{id:sale[0].id,store:sale[0].store,date:sale[0].date,quantity:sale[0].quantity,price:sale[0].price,acquisitionCost:sale[0].acquisitionCost},receiptDuplicateCount:receiptDup.length,sourceInventoryCount:(state.inventoryLots||[]).filter(l=>String(l.sourceTransactionId||'')===baseId).length,relatedLotteries:relatedLottery.map(x=>({id:x.id,status:x.status,receiptStatus:x.receiptStatus,receiptAmount:x.receiptAmount,receivedDate:x.receivedDate})),mutationResult:result};
+ const to=Session.getEffectiveUser().getEmail();if(!to)throw new Error('修正結果の保存先メールを取得できません');
+ GmailApp.createDraft(to,'[Toreca Vault Repair Result 20260927]',JSON.stringify(summary,null,2));
+ return summary;
+}
+function scheduleTv2RepairPlayzNamba20260927(){
+ const name='runTv2RepairPlayzNamba20260927';
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===name).forEach(t=>ScriptApp.deleteTrigger(t));
+ ScriptApp.newTrigger(name).timeBased().after(30*1000).create();
+ return{scheduled:true,handler:name};
+}
