@@ -265,13 +265,13 @@ async function processPendingCommandQueueOnBoot(){
  }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
 }
 async function refreshSinglesOnceOnBoot(){
- const key='toreca-vault:single-market-refresh:20260928-v3';
+ const key='toreca-vault:single-market-refresh:20260928-v4';
  if(localStorage.getItem(key)==='done')return;
  const config=getVaultV2Config();if(!config.token||!v2Connected())return;
  try{
   setSyncStatus('シングル最新相場を取得中…');
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),120000);let response;
-  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'refresh-single-market-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
+  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'repair-known-card-identities-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
   const result=await response.json();if(!result.ok)throw new Error(result.error||'シングル相場更新に失敗しました');
   const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('相場更新後のV2受入チェックに失敗しました');
   const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));localStorage.setItem(key,'done');render();
