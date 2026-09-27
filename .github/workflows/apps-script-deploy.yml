@@ -65,6 +65,10 @@ jobs:
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
       - name: Update market refresh web deployment
         run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
+      - name: Process Mega Rayquaza opening now
+        run: |
+          npx clasp run runTv2LotteryAuto
+          npx clasp run runTv2VerifyMegaRayquaza20260927
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
