@@ -5,6 +5,7 @@ import{assertV2WriteEnabled}from'./write-gate.js';
 
 const clone=x=>structuredClone(x);
 const text=x=>String(x||'').trim();
+function verifyPersistedMutation(reread,nextRevision,mutationId,label){const revision=Number(reread?.revision),expected=Number(nextRevision),audits=(reread?.payload?.auditLog||[]).filter(x=>x.mutationId===mutationId);if(!Number.isFinite(revision)||revision<expected||audits.length!==1)throw new Error(label+'の保存検証に失敗しました');return revision}
 const norm=x=>text(x).normalize('NFKC').toLocaleLowerCase('ja').replace(/\s+/g,' ');
 const key=x=>text(x.applicationId||x.entryId||x.referenceId)||[norm(x.store),norm(x.title)].join('::');
 const statusRank={応募前:0,応募済:1,落選:2,当選:2,購入済:3};
@@ -32,7 +33,7 @@ export async function commitV2LotteryBatch(items,config=getVaultV2Config()){
  if(JSON.stringify(before.payload.transactions)!==JSON.stringify(next.transactions)||JSON.stringify(before.payload.inventoryLots)!==JSON.stringify(next.inventoryLots)||JSON.stringify(before.payload.marketQuotes)!==JSON.stringify(next.marketQuotes))throw new Error('安全停止: 抽選以外のV2データが変化');
  if(Number(next.revision)===Number(before.payload.revision)&&next.lastMutationId===before.payload.lastMutationId)return{revision:before.revision,lotteries:before.payload.lotteries,unchanged:true};
  await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
- if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('抽選保存後のrevision検証に失敗しました');
+ verifyPersistedMutation(reread,next.revision,mutationId,'抽選');
  if(JSON.stringify(reread.payload.transactions)!==JSON.stringify(before.payload.transactions)||JSON.stringify(reread.payload.inventoryLots)!==JSON.stringify(before.payload.inventoryLots)||JSON.stringify(reread.payload.marketQuotes)!==JSON.stringify(before.payload.marketQuotes))throw new Error('安全停止: 保存後に抽選以外が変化');
  return{revision:reread.revision,lotteries:reread.payload.lotteries,unchanged:false};
 }
@@ -60,7 +61,7 @@ export async function commitV2LotteryManualPatches(patches,config=getVaultV2Conf
  if(JSON.stringify(before.payload.transactions)!==JSON.stringify(next.transactions)||JSON.stringify(before.payload.inventoryLots)!==JSON.stringify(next.inventoryLots)||JSON.stringify(before.payload.marketQuotes)!==JSON.stringify(next.marketQuotes))throw new Error('安全停止: 抽選以外のV2データが変化');
  if(Number(next.revision)===Number(before.payload.revision)&&next.lastMutationId===before.payload.lastMutationId)return{revision:before.revision,payload:before.payload,updated:0,unchanged:true};
  await saveV2(config.url,config.token,next,before.revision);const reread=await loadVaultV2(config);
- if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('抽選手動保存後のrevision検証に失敗しました');
+ verifyPersistedMutation(reread,next.revision,mutationId,'抽選手動更新');
  if(JSON.stringify(reread.payload.transactions)!==JSON.stringify(before.payload.transactions)||JSON.stringify(reread.payload.inventoryLots)!==JSON.stringify(before.payload.inventoryLots)||JSON.stringify(reread.payload.marketQuotes)!==JSON.stringify(before.payload.marketQuotes))throw new Error('安全停止: 保存後に抽選以外が変化');
  return{revision:reread.revision,payload:reread.payload,updated:patches.length,unchanged:false};
 }
@@ -108,6 +109,6 @@ export async function commitV2LotteryReceiptPurchase(input,config=getVaultV2Conf
   const txId='lottery-receipt-purchase-'+text(input.id);
   if(reread.payload.transactions.filter(x=>x.id===txId).length!==1)throw new Error('購入履歴の一意性確認に失敗しました');
  }
- if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==mutationId)throw new Error('受取保存後のrevision検証に失敗しました');
+ verifyPersistedMutation(reread,next.revision,mutationId,'受取');
  return{revision:reread.revision,payload:reread.payload,lottery:item};
 }
