@@ -135,6 +135,7 @@ function openReceiptDialog(item){
  document.querySelector('#receipt-shrink').value=item.shrinkStatus||'未選択';
  document.querySelector('#receipt-add-purchase').checked=item.status!=='購入済';
  document.querySelector('#receipt-photo').value='';
+ document.querySelector('#receipt-camera').value='';
  const preview=document.querySelector('#receipt-preview');
  preview.src=item.receiptPhoto||'';preview.hidden=!item.receiptPhoto;
  const review=document.querySelector('#receipt-ocr-review');review.hidden=true;review.textContent='';
@@ -152,13 +153,17 @@ function toast(msg){const el=document.querySelector('#toast');el.textContent=msg
 function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function readFile(input){const file=input.files[0];if(!file)return null;return file.text()}
 
-document.querySelector('#receipt-photo').addEventListener('change',async e=>{
+const receiptPhotoInputs=['receipt-camera','receipt-photo'];
+const selectedReceiptPhoto=()=>receiptPhotoInputs.map(id=>document.querySelector('#'+id)?.files?.[0]).find(Boolean)||null;
+async function handleReceiptPhotoSelection(e){
  const file=e.target.files?.[0],preview=document.querySelector('#receipt-preview');
  if(!file){const item=state.lotteries.find(x=>x.id===receiptTargetId);preview.src=item?.receiptPhoto||'';preview.hidden=!item?.receiptPhoto;return}
- try{preview.src=await compressReceiptPhoto(file);preview.hidden=false;setReceiptOcrStatus('写真を選択しました。読み取りを押してください')}catch(err){setReceiptOcrStatus('写真プレビュー失敗','warning')}
-});
+ for(const id of receiptPhotoInputs)if(id!==e.target.id)document.querySelector('#'+id).value='';
+ try{preview.src=await compressReceiptPhoto(file);preview.hidden=false;setReceiptOcrStatus(e.target.id==='receipt-camera'?'撮影した写真を選択しました。読み取りを押してください':'保存済み写真を選択しました。読み取りを押してください')}catch(err){setReceiptOcrStatus('写真プレビュー失敗','warning')}
+}
+for(const id of receiptPhotoInputs)document.querySelector('#'+id).addEventListener('change',handleReceiptPhotoSelection);
 document.querySelector('#receipt-ocr-button').addEventListener('click',async()=>{
- const file=document.querySelector('#receipt-photo').files?.[0];
+ const file=selectedReceiptPhoto();
  if(!file){alert('先にレシート・購入証拠の写真を選んでください');return}
  const button=document.querySelector('#receipt-ocr-button'),review=document.querySelector('#receipt-ocr-review');
  button.disabled=true;review.hidden=true;
@@ -180,7 +185,7 @@ document.addEventListener('click',async e=>{const a=e.target.closest('[data-acti
 document.querySelector('#receipt-form').addEventListener('submit',async e=>{
  e.preventDefault();const item=state.lotteries.find(x=>x.id===receiptTargetId);if(!item)return;
  try{
-  const file=document.querySelector('#receipt-photo').files[0],quantity=Number(document.querySelector('#receipt-quantity').value||1),total=Number(document.querySelector('#receipt-total').value||0),addPurchase=document.querySelector('#receipt-add-purchase').checked;
+  const file=selectedReceiptPhoto(),quantity=Number(document.querySelector('#receipt-quantity').value||1),total=Number(document.querySelector('#receipt-total').value||0),addPurchase=document.querySelector('#receipt-add-purchase').checked;
   const payload={id:item.id,product:document.querySelector('#receipt-product').value.trim(),store:document.querySelector('#receipt-store').value.trim(),receivedDate:document.querySelector('#receipt-date').value||today(),total,quantity,category:document.querySelector('#receipt-category').value,shrinkStatus:document.querySelector('#receipt-shrink').value,addPurchase};
   if(file)payload.receiptPhoto=await compressReceiptPhoto(file);
   if(addPurchase&&total<=0)throw new Error('購入履歴へ追加する場合は購入合計金額を確認してください');
