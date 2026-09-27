@@ -606,7 +606,7 @@ function tv2ProcessChatTradeDrafts_(){
 
 function tv2HandleMarketRefreshWeb_(req){
  const body=req&&typeof req==='object'?req:{},action=String(body.action||'');
- const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||'');
+ const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||'');
  if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
  if(action==='refresh-market-v2'){
   const result=runTv2MarketAuto({skipQueue:true});
