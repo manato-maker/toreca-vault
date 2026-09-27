@@ -612,3 +612,37 @@ function tv2ProcessOneCommandByNonce_(requestId,nonce){
  draft.deleteDraft();
  return{ok:true,revision:Number(loaded.revision),card:{product:lot[0].product,set:lot[0].set,quantity:lot[0].quantity,memo:lot[0].memo},opening:{product:opening[0].product,quantity:opening[0].quantity,date:opening[0].date},result};
 }
+
+function runTv2MegaRayquazaOnce20260927_(){
+ const handler='runTv2MegaRayquazaOnce20260927_';
+ try{
+  const requestId='20260927-storm-emeralda-mega-rayquaza-ex-m6-095-076-sr',subject='[Toreca Vault Command]';
+  const drafts=GmailApp.getDrafts().filter(d=>{
+   if(String(d.getMessage().getSubject()||'').trim()!==subject)return false;
+   try{return String(JSON.parse(String(d.getMessage().getPlainBody()||'').trim()).requestId||'')===requestId}catch(e){return false}
+  });
+  if(drafts.length>1)throw new Error('メガレックウザのコマンド下書きが複数あります');
+  let result={duplicate:true,changed:false};
+  if(drafts.length===1){
+   const command=JSON.parse(String(drafts[0].getMessage().getPlainBody()||'').trim());
+   result=runTv2ChatPurchase(command);
+   drafts[0].deleteDraft();
+  }
+  const loaded=tv2Load_(),state=loaded.payload||{},txId='chat-purchase-'+requestId,openingId='chat-opening-'+requestId,lotId=txId+'-lot';
+  const tx=(state.transactions||[]).filter(t=>String(t.id||'')===txId),opening=(state.transactions||[]).filter(t=>String(t.id||'')===openingId),lot=(state.inventoryLots||[]).filter(l=>String(l.id||'')===lotId);
+  const ok=tx.length===1&&opening.length===1&&lot.length===1&&String(lot[0].product||'')==='メガレックウザex'&&String(lot[0].set||'')==='M6 095/076'&&Number(lot[0].quantity)===1&&/SR/.test(String(lot[0].memo||''))&&normalize_(String(opening[0].product||'')).includes(normalize_('ストームエメラルダ'));
+  const summary={ok,revision:Number(loaded.revision),card:lot[0]?{product:lot[0].product,set:lot[0].set,quantity:lot[0].quantity,memo:lot[0].memo}:null,opening:opening[0]?{product:opening[0].product,quantity:opening[0].quantity,date:opening[0].date}:null,result};
+  const to=Session.getEffectiveUser().getEmail();
+  if(to){const resultSubject='[Toreca Vault Opening Result 20260927]';GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());GmailApp.createDraft(to,resultSubject,JSON.stringify(summary,null,2));}
+  if(!ok)throw new Error('メガレックウザ開封獲得のV2再読込検証に失敗しました');
+  return summary;
+ }finally{
+  ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===handler).forEach(t=>ScriptApp.deleteTrigger(t));
+ }
+}
+function scheduleTv2MegaRayquazaOnce20260927(){
+ const handler='runTv2MegaRayquazaOnce20260927_';
+ ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()===handler).forEach(t=>ScriptApp.deleteTrigger(t));
+ ScriptApp.newTrigger(handler).timeBased().after(30000).create();
+ return{scheduled:true,handler};
+}
