@@ -572,3 +572,12 @@ function tv2ProcessChatTradeDrafts_(){
  });
  return results;
 }
+
+function tv2HandleMarketRefreshWeb_(req){
+ const body=req&&typeof req==='object'?req:{};
+ if(String(body.action||'')!=='refresh-market-v2')throw new Error('unsupported action');
+ const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||'');
+ if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
+ const result=runTv2MarketAuto();
+ return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+}
