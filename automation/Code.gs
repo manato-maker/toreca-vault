@@ -448,6 +448,7 @@ function fetchToretokuBuyback_(product, setText, model, variant) {
     if(vn===normalize_('マスターボールミラー') && !rv.includes(normalize_('マスターボール')))continue;
     if(vn===normalize_('モンスターボールミラー') && (!rv.includes(normalize_('モンスターボール'))||rv.includes(normalize_('マスターボール'))))continue;
     if(vn===normalize_('ミラー') && !rv.includes(normalize_('ミラー')))continue;
+    if(vn===normalize_('通常版') && /エラー|加工エラー|ミラー/.test(rarity))continue;
     if(!vn && /ミラー/.test(rarity))continue;
     matches.push({price,rarity,modelNumber});
   }
