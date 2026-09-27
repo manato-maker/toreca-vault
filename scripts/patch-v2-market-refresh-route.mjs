@@ -12,7 +12,7 @@ const route=`function doPost(e) {
     try { return jsonResponse_(tv2ProcessMegaRayquazaOnceWeb_()); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }
-  if (['refresh-market-v2','refresh-single-market-v2','process-command-queue-v2'].includes(String(__tv2EarlyReq.action || ''))) {
+  if (['refresh-market-v2','refresh-single-market-v2','repair-known-card-identities-v2','process-command-queue-v2'].includes(String(__tv2EarlyReq.action || ''))) {
     try { return tv2HandleMarketRefreshWeb_(__tv2EarlyReq); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }`;
