@@ -646,3 +646,10 @@ function scheduleTv2MegaRayquazaOnce20260927(){
  ScriptApp.newTrigger(handler).timeBased().after(30000).create();
  return{scheduled:true,handler};
 }
+
+function tv2ProcessMegaRayquazaOnceWeb_(){
+ return tv2ProcessOneCommandByNonce_(
+  '20260927-storm-emeralda-mega-rayquaza-ex-m6-095-076-sr',
+  'mr-20260927-5fa3c78b1e6249d8a6c1f047b39e52ad'
+ );
+}
