@@ -581,3 +581,17 @@ function tv2HandleMarketRefreshWeb_(req){
  const result=runTv2MarketAuto({skipQueue:true});
  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
 }
+
+function runTv2VerifyMegaRayquaza20260927(){
+ const requestId='20260927-storm-emeralda-mega-rayquaza-ex-m6-095-076-sr';
+ const txId='chat-purchase-'+requestId,openingId='chat-opening-'+requestId,lotId=txId+'-lot';
+ const loaded=tv2Load_(),state=loaded.payload||{};
+ const tx=(state.transactions||[]).filter(t=>String(t.id||'')===txId);
+ const opening=(state.transactions||[]).filter(t=>String(t.id||'')===openingId);
+ const lot=(state.inventoryLots||[]).filter(l=>String(l.id||'')===lotId);
+ const ok=tx.length===1&&opening.length===1&&lot.length===1&&String(lot[0].product||'')==='メガレックウザex'&&String(lot[0].set||'')==='M6 095/076'&&Number(lot[0].quantity)===1&&/SR/.test(String(lot[0].memo||''))&&/ストームエメラルダ/.test(String(opening[0].product||''));
+ const summary={ok,revision:Number(loaded.revision),transactionCount:tx.length,openingCount:opening.length,lotCount:lot.length,card:lot[0]?{product:lot[0].product,set:lot[0].set,quantity:lot[0].quantity,memo:lot[0].memo}:null,opening:opening[0]?{product:opening[0].product,quantity:opening[0].quantity,date:opening[0].date}:null};
+ const to=Session.getEffectiveUser().getEmail();if(to){const subject='[Toreca Vault Opening Result 20260927]';GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));}
+ if(!ok)throw new Error('メガレックウザ開封獲得のV2再読込検証に失敗しました');
+ return summary;
+}
