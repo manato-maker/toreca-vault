@@ -1,6 +1,7 @@
 const TV2_SYNC_URL_PROP='TV2_SYNC_URL';
 const TV2_SYNC_TOKEN_PROP='TV2_SYNC_TOKEN';
 const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
+const TV2_OPENING_COMMAND_V2='opening-acquire-v2';
 
 function installTv2Automation(){
   // Only replace schedules after both V2 jobs have successfully read and
