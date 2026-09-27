@@ -92,7 +92,7 @@ const pendingPresets={};
 function applyPendingPreset(type){const preset=pendingPresets[type];if(!preset)return;for(const [name,value] of Object.entries(preset)){const el=document.querySelector('#entry-form [name="'+name+'"]');if(el)el.value=String(value)}}
 function openForm(type){if(type==='dashboard')type='purchases';if(v2ModeLocked()&&!v2Connected()){toast('V2へ自動再接続できるまで保存できません');return}if(v2ModeLocked()&&!isV2WriteEnabled(Number(remoteRevision))){toast('V2確認モードは読み取り専用です');return}if(type==='calendar')type='lotteries';if(type==='ledger')type=subtype==='sales'?'sales':'purchases';if(type==='inventory')type=['boxes','packs','cards','products'].includes(subtype)?subtype:'boxes';if(type==='activity')type='openings';const f=fields[type];if(!f)return;document.querySelector('#entry-form').dataset.type=type;document.querySelector('#form-title').textContent=`${({lotteries:'抽選',purchases:'購入',sales:'売却',boxes:'BOX',packs:'パック',cards:'カード',openings:'開封',products:'商品'}[type])}を追加`;document.querySelector('#form-fields').innerHTML=f.map(([name,label,kind,extra])=>{const full=extra===1?' full':'';if(kind==='select')return`<div class="field${full}"><label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${extra.map(o=>`<option>${o}</option>`).join('')}</select></div>`;if(kind==='textarea')return`<div class="field${full}"><label for="f-${name}">${label}</label><textarea id="f-${name}" name="${name}"></textarea></div>`;return`<div class="field${full}"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${kind}" ${kind==='number'?'min="0" inputmode="numeric"':''} ${name==='quantity'?'value="1"':''} ${name==='date'?'value="'+today()+'"':''} ${['title','product','name'].includes(name)?'required':''}></div>`}).join('');applyPendingPreset(type);document.querySelector('#entry-dialog').showModal()}
 
-let receiptOcrLoader=null;
+let receiptOcrLoader=null,receiptPreparedPhoto=null;
 function receiptCategoryFor(item){const s=String(item?.receiptCategory||item?.category||item?.title||'');if(/スタートデッキ|デッキセット|カードセット|BOX|ボックス/i.test(s))return'BOX';if(/パック/.test(s))return'パック';if(/\d{1,3}\/\d{1,3}|カード/.test(s)&&!/セット/.test(s))return'カード';return'BOX'}
 function setReceiptOcrStatus(text,tone=''){const el=document.querySelector('#receipt-ocr-status');if(!el)return;el.textContent=text;el.dataset.tone=tone}
 function loadReceiptOcr(){
@@ -119,10 +119,10 @@ function parseReceiptOcr(text){
  const amount=receiptAmountFromOcr(text),date=receiptDateFromOcr(text);
  return{amount:amount?.amount||0,amountLine:amount?.line||'',date};
 }
-async function recognizeReceiptPhoto(file){
+async function recognizeReceiptPhoto(source){
  const Tesseract=await loadReceiptOcr();setReceiptOcrStatus('OCR準備中…');
  const worker=await Tesseract.createWorker(['jpn','eng'],1,{logger:m=>{if(m?.status==='recognizing text'&&Number.isFinite(m.progress))setReceiptOcrStatus('OCR '+Math.round(m.progress*100)+'%')}});
- try{const result=await worker.recognize(file);return String(result?.data?.text||'')}finally{await worker.terminate()}
+ try{const result=await worker.recognize(source);return String(result?.data?.text||'')}finally{await worker.terminate()}
 }
 
 function openReceiptDialog(item){
@@ -138,19 +138,38 @@ function openReceiptDialog(item){
  document.querySelector('#receipt-add-purchase').checked=item.status!=='購入済';
  document.querySelector('#receipt-photo').value='';
  document.querySelector('#receipt-camera').value='';
+ receiptPreparedPhoto=null;
  const preview=document.querySelector('#receipt-preview');
  preview.src=item.receiptPhoto||'';preview.hidden=!item.receiptPhoto;
  const review=document.querySelector('#receipt-ocr-review');review.hidden=true;review.textContent='';
  setReceiptOcrStatus('端末内OCR・外部AI送信なし');
  document.querySelector('#receipt-dialog').showModal();
 }
-async function compressReceiptPhoto(file){
- if(!file)return'';
- const image=await createImageBitmap(file),max=1024,scale=Math.min(1,max/Math.max(image.width,image.height));
- const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);
- canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);image.close();
- return canvas.toDataURL('image/jpeg',.62);
+function receiptJpegFromImage(image,max,quality){
+ const width=Number(image.naturalWidth||image.width),height=Number(image.naturalHeight||image.height);
+ if(!width||!height)throw new Error('写真サイズを取得できません');
+ const scale=Math.min(1,max/Math.max(width,height)),canvas=document.createElement('canvas');
+ canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
+ canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+ const data=canvas.toDataURL('image/jpeg',quality);
+ if(!data.startsWith('data:image/jpeg'))throw new Error('写真をJPEGへ変換できません');
+ return data;
 }
+async function prepareReceiptPhoto(file){
+ if(!file)throw new Error('写真が選択されていません');
+ let image=null;
+ try{
+  image=await createImageBitmap(file);
+  return{stored:receiptJpegFromImage(image,1024,.68),ocr:receiptJpegFromImage(image,1800,.88)};
+ }catch(bitmapError){
+  const url=URL.createObjectURL(file);
+  try{
+   const htmlImage=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('選択した写真を読み込めません'));img.src=url});
+   return{stored:receiptJpegFromImage(htmlImage,1024,.68),ocr:receiptJpegFromImage(htmlImage,1800,.88)};
+  }finally{URL.revokeObjectURL(url)}
+ }finally{if(image&&typeof image.close==='function')image.close()}
+}
+async function compressReceiptPhoto(file){return (await prepareReceiptPhoto(file)).stored}
 function toast(msg){const el=document.querySelector('#toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
 function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function readFile(input){const file=input.files[0];if(!file)return null;return file.text()}
@@ -159,9 +178,18 @@ const receiptPhotoInputs=['receipt-camera','receipt-photo'];
 const selectedReceiptPhoto=()=>receiptPhotoInputs.map(id=>document.querySelector('#'+id)?.files?.[0]).find(Boolean)||null;
 async function handleReceiptPhotoSelection(e){
  const file=e.target.files?.[0],preview=document.querySelector('#receipt-preview');
+ receiptPreparedPhoto=null;
  if(!file){const item=state.lotteries.find(x=>x.id===receiptTargetId);preview.src=item?.receiptPhoto||'';preview.hidden=!item?.receiptPhoto;return}
  for(const id of receiptPhotoInputs)if(id!==e.target.id)document.querySelector('#'+id).value='';
- try{preview.src=await compressReceiptPhoto(file);preview.hidden=false;setReceiptOcrStatus(e.target.id==='receipt-camera'?'撮影した写真を選択しました。読み取りを押してください':'保存済み写真を選択しました。読み取りを押してください')}catch(err){setReceiptOcrStatus('写真プレビュー失敗','warning')}
+ try{
+  receiptPreparedPhoto=await prepareReceiptPhoto(file);
+  preview.src=receiptPreparedPhoto.stored;preview.hidden=false;
+  setReceiptOcrStatus(e.target.id==='receipt-camera'?'撮影した写真を準備しました。読み取りを押してください':'保存済み写真を準備しました。読み取りを押してください');
+ }catch(err){
+  receiptPreparedPhoto=null;preview.hidden=true;
+  setReceiptOcrStatus('写真の読み込みに失敗しました。別の画像を選んでください','warning');
+  const review=document.querySelector('#receipt-ocr-review');review.textContent=String(err.message||err);review.hidden=false;
+ }
 }
 for(const id of receiptPhotoInputs)document.querySelector('#'+id).addEventListener('change',handleReceiptPhotoSelection);
 document.querySelector('#receipt-ocr-button').addEventListener('click',async()=>{
@@ -170,7 +198,8 @@ document.querySelector('#receipt-ocr-button').addEventListener('click',async()=>
  const button=document.querySelector('#receipt-ocr-button'),review=document.querySelector('#receipt-ocr-review');
  button.disabled=true;review.hidden=true;
  try{
-  const raw=await recognizeReceiptPhoto(file),parsed=parseReceiptOcr(raw);
+  if(!receiptPreparedPhoto)receiptPreparedPhoto=await prepareReceiptPhoto(file);
+  const raw=await recognizeReceiptPhoto(receiptPreparedPhoto.ocr),parsed=parseReceiptOcr(raw);
   if(parsed.amount)document.querySelector('#receipt-total').value=String(parsed.amount);
   if(parsed.date)document.querySelector('#receipt-date').value=parsed.date;
   const lines=[];
@@ -189,7 +218,7 @@ document.querySelector('#receipt-form').addEventListener('submit',async e=>{
  try{
   const file=selectedReceiptPhoto(),quantity=Number(document.querySelector('#receipt-quantity').value||1),total=Number(document.querySelector('#receipt-total').value||0),addPurchase=document.querySelector('#receipt-add-purchase').checked;
   const payload={id:item.id,product:document.querySelector('#receipt-product').value.trim(),store:document.querySelector('#receipt-store').value.trim(),receivedDate:document.querySelector('#receipt-date').value||today(),total,quantity,category:document.querySelector('#receipt-category').value,shrinkStatus:document.querySelector('#receipt-shrink').value,addPurchase};
-  if(file)payload.receiptPhoto=await compressReceiptPhoto(file);
+  if(file){if(!receiptPreparedPhoto)receiptPreparedPhoto=await prepareReceiptPhoto(file);payload.receiptPhoto=receiptPreparedPhoto.stored;}
   if(addPurchase&&total<=0)throw new Error('購入履歴へ追加する場合は購入合計金額を確認してください');
   if(v2ModeLocked()){
    if(!v2Connected())throw new Error('V2へ自動再接続できていません。ローカル保存は行いません');
