@@ -62,6 +62,8 @@ jobs:
           ! grep -q 'runTv2FinalCompletion20260927' .apps-script-automation/V2Automation.js
           ! grep -q 'runTv2SingleCardRefresh20260926' .apps-script-automation/V2Automation.js
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
+      - name: Run temporary private diagnostic
+        run: npx clasp run runTv2DiagnosticPlayzNamba20260927
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
