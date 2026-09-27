@@ -425,6 +425,36 @@ function fetchCardrushMediaBuyback_(product, model, variant) {
   return unique.length===1?{name:product,model,price:unique[0],source:'カードラッシュ買取表'}:null;
 }
 
+function fetchToretokuBuyback_(product, setText, model, variant) {
+  const query = [
+    'genre= pokemon'.replace(' ',''),
+    'keyword=' + encodeURIComponent(product)
+  ].join('&');
+  const response = UrlFetchApp.fetch('https://www.toretoku.jp/kaitori/pokemon/item-search?' + query, {
+    muteHttpExceptions:true, followRedirects:true,
+    headers:{'User-Agent':'Mozilla/5.0'}
+  });
+  if (response.getResponseCode() !== 200) return null;
+  const html = response.getContentText('UTF-8');
+  const re = /\{\\"name\\":\\"([^\\"]+)\\",\\"itemCode\\":\\"[^\\"]+\\",\\"price\\":(\d+),\\"sellPrice\\":\d+,\\"modelNumber\\":\\"([^\\"]+)\\",\\"imageUrl\\":\\"[^\\"]+\\",\\"rarity\\":\\"([^\\"]*)\\"\}/g;
+  const pn=normalize_(product),full=normalize_(setText||''),mn=normalize_(model),vn=normalize_(variant||''),matches=[];
+  let m;
+  while ((m=re.exec(html))) {
+    const name=String(m[1]||''),price=Number(m[2]),modelNumber=String(m[3]||''),rarity=String(m[4]||'');
+    if(normalize_(name)!==pn||!Number.isFinite(price)||price<=0)continue;
+    const itemModel=normalize_(modelNumber);
+    if(full ? itemModel!==full : !itemModel.endsWith(mn))continue;
+    const rv=normalize_(rarity);
+    if(vn===normalize_('マスターボールミラー') && !rv.includes(normalize_('マスターボール')))continue;
+    if(vn===normalize_('モンスターボールミラー') && (!rv.includes(normalize_('モンスターボール'))||rv.includes(normalize_('マスターボール'))))continue;
+    if(vn===normalize_('ミラー') && !rv.includes(normalize_('ミラー')))continue;
+    if(!vn && /ミラー/.test(rarity))continue;
+    matches.push({price,rarity,modelNumber});
+  }
+  const prices=[...new Set(matches.map(x=>x.price))];
+  return prices.length===1?{name:product,model,price:prices[0],source:'トレトク買取'}:null;
+}
+
 function fetchAltemaBuyback_(product, model) {
   const query = encodeURIComponent(product + ' ' + model);
   const searchUrl = 'https://altema.jp/pokemoncard/?s=' + query;
