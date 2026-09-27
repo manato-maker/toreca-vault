@@ -130,6 +130,30 @@ function tv2CardVariant_(lot){
 }
 
 
+function tv2RepairKnownCardIdentities20260928_(){
+ return tv2Mutate_('card-identity-clarification',state=>{
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  const specs=[
+   {product:'ニョロモ',set:'SV2a 060/165',variant:'マスターボールミラー'},
+   {product:'メガリザードンex',set:'M2a 223/193',variant:''}
+  ];
+  const changes=[],missing=[];
+  for(const spec of specs){
+   const matches=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category==='カード'&&normalize_(l.product)===normalize_(spec.product)&&normalize_(l.set)===normalize_(spec.set));
+   if(!matches.length){missing.push(spec.product+' '+spec.set);continue}
+   for(const lot of matches){
+    const before=String(lot.variant||'');
+    lot.variant=spec.variant;
+    lot.identityNeedsReview=false;
+    lot.identityConfirmedAt='2026-09-28';
+    lot.identityConfirmedBy='user';
+    if(before!==spec.variant)changes.push({lotId:lot.id,product:spec.product,set:spec.set,before,after:spec.variant||'通常版'});
+   }
+  }
+  return{changed:changes.length>0,changes,missing};
+ });
+}
+
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
@@ -591,6 +615,12 @@ function tv2HandleMarketRefreshWeb_(req){
  if(action==='refresh-single-market-v2'){
   const result=runTv2MarketAuto({skipQueue:true,singleOnly:true});
   return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+ }
+ if(action==='repair-known-card-identities-v2'){
+  const identity=tv2RepairKnownCardIdentities20260928_();
+  const market=runTv2MarketAuto({skipQueue:true,singleOnly:true});
+  const loaded=tv2Load_();
+  return ContentService.createTextOutput(JSON.stringify({ok:true,identity,market,revision:Number(loaded.revision)})).setMimeType(ContentService.MimeType.JSON);
  }
  if(action==='process-command-queue-v2'){
   const results=typeof tv2ProcessChatTradeDrafts_==='function'?tv2ProcessChatTradeDrafts_():[];
