@@ -383,36 +383,43 @@ function findCardrushBuyback_(rows, product, model, variant) {
 
 function fetchCardrushMediaBuyback_(product, model, variant) {
   const base='https://cardrush.media/pokemon/buying_prices';
-  const query=[
-    'displayMode='+encodeURIComponent('リスト'),
-    'limit=100',
-    'name='+encodeURIComponent(product),
-    'rarity=',
-    'model_number='+encodeURIComponent(model),
-    'amount=',
-    'page=1',
-    'sort%5Bkey%5D=amount',
-    'sort%5Border%5D=desc'
-  ].join('&');
-  const response=UrlFetchApp.fetch(base+'?'+query,{muteHttpExceptions:true,followRedirects:true});
-  if(response.getResponseCode()!==200)return null;
-  const html=response.getContentText('UTF-8');
-  const rows=[...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map(m=>m[1]);
   const pn=normalize_(product),mn=normalize_(model),vn=normalize_(variant||''),prices=[];
-  for(const row of rows){
-    const text=row.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&yen;|&#165;/gi,'¥').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
-    const nn=normalize_(text);
-    if(!nn.includes(pn)||!nn.includes(mn))continue;
-    if(/未開封|PSA\d|BGS\d|CGC\d|ARS\d|鑑定済|状態A-|状態B|状態C|状態難/i.test(text))continue;
-    if(vn===normalize_('マスターボールミラー')){
-      if(!nn.includes(vn))continue;
-    }else if(vn===normalize_('モンスターボールミラー')){
-      if(!nn.includes(vn)||nn.includes(normalize_('マスターボール')))continue;
-    }else if(vn===normalize_('ミラー')){
-      if(!nn.includes(vn)||nn.includes(normalize_('モンスターボール'))||nn.includes(normalize_('マスターボール')))continue;
-    }else if(/ミラー/.test(text))continue;
-    const found=[...text.matchAll(/[¥￥]\s*([0-9][0-9,]{1,8})/g)].map(m=>Number(m[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
-    if(found.length)prices.push(found[found.length-1]);
+  // New sets are sometimes not returned when Cardrush's model_number filter
+  // expects an expansion-prefixed value (e.g. M6-095/076). Retry by exact
+  // product name without the site-side model filter, then filter rows locally
+  // by product + card number. This stays fail-closed: only one unique buyback
+  // price across exact-matching standard-condition rows is accepted.
+  for(const modelFilter of [model,'']){
+    const query=[
+      'displayMode='+encodeURIComponent('リスト'),
+      'limit=100',
+      'name='+encodeURIComponent(product),
+      'rarity=',
+      'model_number='+encodeURIComponent(modelFilter),
+      'amount=',
+      'page=1',
+      'sort%5Bkey%5D=amount',
+      'sort%5Border%5D=desc'
+    ].join('&');
+    const response=UrlFetchApp.fetch(base+'?'+query,{muteHttpExceptions:true,followRedirects:true});
+    if(response.getResponseCode()!==200)continue;
+    const html=response.getContentText('UTF-8');
+    const rows=[...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map(m=>m[1]);
+    for(const row of rows){
+      const text=row.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&yen;|&#165;/gi,'¥').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+      const nn=normalize_(text);
+      if(!nn.includes(pn)||!nn.includes(mn))continue;
+      if(/未開封|PSA\d|BGS\d|CGC\d|ARS\d|鑑定済|状態A-|状態B|状態C|状態難/i.test(text))continue;
+      if(vn===normalize_('マスターボールミラー')){
+        if(!nn.includes(vn))continue;
+      }else if(vn===normalize_('モンスターボールミラー')){
+        if(!nn.includes(vn)||nn.includes(normalize_('マスターボール')))continue;
+      }else if(vn===normalize_('ミラー')){
+        if(!nn.includes(vn)||nn.includes(normalize_('モンスターボール'))||nn.includes(normalize_('マスターボール')))continue;
+      }else if(/ミラー/.test(text))continue;
+      const found=[...text.matchAll(/[¥￥]\s*([0-9][0-9,]{1,8})/g)].map(m=>Number(m[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
+      if(found.length)prices.push(found[found.length-1]);
+    }
   }
   const unique=[...new Set(prices)];
   return unique.length===1?{name:product,model,price:unique[0],source:'カードラッシュ買取表'}:null;
