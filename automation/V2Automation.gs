@@ -129,8 +129,8 @@ function tv2CardVariant_(lot){
 }
 
 
-function runTv2MarketAuto(){
- if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
+function runTv2MarketAuto(options){
+ if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
   let rows=null;
@@ -578,6 +578,6 @@ function tv2HandleMarketRefreshWeb_(req){
  if(String(body.action||'')!=='refresh-market-v2')throw new Error('unsupported action');
  const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||'');
  if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
- const result=runTv2MarketAuto();
+ const result=runTv2MarketAuto({skipQueue:true});
  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
 }
