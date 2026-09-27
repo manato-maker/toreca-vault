@@ -386,7 +386,7 @@ function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),category=tv2NormalizeProductCategory_(product,input.category),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
  const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
- const openingBox=String(input.openingBoxProduct||'').trim(),cardSet=String(input.cardSet||'').trim(),rarity=String(input.rarity||'').trim();
+ const openingBox=String(input.openingBoxProduct||'').trim(),rawCardSet=String(input.cardSet||input.cardCode||'').trim(),cardSet=rawCardSet.replace(/^(M6)\s+(\d{3})-(\d{3})$/,'$1 $2/$3'),rarity=String(input.rarity||'').trim();
  if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
  if(openingBox&&(category!=='カード'||quantity!==1||!cardSet))throw new Error('開封獲得カード情報が不正です');
