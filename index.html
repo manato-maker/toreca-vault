@@ -53,7 +53,7 @@
         <div class="field full receipt-purchase-toggle"><label><input id="receipt-add-purchase" type="checkbox" checked> 購入履歴・在庫にも追加する</label><small>すでに購入履歴へ登録済みならOFFにしてください。</small></div>
         <div class="field full"><div id="receipt-ocr-review" class="receipt-ocr-review" hidden></div></div>
       </div>
-      <footer class="dialog-actions"><button type="button" class="secondary-button" onclick="this.closest('dialog').close()">キャンセル</button><button class="primary-button">確認内容で受取済みにする</button></footer>
+      <footer class="dialog-actions"><button type="button" class="secondary-button" onclick="this.closest('dialog').close()">キャンセル</button><button id="receipt-submit-button" type="submit" class="primary-button">確認内容で受取済みにする</button></footer>
     </form>
   </dialog>
 
@@ -69,7 +69,7 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=20260927-receipt-normalize-v1"></script>
+  <script type="module" src="js/app.js?v=20260927-receipt-submit-v1"></script>
   <script type="module" src="js/ui-enhancements.js?v=20260926-txn-colors-v1"></script>
   <script type="module" src="js/franchise-ui.js?v=20260926-v2safe"></script>
 </body>
