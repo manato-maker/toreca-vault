@@ -386,18 +386,32 @@ function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),category=tv2NormalizeProductCategory_(product,input.category),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
  const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
+ const openingBox=String(input.openingBoxProduct||'').trim(),cardSet=String(input.cardSet||'').trim(),rarity=String(input.rarity||'').trim();
  if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
+ if(openingBox&&(category!=='カード'||quantity!==1||!cardSet))throw new Error('開封獲得カード情報が不正です');
  return tv2Mutate_('chat-purchase',state=>{
-  const txId='chat-purchase-'+requestId,existing=(state.transactions||[]).filter(t=>t.id===txId);
-  if(existing.length===1)return{duplicate:true,transactionId:txId,changed:false};
-  if(existing.length>1)throw new Error('同一チャット購入IDが重複しています');
-  const lotId=txId+'-lot';state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
-  if(state.inventoryLots.some(l=>l.id===lotId))throw new Error('同一チャット購入lotが既に存在します');
-  state.inventoryLots.push({id:lotId,product,productKey:product,category,condition,quantity,unitCost,acquiredAt:date,store,source:'chat',requestId});
+  const txId='chat-purchase-'+requestId,lotId=txId+'-lot',openingId='chat-opening-'+requestId;
   state.transactions=Array.isArray(state.transactions)?state.transactions:[];
-  state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,quantity,price:unitCost,date,store,source:'chat',requestId});
-  return{duplicate:false,transactionId:txId,lotId,changed:true};
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  const existing=(state.transactions||[]).filter(t=>t.id===txId),openingExisting=state.transactions.filter(t=>t.id===openingId),lotExisting=state.inventoryLots.filter(l=>l.id===lotId);
+  if(existing.length===1&&lotExisting.length===1&&(!openingBox||openingExisting.length===1))return{duplicate:true,transactionId:txId,lotId,changed:false};
+  if(existing.length||lotExisting.length||openingExisting.length)throw new Error('同一チャット購入IDが部分重複しています');
+
+  let source='chat',memo='';
+  if(openingBox){
+   const wanted=normalize_(openingBox),boxLots=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category==='BOX'&&normalize_(l.productKey||l.product)===wanted);
+   if(!boxLots.length)throw new Error('V2正本に開封対象BOX在庫がありません');
+   if(new Set(boxLots.map(l=>String(l.condition||''))).size>1)throw new Error('開封対象BOXの状態が複数あるため条件指定が必要です');
+   boxLots.sort((a,b)=>String(a.acquiredAt||'').localeCompare(String(b.acquiredAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
+   const box=boxLots[0],cost=box.unitCost===null||box.unitCost===undefined||box.unitCost===''?null:Number(box.unitCost);
+   box.quantity=Number(box.quantity)-1;state.inventoryLots=state.inventoryLots.filter(l=>Number(l.quantity)>0);
+   state.transactions.push({id:openingId,type:'opening',product:openingBox,productKey:openingBox,category:'BOX',condition:String(box.condition||''),quantity:1,price:0,date,source:'chat',memo:'BOX開封',requestId,acquisitionCost:Number.isFinite(cost)?cost:null});
+   source='opening';memo='開封獲得'+(rarity?'｜'+rarity:'')+'｜'+openingBox+' 1BOX開封';
+  }
+  state.inventoryLots.push({id:lotId,product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,unitCost,acquiredAt:date,store,source,requestId,memo});
+  state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,price:unitCost,total:unitCost*quantity,date,store,source,requestId,memo});
+  return{duplicate:false,transactionId:txId,lotId,openingId:openingBox?openingId:'',changed:true};
  });
 }
 
