@@ -7,6 +7,7 @@ on:
       - 'automation/**'
       - '.github/workflows/apps-script-deploy.yml'
       - 'scripts/patch-cardrush-buyback.mjs'
+      - 'scripts/patch-v2-market-refresh-route.mjs'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -65,11 +66,6 @@ jobs:
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
       - name: Update market refresh web deployment
         run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
-      - name: Apply Mega Rayquaza opening via POST
-        run: |
-          result="$(curl -fsSL -H 'Content-Type: text/plain;charset=utf-8' --data '{"action":"process-mega-rayquaza-once"}' 'https://script.google.com/macros/s/AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg/exec')"
-          printf '%s\n' "$result"
-          node -e "const x=JSON.parse(process.argv[1]);if(!x.ok)process.exit(1)" "$result"
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
