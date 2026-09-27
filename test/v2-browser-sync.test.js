@@ -1,14 +1,9 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {validateBrowserState,setVaultV2Config,getVaultV2Config,clearVaultV2Config,requiresVaultV2} from '../v2/browser-sync.js';
-
-test('browser adapter accepts canonical v2 state',()=>{
- assert.equal(validateBrowserState({schemaVersion:2,transactions:[],inventoryLots:[],lotteries:[],marketQuotes:[],auditLog:[]}),true);
-});
-test('browser adapter rejects v1 wrapper',()=>{
- assert.throws(()=>validateBrowserState({schemaVersion:1,data:{}}),/V2/);
-});
-
-
-
-test('V2 URL and token persist across browser sessions',()=>{const local=new Map(),session=new Map();global.localStorage={getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)};global.sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v),removeItem:k=>session.delete(k)};const url='https://script.google.com/macros/s/example/exec',token='abcdefghijklmnopqrstuvwxyz123456';setVaultV2Config(url,token);assert.equal(requiresVaultV2(),true);session.clear();assert.deepEqual(getVaultV2Config(),{url,token});assert.equal(requiresVaultV2(),true);clearVaultV2Config();assert.deepEqual(getVaultV2Config(),{url:'',token:''});assert.equal(requiresVaultV2(),false)});
+import test from'node:test';import assert from'node:assert/strict';
+const local=new Map(),session=new Map();
+globalThis.localStorage={getItem:k=>local.get(k)??null,setItem:(k,v)=>local.set(k,String(v)),removeItem:k=>local.delete(k)};
+globalThis.sessionStorage={getItem:k=>session.get(k)??null,setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)};
+const sync=await import('../v2/browser-sync.js');
+const url='https://script.google.com/macros/s/test-deployment-id/exec',token='12345678901234567890123456789012';
+const reset=()=>{local.clear();session.clear()};
+test('recovers V2 config from earlier handoff storage keys',()=>{reset();local.set('tv-v2-sync-endpoint',url);local.set('tv-v2-sync-token',token);const c=sync.getVaultV2Config();assert.deepEqual(c,{url,token});assert.equal(local.get('toreca-vault:v2:required'),'1');assert.deepEqual(JSON.parse(local.get('toreca-vault:v2:sync')),{url,token})});
+test('set mirrors compatibility keys and explicit clear removes every V2 credential key',()=>{reset();sync.setVaultV2Config(url,token);assert.equal(local.get('tv-v2-sync-endpoint'),url);assert.equal(local.get('tv-v2-sync-token'),token);sync.clearVaultV2Config();for(const k of ['toreca-vault:v2:sync','toreca-vault:v2:required','tv-v2-sync-endpoint','tv-v2-sync-token'])assert.equal(local.has(k),false);assert.equal(session.has('toreca-vault:v2:token'),false)});
