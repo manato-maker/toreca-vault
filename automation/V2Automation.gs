@@ -574,50 +574,19 @@ function tv2ProcessChatTradeDrafts_(){
 }
 
 function tv2HandleMarketRefreshWeb_(req){
- const body=req&&typeof req==='object'?req:{};
- if(String(body.action||'')!=='refresh-market-v2')throw new Error('unsupported action');
+ const body=req&&typeof req==='object'?req:{},action=String(body.action||'');
  const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||'');
  if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
- const result=runTv2MarketAuto({skipQueue:true});
- return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+ if(action==='refresh-market-v2'){
+  const result=runTv2MarketAuto({skipQueue:true});
+  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+ }
+ if(action==='process-command-queue-v2'){
+  const results=typeof tv2ProcessChatTradeDrafts_==='function'?tv2ProcessChatTradeDrafts_():[];
+  const loaded=tv2Load_();
+  return ContentService.createTextOutput(JSON.stringify({ok:true,results,revision:Number(loaded.revision)})).setMimeType(ContentService.MimeType.JSON);
+ }
+ throw new Error('unsupported action');
 }
 
-function runTv2VerifyMegaRayquaza20260927(){
- const requestId='20260927-storm-emeralda-mega-rayquaza-ex-m6-095-076-sr';
- const txId='chat-purchase-'+requestId,openingId='chat-opening-'+requestId,lotId=txId+'-lot';
- const loaded=tv2Load_(),state=loaded.payload||{};
- const tx=(state.transactions||[]).filter(t=>String(t.id||'')===txId);
- const opening=(state.transactions||[]).filter(t=>String(t.id||'')===openingId);
- const lot=(state.inventoryLots||[]).filter(l=>String(l.id||'')===lotId);
- const ok=tx.length===1&&opening.length===1&&lot.length===1&&String(lot[0].product||'')==='メガレックウザex'&&String(lot[0].set||'')==='M6 095/076'&&Number(lot[0].quantity)===1&&/SR/.test(String(lot[0].memo||''))&&/ストームエメラルダ/.test(String(opening[0].product||''));
- const summary={ok,revision:Number(loaded.revision),transactionCount:tx.length,openingCount:opening.length,lotCount:lot.length,card:lot[0]?{product:lot[0].product,set:lot[0].set,quantity:lot[0].quantity,memo:lot[0].memo}:null,opening:opening[0]?{product:opening[0].product,quantity:opening[0].quantity,date:opening[0].date}:null};
- const to=Session.getEffectiveUser().getEmail();if(to){const subject='[Toreca Vault Opening Result 20260927]';GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));}
- if(!ok)throw new Error('メガレックウザ開封獲得のV2再読込検証に失敗しました');
- return summary;
-}
 
-function tv2ProcessOneCommandByNonce_(requestId,nonce){
- requestId=String(requestId||'').trim();nonce=String(nonce||'').trim();
- if(!requestId||nonce.length<24)throw new Error('invalid one-time command key');
- const subject='[Toreca Vault Command]';
- const matches=GmailApp.getDrafts().filter(d=>{
-  if(String(d.getMessage().getSubject()||'').trim()!==subject)return false;
-  try{
-   const cmd=JSON.parse(String(d.getMessage().getPlainBody()||'').trim());
-   return String(cmd.requestId||'')===requestId&&String(cmd.oneTimeNonce||'')===nonce;
-  }catch(e){return false}
- });
- if(matches.length!==1)throw new Error('matching command draft not found');
- const draft=matches[0],command=JSON.parse(String(draft.getMessage().getPlainBody()||'').trim());
- if(String(command.type||'')!=='purchase')throw new Error('unsupported one-time command type');
- const result=runTv2ChatPurchase(command);
- const txId='chat-purchase-'+requestId,openingId='chat-opening-'+requestId,lotId=txId+'-lot';
- const loaded=tv2Load_(),state=loaded.payload||{};
- const tx=(state.transactions||[]).filter(t=>String(t.id||'')===txId);
- const opening=(state.transactions||[]).filter(t=>String(t.id||'')===openingId);
- const lot=(state.inventoryLots||[]).filter(l=>String(l.id||'')===lotId);
- const ok=tx.length===1&&opening.length===1&&lot.length===1&&String(lot[0].product||'')==='メガレックウザex'&&String(lot[0].set||'')==='M6 095/076'&&Number(lot[0].quantity)===1&&/SR/.test(String(lot[0].memo||''))&&/ストームエメラルダ/.test(String(opening[0].product||''));
- if(!ok)throw new Error('V2 post-write verification failed');
- draft.deleteDraft();
- return{ok:true,revision:Number(loaded.revision),result,card:{product:lot[0].product,set:lot[0].set,quantity:lot[0].quantity,memo:lot[0].memo},opening:{product:opening[0].product,quantity:opening[0].quantity,date:opening[0].date}};
-}
