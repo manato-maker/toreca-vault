@@ -36,4 +36,12 @@ const getRoute=`function doGet(e) {
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }`;
 if(!s.includes("__tv2OneTimeAction"))s=s.replace(getMarker,getRoute);
+const repairRoute=`  if (__tv2OneTimeAction === 'repair-known-cards-now-20260928') {
+    try { return jsonResponse_(tv2RepairKnownCardsNow_()); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
+`;
+if(s.includes("__tv2OneTimeAction")&&!s.includes("repair-known-cards-now-20260928")){
+  s=s.replace("  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n","  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n"+repairRoute);
+}
 fs.writeFileSync(file,s);
