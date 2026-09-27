@@ -22,6 +22,11 @@ export function pendingMigrationSnapshot(state){
  const requiredTx=['pending-joshin-deck-20260919','pending-joshin-30th-box-20260919','pending-plays-30th-box-20260920','pending-allium-30th-noshrink-20260920','pending-lawson-awajitomishima-packs-20260921','pending-lawson-awajitomishima-opening-20260921','pending-pull-charizard-137-20260921','pending-pull-pikachu-ex-127-20260921'];
  const requiredLots=['pending-joshin-deck-20260919','pending-plays-30th-box-20260920','pending-pull-charizard-137-20260921','pending-pull-pikachu-ex-127-20260921'];
  const missingTransactions=requiredTx.filter(id=>!txIds.has(id));
- const missingLots=requiredLots.filter(id=>!lots.has(id)||qty(lots.get(id))<=0);
- return{ok:missingTransactions.length===0&&missingLots.length===0,missingTransactions,missingLots,requiredTxCount:requiredTx.length,requiredLotCount:requiredLots.length};
+ const historicalLotsPresent=requiredLots.filter(id=>lots.has(id)&&qty(lots.get(id))>0);
+ const historicalLotsConsumed=requiredLots.filter(id=>txIds.has(id)&&!historicalLotsPresent.includes(id));
+ // Migration completion is historical. A migrated inventory lot may later disappear
+ // legitimately after a sale/opening, so only the immutable transaction IDs are a
+ // blocking integrity condition. Current inventory consistency is checked separately
+ // by acceptanceSnapshot against the canonical V2 lots.
+ return{ok:missingTransactions.length===0,missingTransactions,missingLots:[],historicalLotsPresent,historicalLotsConsumed,requiredTxCount:requiredTx.length,requiredLotCount:requiredLots.length};
 }
