@@ -151,8 +151,8 @@ function runTv2MarketAuto(options){
     // Direct Cardrush page fallback is intentionally fail-closed.
     let result=rows&&name?findCardrushBuyback_(rows,name,model,variant):null;
     // Cardrush blocks direct server-side HTML fetches for some current cards.
-    // Use Toretoku's official buyback search as an exact-card fallback, then
-    // Altema only for non-variant cards. Every fallback stays fail-closed.
+    // Use Toretoku's official buyback search as an exact-card fallback when
+    // Cardrush has no usable exact result; every fallback stays fail-closed.
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchToretokuBuyback_(name,lot.set,model,variant);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
