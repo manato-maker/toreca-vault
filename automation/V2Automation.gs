@@ -473,3 +473,36 @@ function tv2ProcessChatTradeDrafts_(){
 }
 
 
+
+function runTv2DiagnosticPlayzNamba20260927(){
+ const loaded=tv2Load_(),state=loaded.payload||{};
+ const compact=s=>String(s||'').toLowerCase().replace(/[\s　・･()（）「」『』【】\[\]_-]/g,'');
+ const isPlayzNamba=x=>{const s=compact(x);return s.includes('プレイズ')&&(s.includes('なんば')||s.includes('難波'))};
+ const lotteries=(state.lotteries||[]).filter(x=>isPlayzNamba(x.store));
+ const lotteryIds=new Set(lotteries.map(x=>String(x.id||'')));
+ const receiptTx=(state.transactions||[]).filter(t=>t.type==='purchase'&&(
+   lotteryIds.has(String(t.sourceLotteryId||''))||
+   [...lotteryIds].some(id=>String(t.id||'')==='lottery-receipt-purchase-'+id)||
+   isPlayzNamba(t.store)
+ ));
+ const receiptTxIds=new Set(receiptTx.map(t=>String(t.id||'')));
+ const productKeys=new Set(receiptTx.map(t=>compact(t.productKey||t.product)).filter(Boolean));
+ const relatedLots=(state.inventoryLots||[]).filter(l=>receiptTxIds.has(String(l.sourceTransactionId||''))||isPlayzNamba(l.store));
+ const relatedSales=(state.transactions||[]).filter(t=>t.type==='sale'&&productKeys.has(compact(t.productKey||t.product)));
+ const txCounts={};
+ (state.transactions||[]).forEach(t=>{const id=String(t.id||'');if(id)txCounts[id]=(txCounts[id]||0)+1});
+ const duplicateReceiptTransactionIds=Object.keys(txCounts).filter(id=>id.startsWith('lottery-receipt-purchase-')&&txCounts[id]>1);
+ const body={
+   revision:Number(loaded.revision),
+   checkedAt:new Date().toISOString(),
+   lotteries:lotteries.map(x=>({id:x.id,title:x.title,store:x.store,status:x.status,receiptStatus:x.receiptStatus,receivedDate:x.receivedDate,receiptAmount:x.receiptAmount,receiptProduct:x.receiptProduct,receiptCategory:x.receiptCategory})),
+   receiptTransactions:receiptTx.map(t=>({id:t.id,sourceLotteryId:t.sourceLotteryId,product:t.product,productKey:t.productKey,store:t.store,date:t.date,category:t.category,condition:t.condition,quantity:t.quantity,price:t.price,total:t.total})),
+   relatedInventoryLots:relatedLots.map(l=>({id:l.id,sourceTransactionId:l.sourceTransactionId,product:l.product,productKey:l.productKey,store:l.store,acquiredAt:l.acquiredAt,category:l.category,condition:l.condition,quantity:l.quantity,unitCost:l.unitCost})),
+   relatedSales:relatedSales.map(t=>({id:t.id,product:t.product,productKey:t.productKey,store:t.store,date:t.date,category:t.category,condition:t.condition,quantity:t.quantity,price:t.price,requestId:t.requestId,acquisitionCost:t.acquisitionCost})),
+   duplicateReceiptTransactionIds
+ };
+ const to=Session.getEffectiveUser().getEmail();
+ if(!to)throw new Error('診断結果の保存先メールを取得できません');
+ GmailApp.createDraft(to,'[Toreca Vault Diagnostic 20260927]',JSON.stringify(body,null,2));
+ return{ok:true,draftCreated:true};
+}
