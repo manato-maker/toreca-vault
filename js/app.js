@@ -265,7 +265,7 @@ async function processPendingCommandQueueOnBoot(){
  }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
 }
 async function refreshSinglesOnceOnBoot(){
- const key='toreca-vault:single-market-refresh:20260928-v2';
+ const key='toreca-vault:single-market-refresh:20260928-v3';
  if(localStorage.getItem(key)==='done')return;
  const config=getVaultV2Config();if(!config.token||!v2Connected())return;
  try{
