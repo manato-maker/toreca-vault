@@ -45,6 +45,7 @@ jobs:
           grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
           if test -s .apps-script-automation/Code.js; then code_path=.apps-script-automation/Code.js; else code_path=.apps-script-automation/コード.js; fi
           node scripts/patch-cardrush-buyback.mjs "$code_path" automation/Code.gs
+          node scripts/patch-v2-market-refresh-route.mjs "$code_path"
           cp "$code_path" /tmp/tv-code-expected.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
       - name: Push patched automation
@@ -62,6 +63,8 @@ jobs:
           ! grep -q 'runTv2FinalCompletion20260927' .apps-script-automation/V2Automation.js
           ! grep -q 'runTv2SingleCardRefresh20260926' .apps-script-automation/V2Automation.js
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
+      - name: Create market refresh web deployment
+        run: npx clasp deploy -d "Toreca Vault Market Refresh API"
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
