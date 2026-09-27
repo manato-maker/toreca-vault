@@ -57,13 +57,28 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
     extractModel_:x=>(String(x).match(/\d{3}\/(?:\d{3}|SV-P)/)||[])[0]||'',
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
-    fetchCardrushMediaBuyback_:(name,model)=>name==='ピカチュウ'&&model==='001/SV-P'?{price:3200,source:'カードラッシュ買取表'}:null,
+    fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウ'&&set==='PROMO 001/SV-P'&&model==='001/SV-P'?{price:3200,source:'トレトク買取'}:null,
     fetchAltemaBuyback_:()=>null
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
   const fallbackResult=vm.runInContext('runTv2MarketAuto()',fallbackContext);
-  assert.equal(fallbackResult.report.cardUpdated,1,'cardrush fetch failure falls back for a standard card');
+  assert.equal(fallbackResult.report.cardUpdated,1,'cardrush fetch failure falls back to an exact official buyback result');
   assert.equal(fallbackState.marketQuotes[0].price,3200);
-  assert.equal(fallbackState.marketQuotes[0].source,'カードラッシュ買取表');
+  assert.equal(fallbackState.marketQuotes[0].source,'トレトク買取');
 }
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
+
+{
+  const start=code.indexOf('function fetchToretokuBuyback_('),end=code.indexOf('function fetchAltemaBuyback_(');
+  const fn=code.slice(start,end);
+  const html='self.__next_f.push([1,"items:[{\\\"name\\\":\\\"メガレックウザex\\\",\\\"itemCode\\\":\\\"x\\\",\\\"price\\\":1700,\\\"sellPrice\\\":2700,\\\"modelNumber\\\":\\\"M6 095/076\\\",\\\"imageUrl\\\":\\\"u\\\",\\\"rarity\\\":\\\"SR\\\"}]"])';
+  const ctx=vm.createContext({
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    encodeURIComponent,
+    UrlFetchApp:{fetch:()=>({getResponseCode:()=>200,getContentText:()=>html})}
+  });
+  vm.runInContext(fn,ctx);
+  const hit=vm.runInContext('fetchToretokuBuyback_',ctx)('メガレックウザex','M6 095/076','095/076','');
+  assert.equal(hit?.price,1700,'Toretoku parser accepts one exact name + full set/number match');
+  assert.equal(hit?.source,'トレトク買取');
+}
