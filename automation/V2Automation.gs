@@ -170,6 +170,10 @@ function runTv2MarketAuto(options){
     if(!quote)state.marketQuotes.push(target);
     if(quote&&old===result.price){report.unchanged++;report.cardUnchanged++}else{report.updated++;report.cardUpdated++}
   });
+  if(options&&options.singleOnly){
+    health.lastMarketRunAt=now.toISOString();health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);
+    return{changed:true,report};
+  }
   let feed={products:[],error:''};
   const sealed=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category));
   if(sealed.length){try{
@@ -580,6 +584,10 @@ function tv2HandleMarketRefreshWeb_(req){
  if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
  if(action==='refresh-market-v2'){
   const result=runTv2MarketAuto({skipQueue:true});
+  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+ }
+ if(action==='refresh-single-market-v2'){
+  const result=runTv2MarketAuto({skipQueue:true,singleOnly:true});
   return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
  }
  if(action==='process-command-queue-v2'){
