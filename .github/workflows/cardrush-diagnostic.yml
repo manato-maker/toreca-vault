@@ -8,26 +8,21 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect Toretoku search markup
+      - name: Test Toretoku keyword search
         shell: bash
         run: |
           python - <<'PY'
-          import urllib.request,re
-          url='https://www.toretoku.jp/kaitori/pokemon/item-search?category=3926'
-          req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
-          text=urllib.request.urlopen(req,timeout=20).read().decode('utf-8','replace')
-          print('LEN',len(text))
-          for pat in [r'<form[^>]*>[\s\S]{0,4000}?</form>',r'<input[^>]+>',r'<select[^>]+>']:
-            ms=re.findall(pat,text,re.I)
-            print('PAT',pat,'COUNT',len(ms))
-            for s in ms[:20]:
-              s=re.sub(r'\s+',' ',s)
-              if 'search' in s.lower() or 'keyword' in s.lower() or 'name=' in s.lower() or 'category' in s.lower():
-                print('SNIP',s[:1500])
-          for needle in ['item-search','keyword','search_word','word','query','メガレックウザex','095/076']:
-            print('NEEDLE',needle,'COUNT',text.count(needle))
-          for m in re.finditer('メガレックウザex',text):
-            s=re.sub(r'\s+',' ',text[max(0,m.start()-500):m.start()+1800])
-            print('CARD',s[:2200])
-            break
+          import urllib.parse,urllib.request,re,json
+          for q in ['メガレックウザex','M6 095/076','メガレックウザex M6 095/076']:
+            url='https://www.toretoku.jp/kaitori/pokemon/item-search?'+urllib.parse.urlencode({'genre':'pokemon','keyword':q})
+            req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+            text=urllib.request.urlopen(req,timeout=20).read().decode('utf-8','replace')
+            print('QUERY',q,'LEN',len(text),'RAY',text.count('メガレックウザex'),'MODEL',text.count('095/076'))
+            m=re.search(r'\"items\":\[(.*?)\],\"',text,re.S)
+            if m:
+              chunk=m.group(1)
+              print('ITEMS_CHUNK',re.sub(r'\\u[0-9a-fA-F]{4}','?',chunk[:1200]))
+            for mm in re.finditer('095/076',text):
+              s=re.sub(r'\s+',' ',text[max(0,mm.start()-550):mm.start()+850])
+              print('SNIP',s[:1400]);break
           PY
