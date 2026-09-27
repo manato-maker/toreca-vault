@@ -8,11 +8,23 @@ if(!s.includes(getMarker))throw new Error('doGet not found');
 const route=`function doPost(e) {
   var __tv2EarlyReq = {};
   try { __tv2EarlyReq = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) {}
+  if (String(__tv2EarlyReq.action || '') === 'process-mega-rayquaza-once') {
+    try { return jsonResponse_(tv2ProcessMegaRayquazaOnceWeb_()); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
   if (['refresh-market-v2','process-command-queue-v2'].includes(String(__tv2EarlyReq.action || ''))) {
     try { return tv2HandleMarketRefreshWeb_(__tv2EarlyReq); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }`;
 if(!s.includes("__tv2EarlyReq"))s=s.replace(marker,route);
+const liveEarly="  if (['refresh-market-v2','process-command-queue-v2'].includes(String(__tv2EarlyReq.action || ''))) {";
+if(!s.includes("process-mega-rayquaza-once")){
+  s=s.replace(liveEarly,`  if (String(__tv2EarlyReq.action || '') === 'process-mega-rayquaza-once') {
+    try { return jsonResponse_(tv2ProcessMegaRayquazaOnceWeb_()); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
+${liveEarly}`);
+}
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
