@@ -154,8 +154,7 @@ function tv2RepairKnownCardIdentities20260928_(){
  });
 }
 
-function tv2RepairKnownCardsNow_(nonce){
- if(String(nonce||'')!=='fix-cards-20260928-7f2d1c6b92a74e4d8a3b0f1c5e9a6d21')throw new Error('unauthorized one-time repair');
+function tv2RepairKnownCardsNow_(){
  const identity=tv2RepairKnownCardIdentities20260928_();
  const market=runTv2MarketAuto({skipQueue:true,singleOnly:true});
  const loaded=tv2Load_(),state=loaded.payload||{};
