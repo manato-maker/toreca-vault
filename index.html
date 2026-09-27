@@ -42,7 +42,7 @@
     <form id="receipt-form">
       <header class="dialog-head"><div><p class="eyebrow">受取登録</p><h2>受取情報</h2></div><button type="button" class="icon-button" onclick="this.closest('dialog').close()" aria-label="閉じる">×</button></header>
       <div class="form-grid">
-        <div class="field full"><label for="receipt-photo">レシート・購入証拠の写真</label><input id="receipt-photo" type="file" accept="image/*" capture="environment"><div class="receipt-photo-actions"><button type="button" class="secondary-button compact" id="receipt-ocr-button">写真から読み取る</button><span id="receipt-ocr-status" class="receipt-ocr-status">端末内OCR・外部AI送信なし</span></div><img id="receipt-preview" class="receipt-photo" alt="現在のレシート写真" hidden></div>
+        <div class="field full"><span>レシート・購入証拠の写真</span><div class="receipt-photo-actions"><label class="file-button compact">📷 カメラで撮影<input id="receipt-camera" type="file" accept="image/*" capture="environment"></label><label class="file-button compact">🖼 保存済み写真を選択<input id="receipt-photo" type="file" accept="image/*"></label></div><small class="receipt-photo-help">その場で撮影するか、端末の写真ライブラリ・保存済み画像から選べます。</small><div class="receipt-photo-actions"><button type="button" class="secondary-button compact" id="receipt-ocr-button">写真から読み取る</button><span id="receipt-ocr-status" class="receipt-ocr-status">端末内OCR・外部AI送信なし</span></div><img id="receipt-preview" class="receipt-photo" alt="現在のレシート写真" hidden></div>
         <div class="field full"><label for="receipt-product">商品名</label><input id="receipt-product" type="text" required></div>
         <div class="field full"><label for="receipt-store">店舗</label><input id="receipt-store" type="text" required></div>
         <div class="field"><label for="receipt-date">受取・購入日</label><input id="receipt-date" type="date" required></div>
@@ -69,7 +69,7 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=20260927-reconnect-v1"></script>
+  <script type="module" src="js/app.js?v=20260927-photo-library-v1"></script>
   <script type="module" src="js/ui-enhancements.js?v=20260926-txn-colors-v1"></script>
   <script type="module" src="js/franchise-ui.js?v=20260926-v2safe"></script>
 </body>
