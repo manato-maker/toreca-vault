@@ -27,7 +27,7 @@ export function getVaultV2Config(){
   const sessionToken=sessionStorage.getItem(TOKEN_KEY)||'';
   if(sessionToken&&!saved.token){saved={...saved,token:sessionToken};localStorage.setItem(CONFIG_KEY,JSON.stringify(saved))}
   const token=sessionToken||saved.token||'';
-  if(saved.url&&token)localStorage.setItem(REQUIRED_KEY,'1');
+  if(saved.url||legacyUrl)localStorage.setItem(REQUIRED_KEY,'1');
   return{url:String(saved.url||'').trim(),token:String(token).trim()};
 }
 export function setVaultV2Config(url,token){
@@ -39,11 +39,20 @@ export function setVaultV2Config(url,token){
   localStorage.setItem(REQUIRED_KEY,'1');sessionStorage.setItem(TOKEN_KEY,c.token);return c;
 }
 export function clearVaultV2Config(){
-  localStorage.removeItem(CONFIG_KEY);localStorage.removeItem(REQUIRED_KEY);
+  // Toreca Vault is V2-canonical after migration. Clearing credentials must never
+  // silently re-enable the legacy/local writer.
+  localStorage.removeItem(CONFIG_KEY);
   localStorage.removeItem(LEGACY_URL_KEY);localStorage.removeItem(LEGACY_TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.setItem(REQUIRED_KEY,'1');
 }
-export function requiresVaultV2(){return localStorage.getItem(REQUIRED_KEY)==='1'}
+export function requiresVaultV2(){
+  if(localStorage.getItem(REQUIRED_KEY)==='1')return true;
+  let saved={};try{saved=JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')}catch{}
+  const legacyUrl=String(localStorage.getItem(LEGACY_URL_KEY)||'').trim();
+  if(validUrl(saved.url)||validUrl(legacyUrl)){localStorage.setItem(REQUIRED_KEY,'1');return true}
+  return false;
+}
 
 export async function loadVaultV2(config=getVaultV2Config()){
   if(!config.url||!config.token)throw new Error('V2同期設定がありません');
