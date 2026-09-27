@@ -134,25 +134,47 @@ function tv2RepairKnownCardIdentities20260928_(){
  return tv2Mutate_('card-identity-clarification',state=>{
   state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
   const specs=[
-   {product:'ニョロモ',set:'SV2a 060/165',variant:'マスターボールミラー'},
-   {product:'メガリザードンex',set:'M2a 223/193',variant:''}
+   {name:'ニョロモ',number:'060/165',set:'SV2a 060/165',variant:'マスターボールミラー'},
+   {name:'メガリザードンex',number:'223/193',set:'M2a 223/193',variant:'通常版'}
   ];
-  const changes=[],missing=[];
+  const changes=[],matched=[];
   for(const spec of specs){
-   const matches=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category==='カード'&&normalize_(l.product)===normalize_(spec.product)&&normalize_(l.set)===normalize_(spec.set));
-   if(!matches.length){missing.push(spec.product+' '+spec.set);continue}
-   for(const lot of matches){
-    const before=String(lot.variant||'');
-    lot.variant=spec.variant;
-    lot.identityNeedsReview=false;
-    lot.identityConfirmedAt='2026-09-28';
-    lot.identityConfirmedBy='user';
-    if(before!==spec.variant)changes.push({lotId:lot.id,product:spec.product,set:spec.set,before,after:spec.variant||'通常版'});
-   }
+   const matches=state.inventoryLots.filter(l=>{
+    if(Number(l.quantity)<=0||l.category!=='カード')return false;
+    const combined=normalize_(String(l.product||'')+' '+String(l.productKey||'')+' '+String(l.set||''));
+    return combined.includes(normalize_(spec.name))&&combined.includes(normalize_(spec.number));
+   });
+   if(matches.length!==1)throw new Error(spec.name+' '+spec.number+' の在庫を一意に特定できません: '+matches.length+'件');
+   const lot=matches[0],before={product:lot.product,set:lot.set||'',variant:lot.variant||'',identityNeedsReview:lot.identityNeedsReview===true};
+   lot.product=spec.name;lot.productKey=spec.name;lot.set=spec.set;lot.variant=spec.variant;lot.identityNeedsReview=false;lot.identityConfirmedAt='2026-09-28';lot.identityConfirmedBy='user';
+   changes.push({lotId:lot.id,before,after:{product:lot.product,set:lot.set,variant:lot.variant,identityNeedsReview:false}});
+   matched.push(lot.id);
   }
-  return{changed:changes.length>0,changes,missing};
+  return{changed:true,changes,matched};
  });
 }
+
+function tv2RepairKnownCardsNow_(nonce){
+ if(String(nonce||'')!=='fix-cards-20260928-7f2d1c6b92a74e4d8a3b0f1c5e9a6d21')throw new Error('unauthorized one-time repair');
+ const identity=tv2RepairKnownCardIdentities20260928_();
+ const market=runTv2MarketAuto({skipQueue:true,singleOnly:true});
+ const loaded=tv2Load_(),state=loaded.payload||{};
+ const targets=(state.inventoryLots||[]).filter(l=>{
+  const combined=normalize_(String(l.product||'')+' '+String(l.set||''));
+  return (combined.includes(normalize_('ニョロモ'))&&combined.includes(normalize_('060/165')))||
+         (combined.includes(normalize_('メガリザードンex'))&&combined.includes(normalize_('223/193')));
+ }).map(l=>{
+  const q=(state.marketQuotes||[]).filter(x=>String(x.lotId||'')===String(l.id||'')).sort((a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||'')))[0]||null;
+  return{lotId:l.id,product:l.product,set:l.set||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,quote:q?{price:q.price,source:q.source,checkedAt:q.checkedAt}:null};
+ });
+ if(targets.length!==2)throw new Error('修正対象2件の再読込検証に失敗しました: '+targets.length+'件');
+ const poliwag=targets.find(x=>normalize_(x.product).includes(normalize_('ニョロモ')));
+ const charizard=targets.find(x=>normalize_(x.product).includes(normalize_('メガリザードンex')));
+ if(!poliwag||poliwag.variant!=='マスターボールミラー'||poliwag.identityNeedsReview)throw new Error('ニョロモの版指定検証に失敗しました');
+ if(!charizard||charizard.variant!=='通常版'||charizard.identityNeedsReview)throw new Error('メガリザードンexの版指定検証に失敗しました');
+ return{ok:true,revision:Number(loaded.revision),identity,market,targets};
+}
+
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
