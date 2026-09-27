@@ -4,6 +4,7 @@ import{saveV2}from'./api-client.js';
 import{assertV2WriteEnabled}from'./write-gate.js';
 
 const makeId=(prefix='tx')=>prefix+'-'+Date.now()+'-'+crypto.randomUUID();
+function verifyPersistedMutation(reread,nextRevision,mutationId,label){const revision=Number(reread&&reread.revision),expected=Number(nextRevision),audits=((reread&&reread.payload&&reread.payload.auditLog)||[]).filter(x=>x.mutationId===mutationId);if(!Number.isFinite(revision)||revision<expected||audits.length!==1)throw new Error(label+'の保存検証に失敗しました');return revision}
 export function normalizeUiTransaction(type,data){
  if(!['purchase','sale','opening'].includes(type))throw new Error('V2取引種別が不正です');
  const category=String(data.category||'').trim();
@@ -19,7 +20,7 @@ export async function commitV2Transaction(type,data,config=getVaultV2Config()){
  const stored=reread.payload.transactions.filter(x=>x.id===tx.id);
  const audits=reread.payload.auditLog.filter(x=>x.mutationId===mutationId);
  if(stored.length!==1||audits.length!==1)throw new Error('V2保存後の一意性検証に失敗しました');
- if(reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('V2保存後のrevision検証に失敗しました');
+ verifyPersistedMutation(reread,next.revision,mutationId,'V2取引');
  return{transaction:stored[0],payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
 }
 export async function commitV2CardIdentity(lotId,cardSet,config=getVaultV2Config()){
@@ -27,7 +28,7 @@ export async function commitV2CardIdentity(lotId,cardSet,config=getVaultV2Config
  const mutationId=makeId('card-identity'),next=setCardIdentity(before.payload,lotId,cardSet,mutationId);
  await saveV2(config.url,config.token,next,before.revision);
  const reread=await loadVaultV2(config),lot=reread.payload.inventoryLots.find(x=>x.id===lotId);
- if(!lot||lot.set!==String(cardSet).trim()||reread.lastMutationId!==mutationId||Number(reread.revision)!==Number(next.revision))throw new Error('カード番号の保存確認に失敗しました');
+ if(!lot||lot.set!==String(cardSet).trim())throw new Error('カード番号の保存確認に失敗しました');verifyPersistedMutation(reread,next.revision,mutationId,'カード番号');
  return{payload:reread.payload,revision:reread.revision};
 }
 export async function commitV2CardIdentityBatch(rows,config=getVaultV2Config()){
@@ -69,7 +70,7 @@ export async function commitV2CardIdentityBatch(rows,config=getVaultV2Config()){
  validateState(next);
  await saveV2(config.url,config.token,next,before.revision);
  const reread=await loadVaultV2(config);
- if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==next.lastMutationId||changed.some(item=>reread.payload.inventoryLots.find(x=>x.id===item.lotId)?.set!==item.set||!reread.payload.auditLog.some(a=>a.mutationId===item.mutationId)))throw new Error('カード番号の一括保存確認に失敗しました');
+ if(Number(reread.revision)<Number(next.revision)||changed.some(item=>reread.payload.inventoryLots.find(x=>x.id===item.lotId)?.set!==item.set||reread.payload.auditLog.filter(a=>a.mutationId===item.mutationId).length!==1))throw new Error('カード番号の一括保存確認に失敗しました');
  return{payload:reread.payload,revision:reread.revision,updated:changed.length};
 }
 
@@ -89,6 +90,6 @@ export async function commitV2Batch(items,config=getVaultV2Config()){
  for(const {mutationId} of txs){const audit=next.auditLog.find(x=>x.mutationId===mutationId);if(audit)audit.revision=next.revision}
  validateState(next);let confirmed;try{confirmed=await saveV2(config.url,config.token,next,before.revision)}catch(err){throw new Error('batch save: '+String(err?.message||err))}let reread;try{reread=await loadVaultV2(config)}catch(err){throw new Error('batch reread: '+String(err?.message||err))}
  for(const {tx,mutationId} of txs){if(reread.payload.transactions.filter(x=>x.id===tx.id).length!==1)throw new Error('一括反映後の取引一意性検証に失敗しました');if(reread.payload.auditLog.filter(x=>x.mutationId===mutationId).length!==1)throw new Error('一括反映後の監査検証に失敗しました')}
- if(Number(reread.revision)!==Number(next.revision)||reread.lastMutationId!==txs.at(-1).mutationId)throw new Error('一括反映後のrevision検証に失敗しました');
+ if(Number(reread.revision)<Number(next.revision))throw new Error('一括反映後のrevision検証に失敗しました');
  return{transactions:txs.map(x=>x.tx),payload:reread.payload,revision:reread.revision,lastMutationId:reread.lastMutationId,confirmed};
 }
