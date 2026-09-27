@@ -251,9 +251,22 @@ document.querySelector('#restore-input').addEventListener('change',async e=>{if(
 document.querySelector('#legacy-input').addEventListener('change',async e=>{if(v2ModeLocked()){e.target.value='';toast('V2確認モードは読み取り専用です');return}try{const raw=await readFile(e.target);if(!raw)return;const result=importLegacy(JSON.parse(raw));if(!confirm(`${result.count}件を現在のデータに追加しますか？`))return;state=merge(state,result.state);render();toast(`${result.count}件を取り込みました`)}catch(err){alert(`インポート失敗: ${err.message}`)}finally{e.target.value=''}});
 addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).split('/');route=next||'dashboard';if(route==='inventory')subtype=['boxes','packs','cards'].includes(param)?param:'boxes';if(route==='ledger'&&param)subtype=param;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
+async function processPendingCommandQueueOnBoot(){
+ const key='toreca-vault:queue-sync:20260927-mega-rayquaza';
+ if(localStorage.getItem(key)==='done')return;
+ const config=getVaultV2Config();if(!config.token||!v2Connected())return;
+ try{
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),60000);let response;
+  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'process-command-queue-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
+  const result=await response.json();if(!result.ok)throw new Error(result.error||'コマンド同期に失敗しました');
+  const failed=(result.results||[]).filter(x=>x&&!x.ok);if(failed.length)throw new Error(failed.map(x=>x.error||'コマンド処理失敗').join(' / '));
+  const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('コマンド反映後のV2受入チェックに失敗しました');
+  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));localStorage.setItem(key,'done');render();setSyncStatus('保留コマンド反映済み · rev '+remoteRevision,'success');toast('保留コマンドをV2へ反映しました');
+ }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
+}
 async function bootRemote(){
  if(v2ModeLocked())v2ReadOnly=true;
- if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
+ if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');await processPendingCommandQueueOnBoot();return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
  if(v2ModeLocked()){v2ReadOnly=true;render();setSyncStatus('V2接続情報の再確認が必要です。ローカル保存には戻りません','warning');return}
  if(getSyncConfig().url)pullAndApply().catch(err=>console.warn('起動時同期に失敗しました',err));
 }
