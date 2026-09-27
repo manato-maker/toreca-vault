@@ -12,8 +12,18 @@ export function validateBrowserState(state){
 const CONFIG_KEY='toreca-vault:v2:sync';
 const TOKEN_KEY='toreca-vault:v2:token';
 const REQUIRED_KEY='toreca-vault:v2:required';
+// Compatibility keys used by earlier Toreca Vault handoff builds.
+const LEGACY_URL_KEY='tv-v2-sync-endpoint';
+const LEGACY_TOKEN_KEY='tv-v2-sync-token';
+const validUrl=url=>/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(String(url||'').trim());
 export function getVaultV2Config(){
   let saved={};try{saved=JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')}catch{}
+  const legacyUrl=String(localStorage.getItem(LEGACY_URL_KEY)||'').trim();
+  const legacyToken=String(localStorage.getItem(LEGACY_TOKEN_KEY)||'').trim();
+  if((!saved.url||!saved.token)&&validUrl(legacyUrl)&&legacyToken.length>=24){
+    saved={url:legacyUrl,token:legacyToken};
+    localStorage.setItem(CONFIG_KEY,JSON.stringify(saved));
+  }
   const sessionToken=sessionStorage.getItem(TOKEN_KEY)||'';
   if(sessionToken&&!saved.token){saved={...saved,token:sessionToken};localStorage.setItem(CONFIG_KEY,JSON.stringify(saved))}
   const token=sessionToken||saved.token||'';
@@ -22,11 +32,17 @@ export function getVaultV2Config(){
 }
 export function setVaultV2Config(url,token){
   const c={url:String(url||'').trim(),token:String(token||'').trim()};
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(c.url))throw new Error('Apps Scriptの /exec URLが必要です');
+  if(!validUrl(c.url))throw new Error('Apps Scriptの /exec URLが必要です');
   if(c.token.length<24)throw new Error('同期キーが短すぎます');
-  localStorage.setItem(CONFIG_KEY,JSON.stringify({url:c.url,token:c.token}));localStorage.setItem(REQUIRED_KEY,'1');sessionStorage.setItem(TOKEN_KEY,c.token);return c;
+  localStorage.setItem(CONFIG_KEY,JSON.stringify({url:c.url,token:c.token}));
+  localStorage.setItem(LEGACY_URL_KEY,c.url);localStorage.setItem(LEGACY_TOKEN_KEY,c.token);
+  localStorage.setItem(REQUIRED_KEY,'1');sessionStorage.setItem(TOKEN_KEY,c.token);return c;
 }
-export function clearVaultV2Config(){localStorage.removeItem(CONFIG_KEY);localStorage.removeItem(REQUIRED_KEY);sessionStorage.removeItem(TOKEN_KEY)}
+export function clearVaultV2Config(){
+  localStorage.removeItem(CONFIG_KEY);localStorage.removeItem(REQUIRED_KEY);
+  localStorage.removeItem(LEGACY_URL_KEY);localStorage.removeItem(LEGACY_TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+}
 export function requiresVaultV2(){return localStorage.getItem(REQUIRED_KEY)==='1'}
 
 export async function loadVaultV2(config=getVaultV2Config()){
