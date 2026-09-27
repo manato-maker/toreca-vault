@@ -27,6 +27,10 @@ ${liveEarly}`);
 }
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
+  if (__tv2OneTimeAction === 'repair-known-cards-now-20260928') {
+    try { return jsonResponse_(tv2RepairKnownCardsNow_()); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
     try { return jsonResponse_(tv2ProcessOneCommandByNonce_(e.parameter.requestId, e.parameter.nonce)); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
