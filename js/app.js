@@ -252,16 +252,27 @@ document.querySelector('#legacy-input').addEventListener('change',async e=>{if(v
 addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).split('/');route=next||'dashboard';if(route==='inventory')subtype=['boxes','packs','cards'].includes(param)?param:'boxes';if(route==='ledger'&&param)subtype=param;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
 async function processPendingCommandQueueOnBoot(){
- const key='toreca-vault:queue-sync:20260927-mega-rayquaza';
- if(localStorage.getItem(key)==='done')return;
  const config=getVaultV2Config();if(!config.token||!v2Connected())return;
  try{
-  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),60000);let response;
-  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'process-command-queue-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
-  const result=await response.json();if(!result.ok)throw new Error(result.error||'コマンド同期に失敗しました');
+  setSyncStatus('保留コマンドをV2へ確認中…');
+  let result=null,lastErr=null;
+  for(let attempt=0;attempt<2;attempt++){
+   try{
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),60000);let response;
+    try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'process-command-queue-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
+    const text=await response.text();if(!response.ok)throw new Error('HTTP '+response.status);
+    try{result=JSON.parse(text)}catch(_){throw new Error('コマンドAPIの応答がJSONではありません')}
+    if(!result.ok)throw new Error(result.error||'コマンド同期に失敗しました');
+    lastErr=null;break;
+   }catch(err){lastErr=err;if(attempt===0)await new Promise(r=>setTimeout(r,1500))}
+  }
+  if(lastErr)throw lastErr;
   const failed=(result.results||[]).filter(x=>x&&!x.ok);if(failed.length)throw new Error(failed.map(x=>x.error||'コマンド処理失敗').join(' / '));
+  const processed=(result.results||[]).filter(x=>x&&x.ok).length;
   const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('コマンド反映後のV2受入チェックに失敗しました');
-  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));localStorage.setItem(key,'done');render();setSyncStatus('保留コマンド反映済み · rev '+remoteRevision,'success');toast('保留コマンドをV2へ反映しました');
+  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));render();
+  if(processed){setSyncStatus('保留コマンド反映済み · '+processed+'件 · rev '+remoteRevision,'success');toast('保留コマンドをV2へ'+processed+'件反映しました')}
+  else setSyncStatus('V2確認OK · rev '+remoteRevision,'success');
  }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
 }
 async function refreshSinglesOnceOnBoot(){
