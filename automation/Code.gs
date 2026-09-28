@@ -6,114 +6,17 @@ const APPLICATION_WORDS = /(抽選申込完了|抽選申込み受付完了|申�
 const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘|遊戯王|YU[- ]?GI[- ]?OH|遊戯王OCG|UNION ?ARENA|ユニオンアリーナ)/i;
 
 function installTorecaVaultAutomation() {
-  if (!DATA_FILE_ID) throw new Error('TV_DATA_FILE_ID が未設定です');
-  removeTorecaVaultTriggers_();
-  ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger('runTorecaVaultLotterySync').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger('runTorecaVaultMarketSync').timeBased().atHour(13).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  PropertiesService.getScriptProperties().setProperty('TV_INSTALLED_AT', new Date().toISOString());
-  return runTorecaVaultLotterySync();
+  return installTv2Automation();
 }
 
 function runTorecaVaultLotterySync() {
-  if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return { skipped: true, reason: 'locked' };
-  try {
-    const file = DriveApp.getFileById(DATA_FILE_ID);
-    const raw = file.getBlob().getDataAsString('UTF-8');
-    const root = JSON.parse(raw);
-    validate_(root);
-    const data = root.data;
-    const props = PropertiesService.getScriptProperties();
-    const now = new Date();
-    const lastIso = props.getProperty('TV_LAST_RUN');
-    const since = lastIso ? new Date(lastIso) : new Date(now.getTime() - 2 * 86400000);
-    const automation = root.automation || {};
-    const processed = new Set(automation.gmailMessageIds || []);
-    const report = { updated: 0, created: 0, duplicate: 0, outside: 0, review: 0, scanned: 0, since: since.toISOString(), at: now.toISOString() };
-    const newIds = [];
-    const updates = [];
-    const threads = GmailApp.search('newer_than:3d', 0, 200);
+  tv2EnsureSimpleAutomationSchedule_(true);
+  return runTv2Automation();
+}
 
-    threads.forEach(thread => thread.getMessages().forEach(message => {
-      if (message.getDate() <= since) return;
-      const messageId = message.getId();
-      const text = [message.getSubject(), message.getPlainBody()].join('\n');
-      if (!CARD_WORDS.test(text) || (!RESULT_WORDS.test(text) && !APPLICATION_WORDS.test(text))) return;
-      report.scanned++;
-      if (processed.has(messageId)) { report.duplicate++; return; }
-
-      if (APPLICATION_WORDS.test(text) && !RESULT_WORDS.test(text)) {
-        const created = upsertApplication_(data.lotteries, text, message, now);
-        if (created.kind === 'created') report.created++;
-        else if (created.kind === 'duplicate') report.duplicate++;
-        else {
-          report.review++;
-          updates.push({ messageId, reason: created.reason, subject: message.getSubject() });
-        }
-        newIds.push(messageId);
-        return;
-      }
-
-      const match = matchLottery_(data.lotteries, text);
-      if (match.kind === 'outside') {
-        report.outside++;
-      } else if (match.kind === 'review') {
-        report.review++;
-        updates.push({ messageId, reason: match.reason, subject: message.getSubject() });
-      } else {
-        const parsed = parseResult_(text, message.getDate());
-        if (!parsed.status) {
-          report.review++;
-          updates.push({ messageId, reason: '当落を一意に判別できない', subject: message.getSubject() });
-        } else {
-          const item = match.item;
-          const same = item.status === parsed.status && item.resultDate === parsed.resultDate &&
-            (!parsed.receiveDeadline || item.receiveDeadline === parsed.receiveDeadline);
-          if (same) {
-            if (!item.gmailMessageId) item.gmailMessageId = messageId;
-            report.duplicate++;
-          } else {
-            item.status = parsed.status;
-            item.resultDate = parsed.resultDate;
-            if (parsed.receiveDeadline) item.receiveDeadline = parsed.receiveDeadline;
-            if (parsed.receivePeriod) item.receivePeriod = parsed.receivePeriod;
-            if (parsed.shippingSchedule) item.shippingSchedule = parsed.shippingSchedule;
-            if (parsed.status === '当選' && !['受取済み','未受取'].includes(item.receiptStatus)) item.receiptStatus = '未受取';
-            if (parsed.status === '落選' && item.receiptStatus !== '受取済み') item.receiptStatus = '対象外';
-            item.gmailMessageId = messageId;
-            item.updatedAt = now.toISOString();
-            report.updated++;
-          }
-        }
-      }
-      newIds.push(messageId);
-    }));
-
-    automation.gmailMessageIds = [...processed, ...newIds].slice(-MAX_IDS);
-    automation.lastGmailRunAt = now.toISOString();
-    automation.lastReport = report;
-    automation.health = automation.health || {};
-    automation.health.lastGmailRunAt = now.toISOString();
-    automation.health.gmailReview = report.review;
-    automation.health.gmailStatus = report.review ? 'review' : 'ok';
-    automation.needsReview = [...(automation.needsReview || []), ...updates].slice(-200);
-    root.automation = automation;
-
-    if (report.updated || report.created) data.updatedAt = now.toISOString();
-    root.exportedAt = now.toISOString();
-    const out = JSON.stringify(root, null, 2);
-    JSON.parse(out);
-    file.setContent(out);
-
-    props.setProperty('TV_LAST_RUN', now.toISOString());
-    if (report.updated || report.created || report.outside || report.review) sendReport_(report, updates);
-    console.log(JSON.stringify(report));
-    return report;
-  } finally {
-    lock.releaseLock();
-  }
+function runTorecaVaultMarketSync() {
+  tv2EnsureSimpleAutomationSchedule_(true);
+  return runTv2Automation();
 }
 
 function validate_(root) {
