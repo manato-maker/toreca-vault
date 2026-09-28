@@ -59,6 +59,8 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザ�
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
     fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウ'&&set==='PROMO 001/SV-P'&&model==='001/SV-P'?{price:3200,source:'トレトク買取'}:null,
+    fetchToresiaBuyback_:()=>null,
+    fetchGamepediaBuyback_:()=>null,
     fetchAltemaBuyback_:()=>null
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
@@ -124,4 +126,56 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   const hit=vm.runInContext('fetchCardValueBuyback_',ctx)('リザードン','M6a 137/103','137/103','');
   assert.equal(hit?.price,18000,'exact product + set + number fallback accepts current max buyback');
   assert.equal(hit?.source,'ポケカ相場ナビ');
+}
+
+
+{
+  const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
+  const start=code.indexOf('function tv2EscapeRegex_('),end=code.indexOf('function fetchCardValueBuyback_(');
+  const html='<html><body><h2>ブラッキーexの買取価格相場ランキング</h2><div>ブラッキーex SA/30th MF-044/040 ブラッキーex MF-044/040 × ブラッキーexのカード一覧 閉じる 9,500 円 -3,500円 12,800 円</div><h2>カード詳細</h2><div>型番 MF-044/040 買取価格 9,500 円 販売価格 12,800 円</div></body></html>';
+  const ctx=vm.createContext({
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    encodeURIComponent,
+    UrlFetchApp:{fetch:()=>({getResponseCode:()=>200,getContentText:()=>html})}
+  });
+  vm.runInContext(code.slice(start,end),ctx);
+  const hit=vm.runInContext('fetchGamepediaBuyback_',ctx)('ブラッキーex','MF 044/040','044/040','');
+  assert.equal(hit?.price,9500,'Gamepedia exact-model parser reads the current buyback price');
+  assert.equal(hit?.source,'攻略大百科');
+}
+
+{
+  const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
+  const start=code.indexOf('function tv2EscapeRegex_('),end=code.indexOf('function fetchCardValueBuyback_(');
+  const html='<html><body>リザードン LV.76 137/103の買取価格・相場 M6a 137/103 基準買取価格 ￥22,000 前日 ￥18,000</body></html>';
+  const ctx=vm.createContext({
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    encodeURIComponent,
+    UrlFetchApp:{fetch:()=>({getResponseCode:()=>200,getContentText:()=>html})}
+  });
+  vm.runInContext(code.slice(start,end),ctx);
+  const hit=vm.runInContext('fetchToresiaBuyback_',ctx)('リザードン','M6a 137/103','137/103','');
+  assert.equal(hit?.price,22000,'Toresia exact mapped page reads the live baseline buyback');
+  assert.equal(hit?.source,'トレシア');
+}
+
+{
+  const fallbackState={inventoryLots:[{id:'f2',category:'カード',product:'コイキング M6a 165/103',set:'M6a 165/103',condition:'良品',quantity:1}],marketQuotes:[]};
+  const fallbackContext=vm.createContext({
+    tv2Mutate_:(_kind,fn)=>fn(fallbackState),TZ:'Asia/Tokyo',
+    Utilities:{formatDate:()=> '2026-09-28'},
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
+    fetchCardrushRows_:()=>{throw new Error('feed down')},
+    findCardrushBuyback_:()=>null,
+    fetchToretokuBuyback_:()=>{throw new Error('source down')},
+    fetchToresiaBuyback_:(name,set,model)=>name==='コイキング'&&set==='M6a 165/103'&&model==='165/103'?{price:5500,source:'トレシア'}:null,
+    fetchGamepediaBuyback_:()=>null,
+    fetchAltemaBuyback_:()=>null
+  });
+  vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
+  const hit=vm.runInContext('runTv2MarketAuto()',fallbackContext);
+  assert.equal(hit.report.cardUpdated,1,'one failed source does not abort later exact fallbacks');
+  assert.equal(fallbackState.marketQuotes[0].price,5500);
+  assert.equal(fallbackState.marketQuotes[0].source,'トレシア');
 }
