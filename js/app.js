@@ -275,24 +275,27 @@ async function processPendingCommandQueueOnBoot(){
   else setSyncStatus('V2確認OK · rev '+remoteRevision,'success');
  }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
 }
-async function refreshSinglesOnceOnBoot(){
- const key='toreca-vault:single-market-refresh:20260928-v4';
+async function refreshMarketOnceOnBoot(){
+ const key='toreca-vault:market-refresh:20260928-v5';
  if(localStorage.getItem(key)==='done')return;
  const config=getVaultV2Config();if(!config.token||!v2Connected())return;
  try{
-  setSyncStatus('シングル最新相場を取得中…');
+  setSyncStatus('最新相場を取得中…');
   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),120000);let response;
-  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'repair-known-card-identities-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
-  const result=await response.json();if(!result.ok)throw new Error(result.error||'シングル相場更新に失敗しました');
+  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'refresh-market-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
+  const text=await response.text();if(!response.ok)throw new Error('HTTP '+response.status);
+  let result;try{result=JSON.parse(text)}catch(_){throw new Error('相場APIの応答がJSONではありません')}
+  if(!result.ok)throw new Error(result.error||'相場更新に失敗しました');
   const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('相場更新後のV2受入チェックに失敗しました');
   const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));localStorage.setItem(key,'done');render();
-  const report=result.result&&result.result.report||result.result&&result.result.mutationResult&&result.result.mutationResult.report||{};
-  setSyncStatus('シングル相場更新済み · rev '+remoteRevision,'success');toast('シングル相場を更新しました'+(Number.isFinite(Number(report.cardUpdated))?' · 更新'+Number(report.cardUpdated)+'件':''));
- }catch(err){console.warn('シングル相場自動更新に失敗しました',err);setSyncStatus('シングル相場更新失敗 · '+String(err.message||err),'warning')}
+  const report=result.result&&result.result.report||{};
+  const detail=Number.isFinite(Number(report.cardUpdated))?' · シングル更新'+Number(report.cardUpdated)+'件':'';
+  setSyncStatus('最新相場更新済み · rev '+remoteRevision,'success');toast('最新相場を更新しました'+detail);
+ }catch(err){console.warn('相場自動更新に失敗しました',err);setSyncStatus('相場更新失敗 · '+String(err.message||err),'warning')}
 }
 async function bootRemote(){
  if(v2ModeLocked())v2ReadOnly=true;
- if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');await processPendingCommandQueueOnBoot();await refreshSinglesOnceOnBoot();return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
+ if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');await processPendingCommandQueueOnBoot();await refreshMarketOnceOnBoot();return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
  if(v2ModeLocked()){v2ReadOnly=true;render();setSyncStatus('V2接続情報の再確認が必要です。ローカル保存には戻りません','warning');return}
  if(getSyncConfig().url)pullAndApply().catch(err=>console.warn('起動時同期に失敗しました',err));
 }
