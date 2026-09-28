@@ -11,3 +11,5 @@ test('read-only UI adapter uses V2 projection when snapshot exists',()=>{const p
 
 test('inventory projection shows newest acquired lots first',()=>{const x=structuredClone(state);x.inventoryLots.push({id:'new',product:'Newest',productKey:'Newest',category:'BOX',condition:'あり',quantity:1,unitCost:1,acquiredAt:'2026-09-20'});const view=v2ViewModel(x);assert.equal(view.boxes[0].product,'Newest')});
 test('card identity is visible in V2 inventory projection',()=>{const x=structuredClone(state);x.inventoryLots.push({id:'card',product:'エーフィex',category:'カード',condition:'美品',set:'MF 043/040',quantity:1});assert.equal(v2ViewModel(x).cards[0].set,'MF 043/040')});
+
+test('embedded set number is recognized for card controls',()=>{const x=structuredClone(state);x.inventoryLots.push({id:'embedded',product:'ピカチュウex M6a 127/103',category:'カード',condition:'良品',quantity:1});const card=v2ViewModel(x).cards.find(v=>v.id==='embedded');assert.equal(card.set,'M6a 127/103')});
