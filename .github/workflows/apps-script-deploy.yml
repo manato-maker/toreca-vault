@@ -6,8 +6,6 @@ on:
     paths:
       - 'automation/**'
       - '.github/workflows/apps-script-deploy.yml'
-      - 'scripts/patch-cardrush-buyback.mjs'
-      - 'scripts/patch-v2-market-refresh-route.mjs'
 jobs:
   # V2-only authenticated cutover
   test:
@@ -35,38 +33,24 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
-      - name: Pull project and patch canonical automation
+      - name: Build canonical Apps Script project
         run: |
+          rm -rf .apps-script-automation
           mkdir -p .apps-script-automation
-          npx clasp pull
-          test -s .apps-script-automation/Code.js -o -s .apps-script-automation/コード.js
-          test -s .apps-script-automation/appsscript.json
           cp automation/appsscript.json .apps-script-automation/appsscript.json
-          cp .apps-script-automation/Code.js /tmp/tv-code-before.js 2>/dev/null || cp .apps-script-automation/コード.js /tmp/tv-code-before.js
-          grep -q 'function fetchCardrushRows_' /tmp/tv-code-before.js
-          grep -q 'function findCardrushBuyback_' /tmp/tv-code-before.js
-          if test -s .apps-script-automation/Code.js; then code_path=.apps-script-automation/Code.js; else code_path=.apps-script-automation/コード.js; fi
-          node scripts/patch-cardrush-buyback.mjs "$code_path" automation/Code.gs
-          node scripts/patch-v2-market-refresh-route.mjs "$code_path"
-          cp "$code_path" /tmp/tv-code-expected.js
+          cp automation/Code.gs .apps-script-automation/Code.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
-      - name: Push patched automation
+      - name: Push canonical source
         run: npx clasp push --force
       - name: Verify remote source
         run: |
-          mv .apps-script-automation .apps-script-automation-before
-          mkdir .apps-script-automation
+          rm -rf .apps-script-automation
+          mkdir -p .apps-script-automation
           npx clasp pull
           cmp -s automation/appsscript.json .apps-script-automation/appsscript.json
-          cmp -s /tmp/tv-code-expected.js .apps-script-automation/Code.js || cmp -s /tmp/tv-code-expected.js .apps-script-automation/コード.js
+          cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
-          ! grep -q 'TEMP_FINALIZER_20260927' .apps-script-automation/Code.js
-          ! grep -q '__tv2_finalize_20260927' .apps-script-automation/Code.js
-          ! grep -q 'runTv2FinalCompletion20260927' .apps-script-automation/V2Automation.js
-          ! grep -q 'runTv2SingleCardRefresh20260926' .apps-script-automation/V2Automation.js
-          ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
-      - name: Update market refresh web deployment
-        run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
-      - name: Create immutable version
-        working-directory: automation
-        run: npx clasp version "GitHub ${GITHUB_SHA}"
+      - name: Install simple automation trigger
+        run: npx clasp run installTv2Automation
+      - name: Verify automation trigger
+        run: npx clasp run tv2AutomationStatus
