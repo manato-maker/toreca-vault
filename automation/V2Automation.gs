@@ -206,13 +206,19 @@ function tv2NormalizeCardLotForV2Only_(lot){
  return changed;
 }
 function tv2CleanCutover20260928_(){
+ const version='20260928-v2-only-v1',before=tv2Load_(),beforeState=before.payload||{},beforeHealth=(beforeState.automation&&beforeState.automation.health)||{};
+ if(String(beforeHealth.v2OnlyCutoverVersion||'')===version){
+  const active=(beforeState.inventoryLots||[]).filter(l=>Number(l.quantity)>0),cards=active.filter(l=>l.category==='カード'),quotes=Array.isArray(beforeState.marketQuotes)?beforeState.marketQuotes:[],today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+  const fresh=cards.filter(l=>quotes.some(q=>String(q.lotId||'')===String(l.id||'')&&String(q.checkedAt||'')===today&&Number(q.price)>0)).length;
+  return{ok:true,already:true,revision:Number(before.revision),counts:{activeLots:active.length,cards:cards.length,marketQuotes:quotes.length,freshCardQuotes:fresh}};
+ }
  const reset=tv2Mutate_('v2-only-clean-cutover',state=>{
   state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
   const removedQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes.length:0;
   state.marketQuotes=[];
   let normalizedCards=0;
   state.inventoryLots.forEach(l=>{if(tv2NormalizeCardLotForV2Only_(l))normalizedCards++});
-  const health=tv2Health_(state);health.marketStatus='pending';health.marketReview=0;health.marketNeedsReview=[];
+  const health=tv2Health_(state);health.marketStatus='pending';health.marketReview=0;health.marketNeedsReview=[];health.v2OnlyCutoverVersion=version;health.v2OnlyCutoverAt=new Date().toISOString();
   return{changed:true,removedQuotes,normalizedCards};
  });
  const market=runTv2MarketAuto({skipQueue:true});
@@ -220,7 +226,7 @@ function tv2CleanCutover20260928_(){
  const activeLots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0),cards=activeLots.filter(l=>l.category==='カード');
  const quotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
  const freshCardQuotes=cards.filter(l=>quotes.some(q=>String(q.lotId||'')===String(l.id||'')&&String(q.checkedAt||'')===today&&Number(q.price)>0)).length;
- return{ok:true,revision:Number(loaded.revision),reset,market,counts:{activeLots:activeLots.length,cards:cards.length,marketQuotes:quotes.length,freshCardQuotes}};
+ return{ok:true,already:false,revision:Number(loaded.revision),reset,market,counts:{activeLots:activeLots.length,cards:cards.length,marketQuotes:quotes.length,freshCardQuotes}};
 }
 
 function tv2TryMarketSource_(label,fn,reviews){
@@ -694,6 +700,10 @@ function tv2HandleMarketRefreshWeb_(req){
  const body=req&&typeof req==='object'?req:{},action=String(body.action||'');
  const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||'');
  if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
+ if(action==='clean-cutover-v2'){
+  const result=tv2CleanCutover20260928_();
+  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
+ }
  if(action==='refresh-market-v2'){
   const result=runTv2MarketAuto({skipQueue:true});
   return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
