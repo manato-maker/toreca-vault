@@ -1,0 +1,70 @@
+name: Temporary Market Source Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temp-market-source-probe.yml'
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe current single and sealed sources
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.parse, urllib.request, re, html
+          cards=[
+            ('メガレックウザex','M6','095/076',''),
+            ('ピカチュウex','M6a','127/103',''),
+            ('リザードン','M6a','137/103',''),
+            ('コイキング','M6a','165/103',''),
+            ('ブラッキーex','MF','044/040',''),
+            ('エーフィex','MF','043/040',''),
+            ('レアコイル','SV8','112/106',''),
+            ('メガリザードンex','M2a','223/193','通常版'),
+            ('メガルカリオex','M1L','078/063',''),
+            ('ニョロモ','SV2a','060/165','マスターボールミラー'),
+          ]
+          UA={'User-Agent':'Mozilla/5.0'}
+          objpat=re.compile(r'\{\\\"name\\\":\\\"([^\\\"]+)\\\",\\\"itemCode\\\":\\\"([^\\\"]+)\\\",\\\"price\\\":(\d+),\\\"sellPrice\\\":\d+,\\\"modelNumber\\\":\\\"([^\\\"]+)\\\",\\\"imageUrl\\\":\\\"[^\\\"]+\\\",\\\"rarity\\\":\\\"([^\\\"]*)\\\"\}')
+          def get(url):
+            req=urllib.request.Request(url,headers=UA)
+            with urllib.request.urlopen(req,timeout=30) as r:
+              return r.status,r.read().decode('utf-8','replace')
+          for name,setcode,model,variant in cards:
+            print('\nCARD',name,setcode,model,variant)
+            try:
+              found=[]
+              for q in [name,model]:
+                url='https://www.toretoku.jp/kaitori/pokemon/item-search?'+urllib.parse.urlencode({'genre':'pokemon','keyword':q})
+                st,txt=get(url)
+                rows=[]
+                for m in objpat.finditer(txt):
+                  n,code,price,modelnum,rarity=m.groups()
+                  if model in modelnum:
+                    rows.append((n,int(price),modelnum,rarity))
+                print(' TORETOKU',q,'status',st,'rows',rows[:12])
+                found += rows
+            except Exception as e: print(' TORETOKU_ERR',repr(e))
+            try:
+              slug=model.replace('/','-')
+              url='https://card-value.jp/pokemon/cards/'+slug+'/'
+              st,txt=get(url)
+              clean=re.sub(r'<script[\s\S]*?</script>|<style[\s\S]*?</style>|<[^>]+>',' ',txt,flags=re.I)
+              clean=html.unescape(re.sub(r'\s+',' ',clean))
+              prices=re.findall(r'最高買取(?:価格)?\s*[¥￥]\s*([0-9][0-9,]{1,8})',clean)
+              print(' CARDVALUE status',st,'name?',name in clean,'set?',setcode.lower() in clean.lower(),'model?',model in clean,'highest',prices[:5])
+            except Exception as e: print(' CARDVALUE_ERR',repr(e))
+          try:
+            st,txt=get('https://torekakaku-navi.com/')
+            print('\nSEALED toreKakaku status',st,'startdeck count',txt.count('スタートデッキ100'),'battle count',txt.count('バトルコレクション'))
+            for m in re.finditer('スタートデッキ100',txt):
+              print(' SEALED_SNIP',re.sub(r'\s+',' ',txt[max(0,m.start()-700):m.start()+1800])[:2500]); break
+          except Exception as e: print(' SEALED_ERR',repr(e))
+          try:
+            st,txt=get('https://www.pokemon-card.com/ex/mc/')
+            clean=re.sub(r'<[^>]+>',' ',txt)
+            clean=html.unescape(re.sub(r'\s+',' ',clean))
+            print(' OFFICIAL status',st,'recognized',('スタートデッキ100' in clean),('891円' in clean or '891' in clean),clean[:500])
+          except Exception as e: print(' OFFICIAL_ERR',repr(e))
+          PY
