@@ -70,7 +70,7 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザ�
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
 
 {
-  const start=code.indexOf('function fetchToretokuBuyback_('),end=code.indexOf('function fetchAltemaBuyback_(');
+  const start=code.indexOf('function tv2ToretokuNameMatches_('),end=code.indexOf('function fetchAltemaBuyback_(');
   const fn=code.slice(start,end);
   const html='self.__next_f.push([1,"items:[{\\\"name\\\":\\\"メガレックウザex\\\",\\\"itemCode\\\":\\\"x\\\",\\\"price\\\":1700,\\\"sellPrice\\\":2700,\\\"modelNumber\\\":\\\"M6 095/076\\\",\\\"imageUrl\\\":\\\"u\\\",\\\"rarity\\\":\\\"SR\\\"}]"])';
   const ctx=vm.createContext({
