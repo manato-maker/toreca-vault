@@ -176,10 +176,25 @@ function tv2RepairKnownCardsNow_(){
 }
 
 
-function tv2CardMarketName_(lot,model){
+function tv2CardSetText_(lot,model){
+ const direct=String(lot&&lot.set||'').trim();if(direct)return direct;
+ const source=String(lot&& (lot.product||lot.productKey) ||'').trim();if(!source||!model)return'';
+ const escaped=String(model).replace(/[.*+?^$(){}|[\]\\]/g,'\\function tv2CardMarketName_(lot,model){
  let name=String(lot.product||lot.productKey||'').trim();
  if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
  const setCode=String(lot.set||'').trim().split(/\s+/)[0]||'',parts=name.split(/\s+/);
+ if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
+ return parts.join(' ').trim();
+}');
+ const m=source.match(new RegExp('(?:^|\\s)([A-Za-z0-9-]{1,12})\\s+'+escaped+'(?:\\s|$)','i'));
+ if(!m)return'';
+ const code=String(m[1]||'');if(/^(?:EX|GX|V|VMAX|VSTAR)$/i.test(code))return'';
+ return code+' '+model;
+}
+function tv2CardMarketName_(lot,model){
+ let name=String(lot.product||lot.productKey||'').trim();
+ if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
+ const setCode=tv2CardSetText_(lot,model).split(/\s+/)[0]||'',parts=name.split(/\s+/);
  if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
  return parts.join(' ').trim();
 }
@@ -204,13 +219,13 @@ function runTv2MarketAuto(options){
     if(!model||!['良品','美品',''].includes(String(lot.condition||''))){
       report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
-    const name=tv2CardMarketName_(lot,model),variant=tv2CardVariant_(lot);
+    const name=tv2CardMarketName_(lot,model),setText=tv2CardSetText_(lot,model),variant=tv2CardVariant_(lot);
     // Every source is exact-match and fail-closed. One unavailable source must
     // not abort the remaining inventory refresh.
     let result=rows&&name?tv2TryMarketSource_('カードラッシュ',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,lot.set,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレシア',()=>fetchToresiaBuyback_(name,lot.set,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('攻略大百科',()=>fetchGamepediaBuyback_(name,lot.set,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,setText,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレシア',()=>fetchToresiaBuyback_(name,setText,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('攻略大百科',()=>fetchGamepediaBuyback_(name,setText,model,variant),reviews);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=tv2TryMarketSource_('アルテマ',()=>fetchAltemaBuyback_(name,model),reviews);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
