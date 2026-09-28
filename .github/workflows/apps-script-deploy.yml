@@ -66,6 +66,13 @@ jobs:
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
       - name: Update market refresh web deployment
         run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
+      - name: Run one-time Gmail lottery sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsSL --retry 3 --retry-delay 2 'https://script.google.com/macros/s/AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg/exec?action=gmail-sync-now-20260928')"
+          echo "$body"
+          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error(x.error||"gmail sync failed"); if(!x.result||!x.result.report) throw new Error("missing sync report")' "$body"
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
