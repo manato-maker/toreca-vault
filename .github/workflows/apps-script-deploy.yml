@@ -9,6 +9,7 @@ on:
       - 'scripts/patch-cardrush-buyback.mjs'
       - 'scripts/patch-v2-market-refresh-route.mjs'
 jobs:
+  # V2-only authenticated cutover
   test:
     runs-on: ubuntu-latest
     steps:
