@@ -10,13 +10,14 @@ const feed=`${card('box','MEGAドリームEX','ハイクラスパック 「MEGA�
   row('shrink',[cell('AMTAF','AMTAF_SHOP',12000),cell('買取ミミ','mimi_kaitori',11500),cell('KURO','kuro_tcg',20000)]),
   row('no_shrink',[cell('AMTAF','AMTAF_SHOP',11000)]),
   row('loose_pack',[cell('買取ミミ','mimi_kaitori',350)])
-])}${card('sealed_other','30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー','',[row('shrink',[cell('AMTAF','AMTAF_SHOP',17500),cell('アリウム','cardshop_allium',16000),cell('買取ミミ','mimi_kaitori',15600)])])}${card('other','MEGAドリームEX 限定セット','限定セット',[row('shrink',[cell('AMTAF','AMTAF_SHOP',100000)])])}<footer>掲載日 <b>2026-09-25</b> / スナップショット 2026-09-25 13:19:21</footer>`;
+])}${card('sealed_other','30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー','',[row('shrink',[cell('AMTAF','AMTAF_SHOP',17500),cell('アリウム','cardshop_allium',16000),cell('買取ミミ','mimi_kaitori',15600)])])}${card('sealed_other','スタートデッキ100 バトルコレクション','ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',[row('shrink',[cell('AMTAF','AMTAF_SHOP',500),cell('買取ミミ','mimi_kaitori',900)])])}${card('other','MEGAドリームEX 限定セット','限定セット',[row('shrink',[cell('AMTAF','AMTAF_SHOP',100000)])])}<footer>掲載日 <b>2026-09-25</b> / スナップショット 2026-09-25 13:19:21</footer>`;
 const state={inventoryLots:[
   {id:'b1',category:'BOX',product:'MEGAドリームex',condition:'あり',quantity:1},
   {id:'b2',category:'BOX',product:'MEGAドリームex',condition:'なし',quantity:1},
   {id:'p1',category:'パック',product:'MEGAドリームex',condition:'未開封',quantity:1},
   {id:'b3',category:'BOX',product:'MEGAドリームex',condition:'未開封',quantity:1},
-  {id:'deck',category:'BOX',product:'ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー',condition:'',quantity:1}
+  {id:'deck',category:'BOX',product:'ポケモンカードゲーム MEGA 30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー',condition:'',quantity:1},
+  {id:'start100',category:'BOX',product:'スタートデッキ100',condition:'未開封',quantity:1}
 ],marketQuotes:[]};
 const context=vm.createContext({
   tv2Mutate_:(_kind,fn)=>fn(state),TZ:'Asia/Tokyo',
@@ -26,14 +27,19 @@ const context=vm.createContext({
 });
 vm.runInContext(src.slice(0,src.indexOf('function tv2Mutate_(')),context);
 const parsed=vm.runInContext('tv2ParseSealedFeed_',context)(feed,'2026-09-25');
-assert.equal(parsed.products.length,2);
+assert.equal(parsed.products.length,3);
 assert.equal(parsed.products[0].offers.shrink.length,2);
 assert.equal(vm.runInContext('tv2ParseSealedFeed_',context)(feed,'2026-09-26').date,'2026-09-25');
 const result=vm.runInContext('runTv2MarketAuto()',context);
-assert.equal(result.report.updated,4);
+assert.equal(result.report.updated,5);
 assert.equal(result.report.review,1);
-assert.deepEqual(state.marketQuotes.map(q=>q.price),[12000,11000,350,17500]);
+assert.deepEqual(state.marketQuotes.map(q=>q.price),[12000,11000,350,17500,900]);
 assert.equal(state.marketQuotes[3].source.includes('AMTAF'),true);
+assert.equal(state.marketQuotes[4].product,'スタートデッキ100');
+assert.equal(state.marketQuotes[4].officialProductUrl,'https://www.pokemon-card.com/ex/mc/');
+assert.equal(state.marketQuotes[4].officialProductName,'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション');
+assert.equal(vm.runInContext("tv2SealedName_('スタートデッキ100')",context),vm.runInContext("tv2SealedName_('ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション')",context),'short and official names canonicalize identically');
+assert.equal(vm.runInContext("tv2PickupLineOffer_('スタートデッキ100 バトルコレクション 未開封 ¥900',{product:'スタートデッキ100',category:'BOX',condition:'未開封'})",context)?.price,900,'Google Vision/OCR text can identify Start Deck 100 by official/short alias');
 assert.match(state.marketQuotes[0].source,/https:\/\/x\.com\/AMTAF_SHOP\/status\/123/);
 assert.equal(state.marketQuotes[1].condition,'なし');
 assert.equal(state.marketQuotes[2].category,'パック');
