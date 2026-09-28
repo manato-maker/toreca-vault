@@ -27,10 +27,6 @@ ${liveEarly}`);
 }
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
-  if (__tv2OneTimeAction === 'market-diag-20260928-8c51d7a2') {
-    try { return jsonResponse_(tv2MarketDiag20260928_()); }
-    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
-  }
 
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
     try { return jsonResponse_(tv2ProcessOneCommandByNonce_(e.parameter.requestId, e.parameter.nonce)); }
@@ -39,7 +35,4 @@ const getRoute=`function doGet(e) {
 if(!s.includes("__tv2OneTimeAction"))s=s.replace(getMarker,getRoute);
 s=s.replace(/  if \\(__tv2OneTimeAction === 'gmail-sync-now-20260928'\\) \\{[\\s\\S]*?\\n  \\}\\n/g,'');
 s=s.replace(/  if \\(__tv2OneTimeAction === 'gmail-pickup-verify-20260928'\\) \\{[\\s\\S]*?\\n  \\}\\n/g,'');
-if(s.includes("__tv2OneTimeAction")&&!s.includes("market-diag-20260928-8c51d7a2")){
-  s=s.replace("  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n","  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n  if (__tv2OneTimeAction === 'market-diag-20260928-8c51d7a2') {\n    try { return jsonResponse_(tv2MarketDiag20260928_()); }\n    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }\n  }\n");
-}
 fs.writeFileSync(file,s);
