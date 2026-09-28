@@ -350,7 +350,9 @@ const CARDRUSH_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQT3Q9qDbZ
 function fetchCardrushRows_() {
   const response = UrlFetchApp.fetch(CARDRUSH_CSV + '&v=' + Date.now(), { muteHttpExceptions: true, followRedirects: true });
   if (response.getResponseCode() !== 200) throw new Error('Cardrush CSV HTTP ' + response.getResponseCode());
-  return Utilities.parseCsv(response.getContentText('UTF-8'));
+  const rows=Utilities.parseCsv(response.getContentText('UTF-8'));
+  if(!Array.isArray(rows)||rows.length<10)throw new Error('Cardrush CSV is empty or malformed');
+  return rows;
 }
 
 function findCardrushBuyback_(rows, product, model, variant) {
@@ -366,7 +368,8 @@ function findCardrushBuyback_(rows, product, model, variant) {
     if (vn === normalize_('マスターボールミラー')) return text.includes(vn);
     if (vn === normalize_('モンスターボールミラー')) return text.includes(vn) && !text.includes(normalize_('マスターボール'));
     if (vn === normalize_('ミラー')) return text.includes(vn) && !text.includes(normalize_('モンスターボール')) && !text.includes(normalize_('マスターボール'));
-    return !vn && !/ミラー/.test(text);
+    if (vn === normalize_('通常版')) return !/ミラー|エラー|加工エラー/.test(text);
+    return !vn && !/ミラー|エラー|加工エラー/.test(text);
   }).map(row => {
     const prices = row.map(cell => {
       const s = String(cell || '').normalize('NFKC').replace(/[,，円¥￥\s]/g, '');
@@ -425,35 +428,67 @@ function fetchCardrushMediaBuyback_(product, model, variant) {
   return unique.length===1?{name:product,model,price:unique[0],source:'カードラッシュ買取表'}:null;
 }
 
+function tv2ToretokuNameMatches_(wanted,actual,model,variant){
+  const w=normalize_(wanted),a=normalize_(actual),v=normalize_(variant||'');
+  if(a===w)return true;
+  const stripped=normalize_(String(actual||'').replace(/[（(](?:マスターボールミラー|モンスターボールミラー|ミラー)[）)]/g,''));
+  if(stripped===w)return true;
+  // The owned M2a card was confirmed by the user as the normal print. Toretoku
+  // lists its canonical name with the X that older imported inventory omitted.
+  if(String(model||'').toUpperCase()==='223/193'&&w===normalize_('メガリザードンex')&&stripped===normalize_('メガリザードンXex'))return true;
+  return false;
+}
+function tv2ToretokuVariantMatches_(actualName,rarity,variant){
+  const text=normalize_(String(actualName||'')+' '+String(rarity||'')),v=normalize_(variant||'');
+  if(v===normalize_('マスターボールミラー'))return text.includes(normalize_('マスターボールミラー'))||text.includes(normalize_('マスターボール'));
+  if(v===normalize_('モンスターボールミラー'))return (text.includes(normalize_('モンスターボールミラー'))||text.includes(normalize_('モンスターボール')))&&!text.includes(normalize_('マスターボール'));
+  if(v===normalize_('ミラー'))return text.includes(normalize_('ミラー'))&&!text.includes(normalize_('モンスターボール'))&&!text.includes(normalize_('マスターボール'));
+  if(v===normalize_('通常版'))return !/ミラー|エラー|加工エラー/.test(text);
+  return !/ミラー|エラー|加工エラー/.test(text);
+}
 function fetchToretokuBuyback_(product, setText, model, variant) {
-  const query = [
-    'genre= pokemon'.replace(' ',''),
-    'keyword=' + encodeURIComponent(product)
-  ].join('&');
-  const response = UrlFetchApp.fetch('https://www.toretoku.jp/kaitori/pokemon/item-search?' + query, {
-    muteHttpExceptions:true, followRedirects:true,
-    headers:{'User-Agent':'Mozilla/5.0'}
-  });
-  if (response.getResponseCode() !== 200) return null;
-  const html = response.getContentText('UTF-8');
-  const re = /\{\\"name\\":\\"([^\\"]+)\\",\\"itemCode\\":\\"[^\\"]+\\",\\"price\\":(\d+),\\"sellPrice\\":\d+,\\"modelNumber\\":\\"([^\\"]+)\\",\\"imageUrl\\":\\"[^\\"]+\\",\\"rarity\\":\\"([^\\"]*)\\"\}/g;
-  const pn=normalize_(product),full=normalize_(setText||''),mn=normalize_(model),vn=normalize_(variant||''),matches=[];
-  let m;
-  while ((m=re.exec(html))) {
-    const name=String(m[1]||''),price=Number(m[2]),modelNumber=String(m[3]||''),rarity=String(m[4]||'');
-    if(normalize_(name)!==pn||!Number.isFinite(price)||price<=0)continue;
-    const itemModel=normalize_(modelNumber);
-    if(full ? itemModel!==full : !itemModel.endsWith(mn))continue;
-    const rv=normalize_(rarity);
-    if(vn===normalize_('マスターボールミラー') && !rv.includes(normalize_('マスターボール')))continue;
-    if(vn===normalize_('モンスターボールミラー') && (!rv.includes(normalize_('モンスターボール'))||rv.includes(normalize_('マスターボール'))))continue;
-    if(vn===normalize_('ミラー') && !rv.includes(normalize_('ミラー')))continue;
-    if(vn===normalize_('通常版') && /エラー|加工エラー|ミラー/.test(rarity))continue;
-    if(!vn && /ミラー/.test(rarity))continue;
-    matches.push({price,rarity,modelNumber});
+  const full=normalize_(setText||''),mn=normalize_(model),seen=new Set(),matches=[];
+  const queries=[product,model].filter((x,i,a)=>x&&a.indexOf(x)===i);
+  for(const keyword of queries){
+    const query=['genre=pokemon','keyword='+encodeURIComponent(keyword)].join('&');
+    const response=UrlFetchApp.fetch('https://www.toretoku.jp/kaitori/pokemon/item-search?'+query,{
+      muteHttpExceptions:true,followRedirects:true,headers:{'User-Agent':'Mozilla/5.0'}
+    });
+    if(response.getResponseCode()!==200)continue;
+    const html=response.getContentText('UTF-8');
+    const re=/\{\\"name\\":\\"([^\\"]+)\\",\\"itemCode\\":\\"([^\\"]+)\\",\\"price\\":(\d+),\\"sellPrice\\":\d+,\\"modelNumber\\":\\"([^\\"]+)\\",\\"imageUrl\\":\\"[^\\"]+\\",\\"rarity\\":\\"([^\\"]*)\\"\}/g;
+    let m;
+    while((m=re.exec(html))){
+      const name=String(m[1]||''),itemCode=String(m[2]||''),price=Number(m[3]),modelNumber=String(m[4]||''),rarity=String(m[5]||'');
+      const itemModel=normalize_(modelNumber);
+      if(!Number.isFinite(price)||price<=0)continue;
+      if(full?itemModel!==full:!itemModel.endsWith(mn))continue;
+      if(!tv2ToretokuNameMatches_(product,name,model,variant))continue;
+      if(!tv2ToretokuVariantMatches_(name,rarity,variant))continue;
+      const key=[itemCode,price,modelNumber,rarity].join('|');if(seen.has(key))continue;seen.add(key);
+      matches.push({price,rarity,modelNumber,name});
+    }
+    const prices=[...new Set(matches.map(x=>x.price))];
+    if(prices.length===1)return{name:product,model,price:prices[0],source:'トレトク買取'};
+    if(prices.length>1)return null;
   }
-  const prices=[...new Set(matches.map(x=>x.price))];
-  return prices.length===1?{name:product,model,price:prices[0],source:'トレトク買取'}:null;
+  return null;
+}
+
+function fetchCardValueBuyback_(product,setText,model,variant){
+  if(variant&&normalize_(variant)!==normalize_('通常版'))return null;
+  // Avoid pages where the same number is known to have a special error print.
+  if(normalize_(variant)===normalize_('通常版')&&String(model||'').toUpperCase()==='223/193')return null;
+  const slug=String(model||'').toUpperCase().replace(/[^0-9A-Z/-]/g,'').replace('/','-');
+  if(!/^\d{3}-[A-Z0-9-]{3,}$/.test(slug))return null;
+  const response=UrlFetchApp.fetch('https://card-value.jp/pokemon/cards/'+slug+'/',{muteHttpExceptions:true,followRedirects:true,headers:{'User-Agent':'Mozilla/5.0'}});
+  if(response.getResponseCode()!==200)return null;
+  const text=response.getContentText('UTF-8').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&yen;|&#165;/gi,'¥').replace(/\s+/g,' ').trim();
+  const n=normalize_(text),pn=normalize_(product),mn=normalize_(model),setCode=normalize_(String(setText||'').split(/\s+/)[0]||'');
+  if(!n.includes(pn)||!n.includes(mn)||(setCode&&!n.includes(setCode)))return null;
+  const prices=[...text.matchAll(/最高買取(?:価格)?\s*[¥￥]\s*([0-9][0-9,]{1,8})/g)].map(m=>Number(m[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
+  const unique=[...new Set(prices)];
+  return unique.length===1?{name:product,model,price:unique[0],source:'ポケカ相場ナビ'}:null;
 }
 
 function fetchAltemaBuyback_(product, model) {
