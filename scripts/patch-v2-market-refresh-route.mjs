@@ -27,6 +27,10 @@ ${liveEarly}`);
 }
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
+  if (__tv2OneTimeAction === 'gmail-sync-now-20260928b') {
+    try { return jsonResponse_({ok:true,result:runTv2LotteryAuto()}); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
     try { return jsonResponse_(tv2ProcessOneCommandByNonce_(e.parameter.requestId, e.parameter.nonce)); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
@@ -34,4 +38,7 @@ const getRoute=`function doGet(e) {
 if(!s.includes("__tv2OneTimeAction"))s=s.replace(getMarker,getRoute);
 s=s.replace(/  if \\(__tv2OneTimeAction === 'gmail-sync-now-20260928'\\) \\{[\\s\\S]*?\\n  \\}\\n/g,'');
 s=s.replace(/  if \\(__tv2OneTimeAction === 'gmail-pickup-verify-20260928'\\) \\{[\\s\\S]*?\\n  \\}\\n/g,'');
+if(s.includes("__tv2OneTimeAction")&&!s.includes("gmail-sync-now-20260928b")){
+  s=s.replace("  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n","  var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');\n  if (__tv2OneTimeAction === 'gmail-sync-now-20260928b') {\n    try { return jsonResponse_({ok:true,result:runTv2LotteryAuto()}); }\n    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }\n  }\n");
+}
 fs.writeFileSync(file,s);
