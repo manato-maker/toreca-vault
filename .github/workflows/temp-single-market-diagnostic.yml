@@ -8,46 +8,31 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect live buyback sources
+      - name: Inspect Toretoku exact model variants
         shell: bash
         run: |
           python - <<'PY'
-          import urllib.parse,urllib.request,re,csv,io,json
+          import urllib.parse,urllib.request,re
           cards=[
-            ('メガレックウザex','M6 095/076'),
-            ('ピカチュウex','M6a 127/103'),
             ('リザードン','M6a 137/103'),
-            ('コイキング','M6a 165/103'),
-            ('ブラッキーex','MF 044/040'),
-            ('エーフィex','MF 043/040'),
             ('レアコイル','SV8 112/106'),
             ('メガリザードンex','M2a 223/193'),
-            ('メガルカリオex','M1L 078/063'),
             ('ニョロモ','SV2a 060/165'),
           ]
           def norm(s):
             return re.sub(r'[\s\u3000\-_・:：()（）【】\[\]「」『』]','',str(s).casefold())
-          csv_url='https://docs.google.com/spreadsheets/d/e/2PACX-1vQT3Q9qDbZUpnP3_WH2I5qw8O-U_PqXVhhoIzH2o-tSzeDND9FTuoGKbZiNHTbrzTgKAUA2_SvXFh_2/pub?gid=1490875147&single=true&output=csv'
-          try:
-            data=urllib.request.urlopen(urllib.request.Request(csv_url,headers={'User-Agent':'Mozilla/5.0'}),timeout=30).read().decode('utf-8-sig','replace')
-            rows=list(csv.reader(io.StringIO(data)))
-            print('CARDRUSH_ROWS',len(rows))
-            for name,settext in cards:
-              model=settext.split()[-1]
-              hits=[r for r in rows if norm(name) in norm(' '.join(r)) and norm(model) in norm(' '.join(r))]
-              print('CARD',name,settext,'CSV_HITS',len(hits))
-              for h in hits[:5]: print(' CSV',h[:8])
-          except Exception as e: print('CARDRUSH_ERR',repr(e))
           pat=re.compile(r'\\\"name\\\":\\\"([^\\\"]+)\\\".*?\\\"price\\\":(\d+).*?\\\"modelNumber\\\":\\\"([^\\\"]+)\\\".*?\\\"rarity\\\":\\\"([^\\\"]*)\\\"',re.S)
-          for name,settext in cards:
-            url='https://www.toretoku.jp/kaitori/pokemon/item-search?'+urllib.parse.urlencode({'genre':'pokemon','keyword':name})
-            try:
-              txt=urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=30).read().decode('utf-8','replace')
-              matches=[]
-              for m in pat.finditer(txt):
-                n,price,model,rarity=m.groups()
-                if norm(n)==norm(name) and (norm(model)==norm(settext) or norm(model).endswith(norm(settext.split()[-1]))):
-                  matches.append((n,int(price),model,rarity))
-              print('TORETOKU',name,settext,'HITS',len(matches),matches[:10])
-            except Exception as e: print('TORETOKU_ERR',name,repr(e))
+          for wanted,settext in cards:
+            print('\n===',wanted,settext,'===')
+            for q in [wanted,settext,settext.split()[-1],wanted+' '+settext]:
+              url='https://www.toretoku.jp/kaitori/pokemon/item-search?'+urllib.parse.urlencode({'genre':'pokemon','keyword':q})
+              try:
+                txt=urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=30).read().decode('utf-8','replace')
+                allrows=[]
+                for m in pat.finditer(txt):
+                  n,price,model,rarity=m.groups()
+                  if norm(settext.split()[-1]) in norm(model):
+                    allrows.append((n,int(price),model,rarity))
+                print('QUERY',q,'MODEL_HITS',len(allrows),allrows[:20])
+              except Exception as e: print('ERR',q,repr(e))
           PY
