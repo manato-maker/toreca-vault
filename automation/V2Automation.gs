@@ -205,8 +205,14 @@ function tv2ApplyGmailPickup20260928_(){
   ];
   for(const g of geo){
    const matches=state.lotteries.filter(x=>String(x.gmailMessageId||'')===g.gmail);
-   if(matches.length!==1)throw new Error('GEO申込メール '+g.gmail+' の抽選を一意に特定できません: '+matches.length+'件');
-   const item=matches[0];item.title=g.title;item.store='GEO（受取店舗未確定）';item.resultDate=g.date;item.updatedAt=now;updated.push(g.gmail);
+   if(matches.length>1)throw new Error('GEO申込メール '+g.gmail+' の抽選が複数あります: '+matches.length+'件');
+   let item=matches[0];
+   if(!item){
+    item={id:'lottery-geo-mail-'+g.gmail,title:g.title,store:'GEO（受取店舗未確定）',status:'応募済',applicationDate:'2026-09-28',resultDate:g.date,receiptStatus:'対象外',receivedDate:'',memo:'Gmail申込から補完',gmailMessageId:g.gmail,createdAt:now,updatedAt:now};
+    state.lotteries.push(item);created.push(g.gmail);
+   }else{
+    item.title=g.title;item.store='GEO（受取店舗未確定）';item.resultDate=g.date;item.updatedAt=now;updated.push(g.gmail);
+   }
   }
   const famimaNo='20260921555332';
   let fm=state.lotteries.filter(x=>String(x.id||'').includes(famimaNo)||String(x.memo||'').includes(famimaNo));
