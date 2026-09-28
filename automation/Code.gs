@@ -475,6 +475,45 @@ function fetchToretokuBuyback_(product, setText, model, variant) {
   return null;
 }
 
+function tv2EscapeRegex_(text){return String(text||'').replace(/[.*+?^$(){}|[\]\\]/g,'\\function fetchCardValueBuyback_(product,setText,model,variant){')}
+function tv2PlainHtmlText_(html){
+  return String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&yen;|&#165;/gi,'¥').replace(/&amp;/gi,'&').replace(/&#39;|&apos;/gi,"'").replace(/&quot;/gi,'"').replace(/\s+/g,' ').trim();
+}
+function fetchGamepediaBuyback_(product,setText,model,variant){
+  if(variant&&normalize_(variant)!==normalize_('通常版'))return null;
+  const response=UrlFetchApp.fetch('https://premium.gamepedia.jp/pokeca/card/'+encodeURIComponent(product),{muteHttpExceptions:true,followRedirects:true,headers:{'User-Agent':'Mozilla/5.0'}});
+  if(response.getResponseCode()!==200)return null;
+  const text=tv2PlainHtmlText_(response.getContentText('UTF-8'));
+  const setCode=String(setText||'').trim().split(/\s+/)[0]||'',fullModel=(setCode?setCode+'-':'')+String(model||'');
+  if(!normalize_(text).includes(normalize_(product))||!normalize_(text).includes(normalize_(fullModel)))return null;
+  const escaped=tv2EscapeRegex_(fullModel),prices=[];
+  for(const re of [
+    new RegExp('型番\\s*'+escaped+'[\\s\\S]{0,500}?買取価格\\s*([0-9][0-9,]{1,8})\\s*円','gi'),
+    new RegExp(escaped+'[\\s\\S]{0,450}?閉じる\\s*([0-9][0-9,]{1,8})\\s*円','gi')
+  ]){
+    let m;while((m=re.exec(text))){const price=Number(String(m[1]||'').replace(/,/g,''));if(Number.isFinite(price)&&price>0)prices.push(price)}
+    const unique=[...new Set(prices)];if(unique.length===1)return{name:product,model,price:unique[0],source:'攻略大百科'};
+    if(unique.length>1)return null;
+  }
+  return null;
+}
+const TORESIA_EXACT_CARD_URLS_={
+  'M6A 137/103':'https://toresia.net/pokeca/cards/c01mxty',
+  'M6A 165/103':'https://toresia.net/pokeca/cards/c01ms6y'
+};
+function fetchToresiaBuyback_(product,setText,model,variant){
+  if(variant&&normalize_(variant)!==normalize_('通常版'))return null;
+  const setCode=String(setText||'').trim().split(/\s+/)[0]||'',key=(setCode+' '+String(model||'')).trim().toUpperCase(),url=TORESIA_EXACT_CARD_URLS_[key];
+  if(!url)return null;
+  const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true,headers:{'User-Agent':'Mozilla/5.0'}});
+  if(response.getResponseCode()!==200)return null;
+  const text=tv2PlainHtmlText_(response.getContentText('UTF-8')),n=normalize_(text);
+  if(!n.includes(normalize_(product))||!n.includes(normalize_(setCode))||!n.includes(normalize_(model)))return null;
+  const prices=[...text.matchAll(/基準買取価格\s*[¥￥]\s*([0-9][0-9,]{1,8})/g)].map(m=>Number(m[1].replace(/,/g,''))).filter(x=>Number.isFinite(x)&&x>0);
+  const unique=[...new Set(prices)];
+  return unique.length===1?{name:product,model,price:unique[0],source:'トレシア'}:null;
+}
+
 function fetchCardValueBuyback_(product,setText,model,variant){
   if(variant&&normalize_(variant)!==normalize_('通常版'))return null;
   // Avoid pages where the same number is known to have a special error print.
