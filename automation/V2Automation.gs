@@ -5,13 +5,22 @@ const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
 const TV2_OPENING_COMMAND_V2='opening-acquire-v2';
 
 function installTv2Automation(){
-  const loaded=tv2Load_();
   tv2EnsureSimpleAutomationSchedule_(true);
-  return{ok:true,revision:Number(loaded.revision),gmail:'15分ごと',market:'13:30以降に1日1回'};
+  ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2AutomationBootstrap_').forEach(t=>ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('runTv2AutomationBootstrap_').timeBased().after(15000).create();
+  return tv2AutomationStatus();
+}
+function tv2AutomationStatus(){
+  const handlers=ScriptApp.getProjectTriggers().map(t=>t.getHandlerFunction());
+  return{ok:true,handlers,recurring:handlers.filter(x=>x==='runTv2Automation').length,bootstrap:handlers.filter(x=>x==='runTv2AutomationBootstrap_').length,schedule:'15分ごと',market:'13:30以降に1日1回'};
+}
+function runTv2AutomationBootstrap_(){
+  try{return runTv2Automation()}
+  finally{ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2AutomationBootstrap_').forEach(t=>ScriptApp.deleteTrigger(t))}
 }
 function tv2EnsureSimpleAutomationSchedule_(force){
   if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
-  const version='simple-15m-market-1330-v1',handler='runTv2Automation';
+  const version='simple-15m-market-1330-v2',handler='runTv2Automation';
   const managed=['runTv2Automation','runTv2LotteryAuto','runTv2MarketAuto','runTv2PickupAuto','runTorecaVaultLotterySync','runTorecaVaultMarketSync'];
   const props=PropertiesService.getScriptProperties(),triggers=ScriptApp.getProjectTriggers();
   const ours=triggers.filter(t=>managed.includes(t.getHandlerFunction()));
@@ -701,32 +710,10 @@ function tv2HandleMarketRefreshWeb_(req){
  const body=req&&typeof req==='object'?req:{},action=String(body.action||'');
  const p=PropertiesService.getScriptProperties(),provided=String(body.token||''),accepted=['TV_SYNC_TOKEN','TV_V2_SYNC_TOKEN','TV2_SYNC_TOKEN'].map(k=>String(p.getProperty(k)||'')).filter(v=>v.length>=24);
  if(!accepted.length||!accepted.includes(provided))throw new Error('unauthorized');
- if(action==='clean-cutover-v2'){
-  const result=tv2CleanCutover20260928_();
-  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
- }
- if(action==='refresh-market-v2'){
-  const result=runTv2MarketAuto({skipQueue:true});
-  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
- }
- if(action==='refresh-single-market-v2'){
-  const result=runTv2MarketAuto({skipQueue:true,singleOnly:true});
-  return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
- }
- if(action==='repair-known-card-identities-v2'){
-  const identity=tv2RepairKnownCardIdentities20260928_();
-  const market=runTv2MarketAuto({skipQueue:true,singleOnly:true});
-  const loaded=tv2Load_();
-  return ContentService.createTextOutput(JSON.stringify({ok:true,identity,market,revision:Number(loaded.revision)})).setMimeType(ContentService.MimeType.JSON);
- }
- if(action==='process-command-queue-v2'){
-  const results=typeof tv2ProcessChatTradeDrafts_==='function'?tv2ProcessChatTradeDrafts_():[];
-  const loaded=tv2Load_();
-  return ContentService.createTextOutput(JSON.stringify({ok:true,results,revision:Number(loaded.revision)})).setMimeType(ContentService.MimeType.JSON);
- }
- throw new Error('unsupported action');
+ if(action!=='refresh-market-v2')throw new Error('unsupported action');
+ const result=runTv2MarketAuto({skipQueue:true,skipScheduleEnsure:true});
+ return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
 }
-
 
 
 function tv2ProcessOneCommandByNonce_(requestId,nonce){
