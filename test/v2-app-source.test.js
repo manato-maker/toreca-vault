@@ -16,9 +16,12 @@ test('completed one-shot purchase preset is removed',()=>{
   assert.doesNotMatch(source,/コイキング M6a 165\/103/);
 });
 
-test('V2 permanent mode blocks local fallback',()=>{
-  assert.match(source,/function v2ModeLocked\(\)\{return v2ReadOnly\|\|requiresVaultV2\(\)\|\|hasV2ReadOnly\(\)\|\|isV2WriteEnabled\(\)\}/);
-  assert.match(source,/function assertWritable\(\)\{if\(v2ModeLocked\(\)\)throw new Error\('V2永続接続モードではローカル保存できません'\)\}/);
+test('V2-only runtime blocks all local/V1 fallback',()=>{
+  assert.match(source,/let state=emptyState\(\),remoteRevision='',receiptTargetId='',v2ReadOnly=true/);
+  assert.match(source,/function v2ModeLocked\(\)\{return true\}/);
+  assert.match(source,/function assertWritable\(\)\{throw new Error\('V2専用モードです。ローカル\/V1保存は使用しません'\)\}/);
+  assert.doesNotMatch(source,/state=load\(\)/);
+  assert.doesNotMatch(source,/syncPublishedMarket\(\)/);
   assert.doesNotMatch(source,/disableV2ReadOnly\(\);disableV2Write\(\);clearSyncConfig\(\)/);
 });
 
