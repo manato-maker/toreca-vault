@@ -698,8 +698,8 @@ function tv2ProcessChatTradeDrafts_(){
 
 function tv2HandleMarketRefreshWeb_(req){
  const body=req&&typeof req==='object'?req:{},action=String(body.action||'');
- const p=PropertiesService.getScriptProperties(),expected=String(p.getProperty('TV_SYNC_TOKEN')||p.getProperty('TV_V2_SYNC_TOKEN')||p.getProperty('TV2_SYNC_TOKEN')||'');
- if(!expected||expected.length<24||String(body.token||'')!==expected)throw new Error('unauthorized');
+ const p=PropertiesService.getScriptProperties(),provided=String(body.token||''),accepted=['TV_SYNC_TOKEN','TV_V2_SYNC_TOKEN','TV2_SYNC_TOKEN'].map(k=>String(p.getProperty(k)||'')).filter(v=>v.length>=24);
+ if(!accepted.length||!accepted.includes(provided))throw new Error('unauthorized');
  if(action==='clean-cutover-v2'){
   const result=tv2CleanCutover20260928_();
   return ContentService.createTextOutput(JSON.stringify({ok:true,result})).setMimeType(ContentService.MimeType.JSON);
