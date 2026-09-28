@@ -192,6 +192,37 @@ function tv2CardMarketName_(lot,model){
  if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
  return parts.join(' ').trim();
 }
+function tv2NormalizeCardLotForV2Only_(lot){
+ if(!lot||lot.category!=='カード')return false;
+ const model=extractModel_([lot.set,lot.product,lot.productKey].filter(Boolean).join(' '));if(!model)return false;
+ let changed=false,setText=tv2CardSetText_(lot,model);
+ if(!String(lot.set||'').trim()&&setText){lot.set=setText;changed=true}
+ const setCode=String(lot.set||setText||'').trim().split(/\s+/)[0]||'';
+ const parts=String(lot.product||'').trim().split(/\s+/),idx=parts.findIndex(p=>normalize_(p)===normalize_(model));
+ if(idx>0&&setCode&&normalize_(parts[idx-1])===normalize_(setCode)){
+   const next=parts.slice(0,idx-1).concat(parts.slice(idx+1)).join(' ').trim();
+   if(next&&next!==lot.product){lot.product=next;changed=true}
+ }
+ return changed;
+}
+function tv2CleanCutover20260928_(){
+ const reset=tv2Mutate_('v2-only-clean-cutover',state=>{
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  const removedQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes.length:0;
+  state.marketQuotes=[];
+  let normalizedCards=0;
+  state.inventoryLots.forEach(l=>{if(tv2NormalizeCardLotForV2Only_(l))normalizedCards++});
+  const health=tv2Health_(state);health.marketStatus='pending';health.marketReview=0;health.marketNeedsReview=[];
+  return{changed:true,removedQuotes,normalizedCards};
+ });
+ const market=runTv2MarketAuto({skipQueue:true});
+ const loaded=tv2Load_(),state=loaded.payload||{},today=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+ const activeLots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0),cards=activeLots.filter(l=>l.category==='カード');
+ const quotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
+ const freshCardQuotes=cards.filter(l=>quotes.some(q=>String(q.lotId||'')===String(l.id||'')&&String(q.checkedAt||'')===today&&Number(q.price)>0)).length;
+ return{ok:true,revision:Number(loaded.revision),reset,market,counts:{activeLots:activeLots.length,cards:cards.length,marketQuotes:quotes.length,freshCardQuotes}};
+}
+
 function tv2TryMarketSource_(label,fn,reviews){
  try{return fn()||null}catch(err){reviews.push(label+'取得失敗: '+String(err&&err.message||err));return null}
 }
