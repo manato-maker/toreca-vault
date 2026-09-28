@@ -50,5 +50,3 @@ jobs:
           cmp -s automation/appsscript.json .apps-script-automation/appsscript.json
           cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
-      - name: Inspect existing deployments
-        run: npx clasp deployments
