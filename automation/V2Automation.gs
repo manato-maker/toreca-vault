@@ -333,7 +333,12 @@ function tv2VisionText_(url,key){if(!/^https:\/\/pbs\.twimg\.com\/media\/[A-Za-z
 function tv2PickupLineOffer_(line,lot){const name=tv2SealedName_(lot.product||lot.productKey),condition=tv2SealedCondition_(lot);
  if(!name||!condition||!line||line.length>140||!tv2SealedName_(line).includes(name))return null;
  const normalized=normalize_(line),shrink=/(?:シュリンク|シュリ)(?:あり|有)/.test(normalized),noShrink=/(?:シュリンク|シュリ)(?:なし|無)/.test(normalized);
- if(condition==='shrink'&&(!shrink||noShrink)||condition==='no_shrink'&&(!noShrink||shrink)||condition==='loose_pack'&&!/(?:バラパック|バラ売り|単品パック)/.test(normalized))return null;
+ const sealedOther=lot.category==='BOX'&&tv2IsSealedOther_(lot.product||lot.productKey);
+ if(condition==='shrink'&&sealedOther){
+   if(/開封済み|中古|シュリンク(?:なし|無)|シュリ(?:なし|無)/.test(normalized))return null;
+ }else if(condition==='shrink'&&(!shrink||noShrink))return null;
+ else if(condition==='no_shrink'&&(!noShrink||shrink))return null;
+ else if(condition==='loose_pack'&&!/(?:バラパック|バラ売り|単品パック)/.test(normalized))return null;
  const prices=[...String(line).matchAll(/(?:[¥￥]\s*([\d,]{3,})|((?:\d{1,3}(?:,\d{3})+|\d{4,}|\d{3}\s*円))\s*円?)/g)].map(m=>Number((m[1]||m[2]).replace(/[,円\s]/g,''))).filter(n=>Number.isFinite(n)&&n>0);
  if(prices.length!==1)return null;return{category:lot.category,name,condition,price:prices[0]}}
 function tv2PickupOffersFromText_(text,lots){const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean),out=[];
