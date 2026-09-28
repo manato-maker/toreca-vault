@@ -58,6 +58,7 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザ�
     extractModel_:x=>(String(x).match(/\d{3}\/(?:\d{3}|SV-P)/)||[])[0]||'',
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
+    fetchCardrushMediaBuyback_:()=>null,
     fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウ'&&set==='PROMO 001/SV-P'&&model==='001/SV-P'?{price:3200,source:'トレトク買取'}:null,
     fetchToresiaBuyback_:()=>null,
     fetchGamepediaBuyback_:()=>null,
@@ -168,16 +169,14 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
     extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
-    fetchToretokuBuyback_:()=>{throw new Error('source down')},
-    fetchToresiaBuyback_:(name,set,model)=>name==='コイキング'&&set==='M6a 165/103'&&model==='165/103'?{price:5500,source:'トレシア'}:null,
-    fetchGamepediaBuyback_:()=>null,
-    fetchAltemaBuyback_:()=>null
+    fetchCardrushMediaBuyback_:()=>null,
+    fetchToretokuBuyback_:()=>{throw new Error('source down')}
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
   const hit=vm.runInContext('runTv2MarketAuto()',fallbackContext);
-  assert.equal(hit.report.cardUpdated,1,'one failed source does not abort later exact fallbacks');
-  assert.equal(fallbackState.marketQuotes[0].price,5500);
-  assert.equal(fallbackState.marketQuotes[0].source,'トレシア');
+  assert.equal(hit.report.cardUpdated,0,'no source outside Cardrush/Toretoku may write a card quote');
+  assert.equal(hit.report.cardReview,1);
+  assert.equal(fallbackState.marketQuotes.length,0);
 }
 
 
@@ -190,6 +189,7 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
     extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
     fetchCardrushRows_:()=>[],
     findCardrushBuyback_:()=>null,
+    fetchCardrushMediaBuyback_:()=>null,
     fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウex'&&set==='M6a 127/103'&&model==='127/103'?{price:7300,source:'トレトク買取'}:null,
     fetchToresiaBuyback_:()=>null,
     fetchGamepediaBuyback_:()=>null,
