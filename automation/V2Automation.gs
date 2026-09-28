@@ -299,8 +299,9 @@ function runTv2MarketAuto(options){
     feed=tv2ParseSealedFeed_(response.getContentText('UTF-8'),date);
   }catch(err){feed={products:[],error:'BOX相場取得失敗: '+String(err)}}}
   if(feed.error)reviews.push(feed.error);
-  const pickup=tv2FetchPickupPosts_(sealed,health);
-  if(pickup.errors.length){reviews.push(...pickup.errors);report.review+=pickup.errors.length}
+  // Free-only runtime: do not call X API or Vision API. The public sealed-market
+  // feed already carries the store X source URLs used for provenance.
+  const pickup={offers:[],errors:[],uncertainShops:[],status:'free-public-feed-only'};
   health.xPickupStatus=pickup.status;
   const sealedSeen=new Set();
   sealed.forEach(lot=>{
