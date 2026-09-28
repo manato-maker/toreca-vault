@@ -66,6 +66,17 @@ jobs:
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
       - name: Update market refresh web deployment
         run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
+      - name: Run one-time Dragon Star Gmail sync
+        shell: bash
+        run: |
+          set -u
+          for i in 1 2 3; do
+            body="$(curl -fsSL --retry 2 --retry-delay 2 'https://script.google.com/macros/s/AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg/exec?action=gmail-sync-now-20260928b' || true)"
+            echo "$body"
+            if node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) process.exit(1)' "$body"; then exit 0; fi
+            sleep 15
+          done
+          exit 1
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
