@@ -264,6 +264,27 @@ async function processPendingCommandQueueOnBoot(){
   else setSyncStatus('V2確認OK · rev '+remoteRevision,'success');
  }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
 }
+async function ensureV2OnlyCutoverOnBoot(){
+ const key='toreca-vault:v2-only-cutover:20260928-v1';
+ if(localStorage.getItem(key)==='done')return false;
+ const config=getVaultV2Config();if(!config.token||!v2Connected())return false;
+ try{
+  setSyncStatus('V2正本をクリーン再構築中…');
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),300000);let response;
+  try{response=await fetch(MARKET_REFRESH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'clean-cutover-v2',token:config.token}),signal:ctl.signal})}finally{clearTimeout(timer)}
+  const text=await response.text();if(!response.ok)throw new Error('HTTP '+response.status);
+  let result;try{result=JSON.parse(text)}catch(_){throw new Error('V2再構築APIの応答がJSONではありません')}
+  if(!result.ok)throw new Error(result.error||'V2再構築に失敗しました');
+  const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('V2再構築後の受入チェックに失敗しました');
+  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));render();
+  localStorage.setItem(key,'done');
+  localStorage.setItem('toreca-vault:market-refresh:20260928-v8','done');
+  const info=result.result||{},counts=info.counts||{};
+  setSyncStatus('V2専用再構築済み · カード相場 '+Number(counts.freshCardQuotes||0)+'/'+Number(counts.cards||0)+'件 · rev '+remoteRevision,Number(counts.freshCardQuotes||0)<Number(counts.cards||0)?'warning':'success');
+  toast('旧相場を切り離してV2正本を再構築しました');
+  return true;
+ }catch(err){console.warn('V2専用再構築に失敗しました',err);setSyncStatus('V2再構築失敗 · '+String(err.message||err),'warning');return false}
+}
 async function refreshMarketOnceOnBoot(){
  const key='toreca-vault:market-refresh:20260928-v8';
  if(localStorage.getItem(key)==='done')return;
@@ -283,7 +304,7 @@ async function refreshMarketOnceOnBoot(){
 }
 async function bootRemote(){
  if(v2ModeLocked())v2ReadOnly=true;
- if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');await processPendingCommandQueueOnBoot();await refreshMarketOnceOnBoot();return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
+ if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');await processPendingCommandQueueOnBoot();await ensureV2OnlyCutoverOnBoot();await refreshMarketOnceOnBoot();return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
  v2ReadOnly=true;render();setSyncStatus('V2接続情報の再確認が必要です。V1/ローカルデータは使用しません','warning');
 }
 bootRemote();
