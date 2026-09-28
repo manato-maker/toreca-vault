@@ -176,6 +176,17 @@ function tv2RepairKnownCardsNow_(){
 }
 
 
+function tv2CardMarketName_(lot,model){
+ let name=String(lot.product||lot.productKey||'').trim();
+ if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
+ const setCode=String(lot.set||'').trim().split(/\s+/)[0]||'',parts=name.split(/\s+/);
+ if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
+ return parts.join(' ').trim();
+}
+function tv2TryMarketSource_(label,fn,reviews){
+ try{return fn()||null}catch(err){reviews.push(label+'取得失敗: '+String(err&&err.message||err));return null}
+}
+
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
@@ -193,15 +204,14 @@ function runTv2MarketAuto(options){
     if(!model||!['良品','美品',''].includes(String(lot.condition||''))){
       report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
-    const name=String(lot.product||'').replace(model,'').trim(),variant=tv2CardVariant_(lot);
-    // Direct Cardrush page fallback is intentionally fail-closed.
-    let result=rows&&name?findCardrushBuyback_(rows,name,model,variant):null;
-    // Cardrush blocks direct server-side HTML fetches for some current cards.
-    // Use Toretoku's official buyback search as an exact-card fallback when
-    // Cardrush has no usable exact result; every fallback stays fail-closed.
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchToretokuBuyback_(name,lot.set,model,variant);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchCardValueBuyback_(name,lot.set,model,variant);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
+    const name=tv2CardMarketName_(lot,model),variant=tv2CardVariant_(lot);
+    // Every source is exact-match and fail-closed. One unavailable source must
+    // not abort the remaining inventory refresh.
+    let result=rows&&name?tv2TryMarketSource_('カードラッシュ',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,lot.set,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレシア',()=>fetchToresiaBuyback_(name,lot.set,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('攻略大百科',()=>fetchGamepediaBuyback_(name,lot.set,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=tv2TryMarketSource_('アルテマ',()=>fetchAltemaBuyback_(name,model),reviews);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
     }
@@ -276,17 +286,6 @@ function runTv2MarketAuto(options){
  tv2EnsurePickupSchedule_();
  return outcome;
 }
-function tv2MarketDiag20260928_(){
- const result=runTv2MarketAuto({skipQueue:true});
- const loaded=tv2Load_(),state=loaded.payload||{},health=(state.automation&&state.automation.health)||{};
- const lots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&(l.category==='カード'||tv2IsStartDeck100_(l.product||l.productKey)));
- const rows=lots.map(l=>{
-  const q=(state.marketQuotes||[]).filter(x=>String(x.lotId||'')===String(l.id||'')).sort((a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||'')))[0]||null;
-  return{lotId:l.id,category:l.category,product:l.product,set:l.set||'',variant:l.variant||'',condition:l.condition||'',quote:q?{price:q.price,source:q.source,checkedAt:q.checkedAt,fresh:q.fresh,officialProductName:q.officialProductName||'',officialProductUrl:q.officialProductUrl||''}:null};
- });
- return{ok:true,revision:Number(loaded.revision),report:result&&result.report||result&&result.mutationResult&&result.mutationResult.report||null,reviews:(health.marketNeedsReview||[]).slice(-100),rows};
-}
-
 function tv2SealedName_(s){
  let n=normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'');
  if(n==='スタートデッキ100'||n==='megaスタートデッキ100'||n==='スタートデッキ100バトルコレクション')return'スタートデッキ100バトルコレクション';
