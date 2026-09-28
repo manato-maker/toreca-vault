@@ -413,6 +413,7 @@ function fetchCardrushMediaBuyback_(product, model, variant) {
       const nn=normalize_(text);
       if(!nn.includes(pn)||!nn.includes(mn))continue;
       if(/未開封|PSA\d|BGS\d|CGC\d|ARS\d|鑑定済|状態A-|状態B|状態C|状態難/i.test(text))continue;
+      if(/エラー|加工エラー/.test(text)&&vn!==normalize_('エラー版'))continue;
       if(vn===normalize_('マスターボールミラー')){
         if(!nn.includes(vn))continue;
       }else if(vn===normalize_('モンスターボールミラー')){
