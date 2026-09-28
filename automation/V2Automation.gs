@@ -276,6 +276,17 @@ function runTv2MarketAuto(options){
  tv2EnsurePickupSchedule_();
  return outcome;
 }
+function tv2MarketDiag20260928_(){
+ const result=runTv2MarketAuto({skipQueue:true});
+ const loaded=tv2Load_(),state=loaded.payload||{},health=(state.automation&&state.automation.health)||{};
+ const lots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&(l.category==='カード'||tv2IsStartDeck100_(l.product||l.productKey)));
+ const rows=lots.map(l=>{
+  const q=(state.marketQuotes||[]).filter(x=>String(x.lotId||'')===String(l.id||'')).sort((a,b)=>String(b.checkedAt||'').localeCompare(String(a.checkedAt||'')))[0]||null;
+  return{lotId:l.id,category:l.category,product:l.product,set:l.set||'',variant:l.variant||'',condition:l.condition||'',quote:q?{price:q.price,source:q.source,checkedAt:q.checkedAt,fresh:q.fresh,officialProductName:q.officialProductName||'',officialProductUrl:q.officialProductUrl||''}:null};
+ });
+ return{ok:true,revision:Number(loaded.revision),report:result&&result.report||result&&result.mutationResult&&result.mutationResult.report||null,reviews:(health.marketNeedsReview||[]).slice(-100),rows};
+}
+
 function tv2SealedName_(s){
  let n=normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'');
  if(n==='スタートデッキ100'||n==='megaスタートデッキ100'||n==='スタートデッキ100バトルコレクション')return'スタートデッキ100バトルコレクション';
