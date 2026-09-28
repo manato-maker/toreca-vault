@@ -61,20 +61,13 @@
     <section class="settings-panel">
       <header class="dialog-head"><div><p class="eyebrow">データ管理</p><h2>V2正本</h2></div><button class="icon-button" data-action="close-settings" aria-label="閉じる">×</button></header>
       <div class="setting-block"><h3>V2バックアップ</h3><p>現在のV2正本をそのままJSONで書き出します。</p><button class="primary-button" data-action="export-json">V2正本を書き出す</button></div>
-      <div class="setting-block"><h3>V2永続接続</h3><p>この端末はV2正本を常用します。同期キーを端末のブラウザに保存し、起動・再読み込み時は自動でV2へ再接続します。通信エラー時もローカル保存へは切り替わりません。</p><label class="field full"><span>Apps Script URL</span><input id="sync-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="field full"><span>同期キー</span><input id="sync-token" type="password" autocomplete="off" placeholder="初回設定時のキー"></label><div class="sync-actions"><button class="primary-button" data-action="connect-sync">V2へ接続</button><button class="secondary-button" data-action="sync-now">V2を再確認</button></div><div id="sync-status" class="notice">未接続</div><div id="v2-write-controls" class="setting-block" hidden><h3>V2書き込み</h3><p>一度有効化すると、この端末ではブラウザを閉じてもV2書き込みを維持します。設定から明示的に無効化するまでONです。</p><div class="sync-actions"><button class="primary-button" data-action="enable-v2-write">この端末でV2書き込みを常時ON</button><button class="secondary-button" data-action="disable-v2-write" hidden>V2書き込みをOFF</button></div><div class="setting-block"><h3>相場更新</h3><p>押した時点の最新相場を取得し、商品・型番・状態が安全に一致したものだけV2へ更新します。一致しないものは前回価格を維持します。</p><button class="primary-button" data-refresh-live-market>最新相場を取得・更新</button><p><small>カードは完全一致の買取相場、BOX・パックも取得できた最新データのみ反映します。</small></p></div></div></div>
+      <div class="setting-block"><h3>V2永続接続</h3><p>この端末はV2正本を常用します。同期キーを端末のブラウザに保存し、起動・再読み込み時は自動でV2へ再接続します。通信エラー時もローカル保存へは切り替わりません。</p><label class="field full"><span>Apps Script URL</span><input id="sync-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec"></label><label class="field full"><span>同期キー</span><input id="sync-token" type="password" autocomplete="off" placeholder="初回設定時のキー"></label><div class="sync-actions"><button class="primary-button" data-action="connect-sync">V2へ接続</button><button class="secondary-button" data-action="sync-now">V2を再確認</button></div><div id="sync-status" class="notice">未接続</div><div id="v2-write-controls" class="setting-block" hidden><h3>V2書き込み</h3><p>一度有効化すると、この端末ではブラウザを閉じてもV2書き込みを維持します。設定から明示的に無効化するまでONです。</p><div class="sync-actions"><button class="primary-button" data-action="enable-v2-write">この端末でV2書き込みを常時ON</button><button class="secondary-button" data-action="disable-v2-write" hidden>V2書き込みをOFF</button></div><div class="setting-block"><h3>相場更新</h3><p>自動更新は毎日13:30以降に1回。シングルはカードラッシュ→トレトクの完全一致、BOX・パックは取得できた最新データだけV2へ反映します。</p><button class="primary-button" data-refresh-live-market>最新相場を取得・更新</button><p><small>このボタンは臨時の手動更新です。通常はApps Script側で自動更新します。</small></p></div></div></div>
       <div class="setting-block"><h3>V2専用運用</h3><p>表示・保存・相場更新はV2正本のみを使用します。旧V1・ローカル保存・旧相場JSONは実行経路から外しています。</p></div><div id="import-status" class="notice" hidden></div>
     </section>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script>
-    (function(){
-      localStorage.setItem('toreca-vault:v2-only-cutover:20260928-v1','done');
-      localStorage.setItem('toreca-vault:market-refresh:20260928-v8','done');
-      localStorage.setItem('toreca-vault:v2-boot-maintenance-paused:20260929','1');
-    })();
-  </script>
-  <script type="module" src="js/app.js?v=20260929-v2-formpost-v1"></script>
+  <script type="module" src="js/app.js?v=20260929-simple-auto-v1"></script>
   <script type="module" src="js/ui-enhancements.js?v=20260926-txn-colors-v1"></script>
   <script type="module" src="js/franchise-ui.js?v=20260926-v2safe"></script>
 </body>
