@@ -44,7 +44,7 @@ test('failed V2 run leaves trigger installation untouched',()=>{
     ScriptApp:{getProjectTriggers:()=>{triggerCalls++;return[]},newTrigger:()=>{triggerCalls++;throw new Error('must not install')}}
   });
   vm.runInContext(source,context);
-  vm.runInContext("runTv2LotteryAuto=()=>{throw new Error('認証に失敗しました')}",context);
+  vm.runInContext("tv2Load_=()=>{throw new Error('認証に失敗しました')}",context);
   assert.throws(()=>vm.runInContext('installTv2Automation()',context),/認証に失敗しました/);
   assert.equal(triggerCalls,0);
 });
