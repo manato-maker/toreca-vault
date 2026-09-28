@@ -66,13 +66,6 @@ jobs:
           ! grep -q 'runTv2GeoStartDeckPurchase20260926' .apps-script-automation/V2Automation.js
       - name: Update market refresh web deployment
         run: npx clasp deploy -i AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg -d "Toreca Vault Market Refresh API"
-      - name: Run one-time V2 clean cutover
-        shell: bash
-        run: |
-          set -euo pipefail
-          body="$(curl -fsSL --max-time 300 --retry 2 --retry-delay 2 'https://script.google.com/macros/s/AKfycbwT_5Qi8GTrNBfaKCs83R2FzCVbNKu1b9f183_LZmsEJtsYUDLqng_S-IUMT6yQMmsjmg/exec?action=v2-clean-cutover-20260928-3d8a9c7f41e64b4e9c0fdcfde5582b12')"
-          echo "$body"
-          node -e 'const x=JSON.parse(process.argv[1]); if(!x.ok) throw new Error(x.error||"cutover failed"); if(!(x.counts&&x.counts.marketQuotes>0)) throw new Error("no rebuilt market quotes");' "$body"
       - name: Create immutable version
         working-directory: automation
         run: npx clasp version "GitHub ${GITHUB_SHA}"
