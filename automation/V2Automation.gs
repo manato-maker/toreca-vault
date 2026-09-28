@@ -178,8 +178,14 @@ function tv2RepairKnownCardsNow_(){
 
 function tv2CardSetText_(lot,model){
  const direct=String(lot&&lot.set||'').trim();if(direct)return direct;
- const source=String(lot&& (lot.product||lot.productKey) ||'').trim();if(!source||!model)return'';
- const escaped=String(model).replace(/[.*+?^$(){}|[\]\\]/g,'\\function tv2CardMarketName_(lot,model){
+ const source=String(lot&&(lot.product||lot.productKey)||'').trim();if(!source||!model)return'';
+ const parts=source.split(/\s+/),index=parts.findIndex(p=>normalize_(p)===normalize_(model));
+ if(index<=0)return'';
+ const code=String(parts[index-1]||'');
+ if(!/^[A-Za-z0-9-]{1,12}$/.test(code)||/^(?:EX|GX|V|VMAX|VSTAR)$/i.test(code))return'';
+ return code+' '+model;
+}
+function tv2CardMarketName_(lot,model){
  let name=String(lot.product||lot.productKey||'').trim();
  if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
  const setCode=String(lot.set||'').trim().split(/\s+/)[0]||'',parts=name.split(/\s+/);
