@@ -88,3 +88,12 @@
 .receipt-purchase-toggle label{display:flex;align-items:center;gap:9px;color:var(--text);font-size:.86rem}
 .receipt-purchase-toggle input{width:auto;min-height:auto}
 .receipt-purchase-toggle small{color:var(--muted);font-size:.72rem}
+
+/* mobile inventory action layout */
+@media(max-width:600px){
+ .list-item{grid-template-columns:minmax(0,1fr);align-items:start}
+ .list-item>div:last-child{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 8px;align-items:center}
+ .list-item>div:last-child .amount{grid-column:1/-1;text-align:right}
+ .list-item>div:last-child small{min-width:0;white-space:normal;line-height:1.35}
+ .list-item>div:last-child button{justify-self:end}
+}
