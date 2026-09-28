@@ -6,6 +6,7 @@ on:
     paths:
       - 'automation/**'
       - '.github/workflows/apps-script-deploy.yml'
+      - 'scripts/prune-apps-script-versions.mjs'
 jobs:
   # V2-only authenticated cutover
   test:
@@ -33,6 +34,10 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Prune unreferenced Apps Script versions
+        env:
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: node scripts/prune-apps-script-versions.mjs
       - name: Build canonical Apps Script project
         run: |
           rm -rf .apps-script-automation
@@ -50,7 +55,17 @@ jobs:
           cmp -s automation/appsscript.json .apps-script-automation/appsscript.json
           cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
+      - name: Create automation executable deployment
+        run: npx clasp deploy -d "Toreca Vault Automation Executable"
       - name: Install simple automation trigger
-        run: npx clasp run installTv2Automation
+        run: |
+          npx clasp run installTv2Automation | tee /tmp/install.txt
+          ! grep -q "Unable to run script function" /tmp/install.txt
+      - name: Run automation bootstrap now
+        run: |
+          npx clasp run runTv2Automation | tee /tmp/run.txt
+          ! grep -q "Unable to run script function" /tmp/run.txt
       - name: Verify automation trigger
-        run: npx clasp run tv2AutomationStatus
+        run: |
+          npx clasp run tv2AutomationStatus | tee /tmp/status.txt
+          ! grep -q "Unable to run script function" /tmp/status.txt
