@@ -27,6 +27,10 @@ ${liveEarly}`);
 }
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
+  if (__tv2OneTimeAction === 'v2-clean-cutover-20260928-3d8a9c7f41e64b4e9c0fdcfde5582b12') {
+    try { return jsonResponse_(tv2CleanCutover20260928_()); }
+    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
+  }
 
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
     try { return jsonResponse_(tv2ProcessOneCommandByNonce_(e.parameter.requestId, e.parameter.nonce)); }
