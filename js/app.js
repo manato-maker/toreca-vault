@@ -46,15 +46,20 @@ async function waitForV2Canonical_(predicate,timeoutMs=300000){
  if(lastErr)throw lastErr;
  throw new Error('V2正本の更新確認がタイムアウトしました');
 }
+async function submitMarketControlForm_(action,token){
+ return new Promise((resolve,reject)=>{
+  const name='tv-market-'+Date.now()+'-'+Math.random().toString(36).slice(2),iframe=document.createElement('iframe'),form=document.createElement('form');
+  iframe.name=name;iframe.hidden=true;form.hidden=true;form.method='POST';form.action=MARKET_REFRESH_URL;form.target=name;
+  for(const [key,value] of Object.entries({action,token})){const input=document.createElement('input');input.type='hidden';input.name=key;input.value=value;form.appendChild(input)}
+  let settled=false;const cleanup=()=>{setTimeout(()=>{form.remove();iframe.remove()},1000)};const timer=setTimeout(()=>{if(settled)return;settled=true;cleanup();resolve()},2500);
+  iframe.addEventListener('load',()=>{if(settled)return;settled=true;clearTimeout(timer);cleanup();resolve()},{once:true});
+  iframe.addEventListener('error',()=>{if(settled)return;settled=true;clearTimeout(timer);cleanup();reject(new Error('相場APIへの送信に失敗しました'))},{once:true});
+  document.body.appendChild(iframe);document.body.appendChild(form);form.submit();
+ });
+}
 async function postMarketControlVerified_(action,token,timeoutMs=300000){
  const before=await tryLoadV2ReadOnly(),beforeRevision=Number(before.revision||0),beforeHealth=before.canonical&&before.canonical.automation&&before.canonical.automation.health||{};
- const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),timeoutMs);
- try{
-  await fetch(MARKET_REFRESH_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,token}),signal:ctl.signal});
- }catch(err){
-  if(err&&err.name==='AbortError')throw new Error('相場APIがタイムアウトしました');
-  throw err;
- }finally{clearTimeout(timer)}
+ await submitMarketControlForm_(action,token);
  if(action==='clean-cutover-v2'){
   const snapshot=await waitForV2Canonical_(snap=>{const h=snap.canonical&&snap.canonical.automation&&snap.canonical.automation.health||{};return String(h.v2OnlyCutoverVersion||'')==='20260928-v2-only-v1'&&String(h.marketStatus||'')!=='pending'&&Boolean(h.lastMarketRunAt)},timeoutMs);
   return{ok:true,snapshot,result:{counts:(()=>{const c=v2MarketCounts_(snapshot.canonical),lots=(snapshot.canonical.inventoryLots||[]).filter(x=>Number(x.quantity)>0);return{activeLots:lots.length,cards:c.cards,marketQuotes:(snapshot.canonical.marketQuotes||[]).length,freshCardQuotes:c.freshCards}})()}};
