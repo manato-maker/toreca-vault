@@ -4,19 +4,32 @@ const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
 const TV2_OPENING_COMMAND_V2='opening-acquire-v2';
 
 function installTv2Automation(){
-  // Only replace schedules after both V2 jobs have successfully read and
-  // verified the canonical state. A failed connection must not install jobs.
-  const lottery=runTv2LotteryAuto(),market=runTv2MarketAuto();
-  if(lottery.skipped||market.skipped)throw new Error('V2自動化の実行がスキップされたためトリガーを作成しません');
-  ScriptApp.getProjectTriggers().forEach(t=>{if(['runTv2LotteryAuto','runTv2MarketAuto','runTorecaVaultLotterySync','runTorecaVaultMarketSync'].includes(t.getHandlerFunction()))ScriptApp.deleteTrigger(t)});
-  ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(12).nearMinute(30).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger('runTv2LotteryAuto').timeBased().atHour(19).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(15).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  PropertiesService.getScriptProperties().setProperty('TV2_MARKET_SCHEDULE_V2','15');
-  tv2EnsurePickupSchedule_();
-  return {lottery,market};
+  const loaded=tv2Load_();
+  tv2EnsureSimpleAutomationSchedule_(true);
+  return{ok:true,revision:Number(loaded.revision),gmail:'15分ごと',market:'13:30以降に1日1回'};
 }
-function runTv2LotteryAuto(){
+function tv2EnsureSimpleAutomationSchedule_(force){
+  if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
+  const version='simple-15m-market-1330-v1',handler='runTv2Automation';
+  const managed=['runTv2Automation','runTv2LotteryAuto','runTv2MarketAuto','runTv2PickupAuto','runTorecaVaultLotterySync','runTorecaVaultMarketSync'];
+  const props=PropertiesService.getScriptProperties(),triggers=ScriptApp.getProjectTriggers();
+  const ours=triggers.filter(t=>managed.includes(t.getHandlerFunction()));
+  const simple=ours.filter(t=>t.getHandlerFunction()===handler);
+  if(!force&&props.getProperty('TV2_AUTOMATION_SCHEDULE')===version&&ours.length===1&&simple.length===1)return;
+  ours.forEach(t=>ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger(handler).timeBased().everyMinutes(15).create();
+  props.setProperty('TV2_AUTOMATION_SCHEDULE',version);
+}
+function runTv2Automation(){
+  tv2EnsureSimpleAutomationSchedule_(false);
+  const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});
+  const hour=Number(Utilities.formatDate(new Date(),TZ,'H')),minute=Number(Utilities.formatDate(new Date(),TZ,'m'));
+  let market={skipped:true,reason:'before-13:30'};
+  if(hour>13||(hour===13&&minute>=30))market=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
+  return{ok:true,gmail,market};
+}
+function runTv2LotteryAuto(options){
+  if(!(options&&options.skipScheduleEnsure))tv2EnsureSimpleAutomationSchedule_(false);
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
@@ -235,11 +248,12 @@ function tv2TryMarketSource_(label,fn,reviews){
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+  if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date)return{changed:false,skipped:true,reason:'already-ran-today',report};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
   let rows=null;
   if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
-  const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),seen=new Set();
+  const seen=new Set();
   cards.forEach(lot=>{
     const key=String(lot.id||normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||''));
     if(seen.has(key))return;seen.add(key);
@@ -253,11 +267,9 @@ function runTv2MarketAuto(options){
     const name=tv2CardMarketName_(lot,model),setText=tv2CardSetText_(lot,model),variant=tv2CardVariant_(lot);
     // Every source is exact-match and fail-closed. One unavailable source must
     // not abort the remaining inventory refresh.
-    let result=rows&&name?tv2TryMarketSource_('カードラッシュ',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
+    let result=rows&&name?tv2TryMarketSource_('カードラッシュCSV',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('カードラッシュ',()=>fetchCardrushMediaBuyback_(name,model,variant),reviews);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,setText,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレシア',()=>fetchToresiaBuyback_(name,setText,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('攻略大百科',()=>fetchGamepediaBuyback_(name,setText,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=tv2TryMarketSource_('アルテマ',()=>fetchAltemaBuyback_(name,model),reviews);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
     }
@@ -326,10 +338,9 @@ function runTv2MarketAuto(options){
     if(!quote)state.marketQuotes.push(target);
     if(quote&&previous===best.price)report.unchanged++;else report.updated++;
   });
-  health.lastMarketRunAt=now.toISOString();health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
+  health.lastMarketRunAt=now.toISOString();if(options&&options.scheduled)health.lastScheduledMarketDate=date;health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
  });
- tv2EnsureMarketSchedule_();
- tv2EnsurePickupSchedule_();
+ if(!(options&&options.skipScheduleEnsure))tv2EnsureMarketSchedule_();
  return outcome;
 }
 function tv2SealedName_(s){
@@ -443,23 +454,11 @@ function tv2FetchPickupPosts_(lots,health){if(typeof PropertiesService==='undefi
  health.xUncertainShops=[...new Set(uncertainShops)];
  return{offers:offers.filter(o=>!uncertainShops.includes(o.shop)),errors,uncertainShops:health.xUncertainShops,status:errors.length?'review':'ok'}
 }
-function tv2EnsureMarketSchedule_(){
-  if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
-  const props=PropertiesService.getScriptProperties();
-  if(props.getProperty('TV2_MARKET_SCHEDULE_V2')==='15')return;
-  const old=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2MarketAuto');
-  ScriptApp.newTrigger('runTv2MarketAuto').timeBased().atHour(15).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  old.forEach(t=>ScriptApp.deleteTrigger(t));
-  props.setProperty('TV2_MARKET_SCHEDULE_V2','15');
-}
-function runTv2PickupAuto(){return runTv2MarketAuto()}
-function tv2EnsurePickupSchedule_(){if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
- const p=PropertiesService.getScriptProperties(),enabled=Boolean(p.getProperty('TV2_X_BEARER_TOKEN')&&p.getProperty('TV2_VISION_API_KEY'));
- const existing=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2PickupAuto');
- if(!enabled){existing.forEach(t=>ScriptApp.deleteTrigger(t));return}
- if(existing.length===2)return;
- existing.forEach(t=>ScriptApp.deleteTrigger(t));
- [19,22].forEach(hour=>ScriptApp.newTrigger('runTv2PickupAuto').timeBased().atHour(hour).nearMinute(0).everyDays(1).inTimezone(TZ).create());
+function tv2EnsureMarketSchedule_(){tv2EnsureSimpleAutomationSchedule_(false)}
+function runTv2PickupAuto(){return runTv2MarketAuto({skipQueue:true})}
+function tv2EnsurePickupSchedule_(){
+  if(typeof ScriptApp==='undefined')return;
+  ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2PickupAuto').forEach(t=>ScriptApp.deleteTrigger(t));
 }
 function tv2PreviousDate_(date){const d=new Date(String(date)+'T12:00:00+09:00');d.setDate(d.getDate()-1);return Utilities.formatDate(d,TZ,'yyyy-MM-dd')}
 function tv2FindQuote_(state,lot){return(state.marketQuotes||[]).find(q=>String(q.lotId||'')===String(lot.id||'')&&String(q.condition||'')===String(lot.condition||''))||(state.marketQuotes||[]).find(q=>!q.lotId&&normalize_(q.productKey||q.product)===normalize_(lot.productKey||lot.product)&&String(q.condition||'')===String(lot.condition||''))}
