@@ -67,6 +67,16 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+    (function(){
+      var reset='toreca-vault:v2-boot-reset:20260929-v1';
+      if(localStorage.getItem(reset)!=='done'){
+        localStorage.removeItem('toreca-vault:v2-only-cutover:20260928-v1');
+        localStorage.removeItem('toreca-vault:market-refresh:20260928-v8');
+        localStorage.setItem(reset,'done');
+      }
+    })();
+  </script>
   <script type="module" src="js/app.js?v=20260929-v2-control-v1"></script>
   <script type="module" src="js/ui-enhancements.js?v=20260926-txn-colors-v1"></script>
   <script type="module" src="js/franchise-ui.js?v=20260926-v2safe"></script>
