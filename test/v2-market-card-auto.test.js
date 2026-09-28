@@ -179,3 +179,25 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   assert.equal(fallbackState.marketQuotes[0].price,5500);
   assert.equal(fallbackState.marketQuotes[0].source,'トレシア');
 }
+
+
+{
+  const embeddedState={inventoryLots:[{id:'e1',category:'カード',product:'ピカチュウex M6a 127/103',set:'',condition:'良品',quantity:1}],marketQuotes:[{lotId:'e1',product:'ピカチュウex M6a 127/103',category:'カード',condition:'良品',price:10000,checkedAt:'2026-09-23',source:'公開買取相場'}]};
+  const ctx=vm.createContext({
+    tv2Mutate_:(_kind,fn)=>fn(embeddedState),TZ:'Asia/Tokyo',
+    Utilities:{formatDate:()=> '2026-09-28'},
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
+    fetchCardrushRows_:()=>[],
+    findCardrushBuyback_:()=>null,
+    fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウex'&&set==='M6a 127/103'&&model==='127/103'?{price:7300,source:'トレトク買取'}:null,
+    fetchToresiaBuyback_:()=>null,
+    fetchGamepediaBuyback_:()=>null,
+    fetchAltemaBuyback_:()=>null
+  });
+  vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),ctx);
+  const hit=vm.runInContext('runTv2MarketAuto()',ctx);
+  assert.equal(hit.report.cardUpdated,1,'embedded set code is separated from the card name for exact market lookup');
+  assert.equal(embeddedState.marketQuotes[0].price,7300);
+  assert.equal(embeddedState.marketQuotes[0].source,'トレトク買取');
+}
