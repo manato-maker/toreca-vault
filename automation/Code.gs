@@ -557,24 +557,6 @@ function fetchAltemaBuyback_(product, model) {
  * doPostは mutationId + expectedRevision で二重実行/競合を防ぎ、
  * 保存後に同じDriveファイルを再読込して mutationId を照合する。
  */
-function doGet() {
-  return jsonResponse_({ok:true,service:'toreca-vault-automation',mode:'v2-only'});
-}
-
-function doPost(e) {
-  var req={};
-  try{req=JSON.parse((e&&e.postData&&e.postData.contents)||'{}')}catch(_){}
-  if(!req.action&&e&&e.parameter)req=Object.assign({},e.parameter);
-  if(String(req.action||'')!=='refresh-market-v2')return jsonResponse_({ok:false,error:'unsupported action'});
-  try{return tv2HandleMarketRefreshWeb_(req)}
-  catch(err){return jsonResponse_({ok:false,error:String(err&&err.message||err)})}
-}
-
-function jsonResponse_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
-
 const SEALED_MARKET_STORES = new Set(['買取ミミ','AMTAF','アリウム']);
 function syncSealedMarketCandidates_(data, date, reviews) {
   const report = { updated:0, unchanged:0, review:0, unsupported:0 };
