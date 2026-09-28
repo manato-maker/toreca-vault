@@ -2,7 +2,7 @@ const DATA_FILE_ID = PropertiesService.getScriptProperties().getProperty('TV_DAT
 const TZ = 'Asia/Tokyo';
 const MAX_IDS = 3000;
 const RESULT_WORDS = /(当選|ご当選|落選|残念|抽選結果)/;
-const APPLICATION_WORDS = /(抽選申込完了|申込受付完了|抽選販売応募完了|応募完了|申込みが完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/;
+const APPLICATION_WORDS = /(抽選申込完了|申込受付完了|申し込み受付完了|抽選販売応募完了|応募完了|申込みが完了|申込完了|申込み完了|申込み受付が完了|お申込み受付が完了|抽選販売へのお申込み受付)/;
 const CARD_WORDS = /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|ウマ娘|遊戯王|YU[- ]?GI[- ]?OH|遊戯王OCG|UNION ?ARENA|ユニオンアリーナ)/i;
 
 function installTorecaVaultAutomation() {
