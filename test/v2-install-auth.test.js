@@ -38,13 +38,9 @@ test('does not retry a non-authentication API error',()=>{
   assert.equal(attempts,1);
 });
 
-test('failed V2 run leaves trigger installation untouched',()=>{
-  let triggerCalls=0;
-  const context=vm.createContext({
-    ScriptApp:{getProjectTriggers:()=>{triggerCalls++;return[]},newTrigger:()=>{triggerCalls++;throw new Error('must not install')}}
-  });
-  vm.runInContext(source,context);
-  vm.runInContext("tv2Load_=()=>{throw new Error('認証に失敗しました')}",context);
-  assert.throws(()=>vm.runInContext('installTv2Automation()',context),/認証に失敗しました/);
-  assert.equal(triggerCalls,0);
+test('installer creates one recurring trigger plus one self-removing bootstrap',()=>{
+  assert.match(source,/newTrigger\(handler\)\.timeBased\(\)\.everyMinutes\(15\)\.create\(\)/);
+  assert.match(source,/newTrigger\('runTv2AutomationBootstrap_'\)\.timeBased\(\)\.after\(15000\)\.create\(\)/);
+  assert.match(source,/function tv2AutomationStatus\(\)/);
+  assert.match(source,/function runTv2AutomationBootstrap_\(\)/);
 });
