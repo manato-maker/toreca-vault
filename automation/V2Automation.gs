@@ -126,6 +126,7 @@ function tv2CardVariant_(lot){
  if(text.includes(normalize_('マスターボールミラー')))return'マスターボールミラー';
  if(text.includes(normalize_('モンスターボールミラー')))return'モンスターボールミラー';
  if(text.includes(normalize_('ミラー')))return'ミラー';
+ if(text.includes(normalize_('通常版')))return'通常版';
  return'';
 }
 
@@ -199,6 +200,7 @@ function runTv2MarketAuto(options){
     // Use Toretoku's official buyback search as an exact-card fallback when
     // Cardrush has no usable exact result; every fallback stays fail-closed.
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchToretokuBuyback_(name,lot.set,model,variant);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=fetchCardValueBuyback_(name,lot.set,model,variant);
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name&&!variant)result=fetchAltemaBuyback_(name,model);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
@@ -258,6 +260,7 @@ function runTv2MarketAuto(options){
     const target=quote||{lotId:lot.id,product:lot.product,productKey:lot.productKey,category:lot.category,condition:lot.condition};
     target.previousPrice=Number.isFinite(previous)?previous:best.price;
     target.price=best.price;target.checkedAt=date;target.shopOffers=latest;
+    const officialUrl=tv2SealedOfficialUrl_(lot.product||lot.productKey);if(officialUrl){target.officialProductUrl=officialUrl;target.officialProductName='ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション'}
     target.source=best.shop+' '+best.date+' '+best.url+' ('+condition+')';target.fresh=best.date===date&&!pickup.uncertainShops.includes(best.shop);
     target.trend=best.price>target.previousPrice?'up':best.price<target.previousPrice?'down':'same';
     target.history=Array.isArray(target.history)?target.history:[];
@@ -273,9 +276,16 @@ function runTv2MarketAuto(options){
  tv2EnsurePickupSchedule_();
  return outcome;
 }
-function tv2SealedName_(s){return normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'')}
+function tv2SealedName_(s){
+ let n=normalize_(String(s||'').replace(/&amp;/g,'&')).replace(/^ポケモンカードゲームmega/,'').replace(/^ポケモンカードゲーム/,'').replace(/^(?:強化拡張|拡張|ハイクラス)パック/,'').replace(/(?:未開封)?(?:box|ボックス)$/,'');
+ if(n==='スタートデッキ100'||n==='megaスタートデッキ100'||n==='スタートデッキ100バトルコレクション')return'スタートデッキ100バトルコレクション';
+ return n;
+}
 function tv2IsPremiumDeck_(name){return tv2SealedName_(name)==='30thcelebrationプレミアムデッキセットエーフィブラッキー'}
-function tv2SealedCondition_(lot){const c=normalize_(lot.condition);if(lot.category==='BOX'&&tv2IsPremiumDeck_(lot.product||lot.productKey))return c==='なし'||c==='シュリンクなし'?'': 'shrink';if(lot.category==='BOX')return c==='あり'||c==='シュリンクあり'||c==='シュリンク有'?'shrink':c==='なし'||c==='シュリンクなし'||c==='シュリンク無'?'no_shrink':'';if(lot.category==='パック')return c===''||c==='未開封'||c==='バラパック'?'loose_pack':'';return''}
+function tv2IsStartDeck100_(name){return tv2SealedName_(name)==='スタートデッキ100バトルコレクション'}
+function tv2IsSealedOther_(name){return tv2IsPremiumDeck_(name)||tv2IsStartDeck100_(name)}
+function tv2SealedOfficialUrl_(name){return tv2IsStartDeck100_(name)?'https://www.pokemon-card.com/ex/mc/':''}
+function tv2SealedCondition_(lot){const c=normalize_(lot.condition);if(lot.category==='BOX'&&tv2IsSealedOther_(lot.product||lot.productKey))return c==='なし'||c==='シュリンクなし'||c==='開封済み'?'':'shrink';if(lot.category==='BOX')return c==='あり'||c==='シュリンクあり'||c==='シュリンク有'?'shrink':c==='なし'||c==='シュリンクなし'||c==='シュリンク無'?'no_shrink':'';if(lot.category==='パック')return c===''||c==='未開封'||c==='バラパック'?'loose_pack':'';return''}
 function tv2ParseSealedFeed_(html,date){
   const text=String(html||'');
   const stamp=text.match(/掲載日\s*<b>(\d{4}-\d{2}-\d{2})<\/b>\s*\/\s*スナップショット\s*(\d{4}-\d{2}-\d{2})/);
@@ -283,10 +293,10 @@ function tv2ParseSealedFeed_(html,date){
   const starts=[...text.matchAll(/<div class="card(?:\s[^"]*)?"[^>]*>/g)],products=[];
   const stores={cardshop_allium:'アリウム',amtaf_shop:'AMTAF',mimi_kaitori:'買取ミミ'};
   for(let i=0;i<starts.length;i++){
-    const head=starts[i][0];if(!/data-cat="box"/.test(head)&&!(/data-cat="sealed_other"/.test(head)&&tv2IsPremiumDeck_((head.match(/data-name="([^"]+)"/)||[])[1])))continue;
+    const head=starts[i][0];if(!/data-cat="box"/.test(head)&&!(/data-cat="sealed_other"/.test(head)&&tv2IsSealedOther_((head.match(/data-name="([^"]+)"/)||[])[1])))continue;
     const block=text.slice(starts[i].index,starts[i+1]?.index||text.length),name=(head.match(/data-name="([^"]+)"/)||[])[1]||'';
     const official=(block.match(/<span class="official">([^<]+)<\/span>/)||[])[1]||'';
-    if(!name||(!official&&!tv2IsPremiumDeck_(name)))continue;
+    if(!name||(!official&&!tv2IsSealedOther_(name)))continue;
     const rows=[...block.matchAll(/<div class="crow\b[^>]*data-cond="(shrink|no_shrink|loose_pack)"[^>]*>/g)],offers={};
     for(let j=0;j<rows.length;j++){
       const condition=rows[j][1],section=block.slice(rows[j].index,rows[j+1]?.index||block.length);
