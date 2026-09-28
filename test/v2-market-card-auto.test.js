@@ -43,10 +43,11 @@ const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf
 const matcher=code.slice(code.indexOf('function findCardrushBuyback_('),code.indexOf('function fetchAltemaBuyback_('));
 const prices=vm.createContext({normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,'')});
 vm.runInContext(matcher,prices);
-const rows=[['ピカチュウ(ミラー)','225/742','500'],['ピカチュウ','225/742','300'],['ピカチュウ(マスターボールミラー)','025/165','45000'],['ピカチュウ(モンスターボールミラー)','025/165','800'],['ピカチュウ','025/165','30']];
+const rows=[['ピカチュウ(ミラー)','225/742','500'],['ピカチュウ','225/742','300'],['ピカチュウ(マスターボールミラー)','025/165','45000'],['ピカチュウ(モンスターボールミラー)','025/165','800'],['ピカチュウ','025/165','30'],['メガリザードンXex','223/193','2500'],['メガリザードンXex 加工エラー','223/193','50000']];
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','225/742','ミラー')?.price,500);
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','モンスターボールミラー')?.price,800);
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165'),null,'number alone must not pick an arbitrary print');
+assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザードンXex','223/193','通常版')?.price,2500,'explicit normal print excludes error print');
 
 {
   const fallbackState={inventoryLots:[{id:'f1',category:'カード',product:'ピカチュウ',set:'PROMO 001/SV-P',condition:'美品',quantity:1}],marketQuotes:[]};
@@ -81,4 +82,46 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   const hit=vm.runInContext('fetchToretokuBuyback_',ctx)('メガレックウザex','M6 095/076','095/076','');
   assert.equal(hit?.price,1700,'Toretoku parser accepts one exact name + full set/number match');
   assert.equal(hit?.source,'トレトク買取');
+}
+
+
+{
+  const v2=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
+  const start=v2.indexOf('function tv2CardVariant_('),end=v2.indexOf('function tv2RepairKnownCardIdentities20260928_(');
+  const ctx=vm.createContext({normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,'')});
+  vm.runInContext(v2.slice(start,end),ctx);
+  assert.equal(vm.runInContext('tv2CardVariant_',ctx)({variant:'通常版',set:'M2a 223/193',product:'メガリザードンex'}),'通常版');
+}
+
+{
+  const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
+  const start=code.indexOf('function tv2ToretokuNameMatches_('),end=code.indexOf('function fetchAltemaBuyback_(');
+  const masterHtml='self.__next_f.push([1,"items:[{\\\"name\\\":\\\"ニョロモ(マスターボールミラー)\\\",\\\"itemCode\\\":\\\"p1\\\",\\\"price\\\":830,\\\"sellPrice\\\":1800,\\\"modelNumber\\\":\\\"SV2a 060/165\\\",\\\"imageUrl\\\":\\\"u\\\",\\\"rarity\\\":\\\"C\\\"}]"])';
+  const aliasHtml='self.__next_f.push([1,"items:[{\\\"name\\\":\\\"メガリザードンXex\\\",\\\"itemCode\\\":\\\"c1\\\",\\\"price\\\":2500,\\\"sellPrice\\\":5500,\\\"modelNumber\\\":\\\"M2a 223/193\\\",\\\"imageUrl\\\":\\\"u\\\",\\\"rarity\\\":\\\"MA\\\"}]"])';
+  let mode='master';
+  const ctx=vm.createContext({
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    encodeURIComponent,
+    UrlFetchApp:{fetch:url=>({getResponseCode:()=>200,getContentText:()=>mode==='master'?masterHtml:(decodeURIComponent(url).includes('メガリザードンex')?'':aliasHtml)})}
+  });
+  vm.runInContext(code.slice(start,end),ctx);
+  const master=vm.runInContext('fetchToretokuBuyback_',ctx)('ニョロモ','SV2a 060/165','060/165','マスターボールミラー');
+  assert.equal(master?.price,830,'variant text in Toretoku product name is recognized');
+  mode='alias';
+  const normal=vm.runInContext('fetchToretokuBuyback_',ctx)('メガリザードンex','M2a 223/193','223/193','通常版');
+  assert.equal(normal?.price,2500,'model retry accepts the confirmed M2a canonical X name');
+}
+
+{
+  const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
+  const start=code.indexOf('function fetchCardValueBuyback_('),end=code.indexOf('function fetchAltemaBuyback_(');
+  const html='<html><body><h1>リザードン #137/103 [M6a] 30th CELEBRATION</h1><div>最高買取価格 ¥18,000</div></body></html>';
+  const ctx=vm.createContext({
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    UrlFetchApp:{fetch:()=>({getResponseCode:()=>200,getContentText:()=>html})}
+  });
+  vm.runInContext(code.slice(start,end),ctx);
+  const hit=vm.runInContext('fetchCardValueBuyback_',ctx)('リザードン','M6a 137/103','137/103','');
+  assert.equal(hit?.price,18000,'exact product + set + number fallback accepts current max buyback');
+  assert.equal(hit?.source,'ポケカ相場ナビ');
 }
