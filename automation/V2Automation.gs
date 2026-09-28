@@ -188,18 +188,6 @@ function tv2CardSetText_(lot,model){
 function tv2CardMarketName_(lot,model){
  let name=String(lot.product||lot.productKey||'').trim();
  if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
- const setCode=String(lot.set||'').trim().split(/\s+/)[0]||'',parts=name.split(/\s+/);
- if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
- return parts.join(' ').trim();
-}');
- const m=source.match(new RegExp('(?:^|\\s)([A-Za-z0-9-]{1,12})\\s+'+escaped+'(?:\\s|$)','i'));
- if(!m)return'';
- const code=String(m[1]||'');if(/^(?:EX|GX|V|VMAX|VSTAR)$/i.test(code))return'';
- return code+' '+model;
-}
-function tv2CardMarketName_(lot,model){
- let name=String(lot.product||lot.productKey||'').trim();
- if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
  const setCode=tv2CardSetText_(lot,model).split(/\s+/)[0]||'',parts=name.split(/\s+/);
  if(setCode&&parts.length>1&&normalize_(parts[parts.length-1])===normalize_(setCode))parts.pop();
  return parts.join(' ').trim();
