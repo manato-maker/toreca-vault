@@ -8,6 +8,7 @@ if(!s.includes(getMarker))throw new Error('doGet not found');
 const route=`function doPost(e) {
   var __tv2EarlyReq = {};
   try { __tv2EarlyReq = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) {}
+  if (!__tv2EarlyReq.action && e && e.parameter) __tv2EarlyReq = Object.assign({}, e.parameter);
   if (String(__tv2EarlyReq.action || '') === 'process-mega-rayquaza-once') {
     try { return jsonResponse_(tv2ProcessMegaRayquazaOnceWeb_()); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
