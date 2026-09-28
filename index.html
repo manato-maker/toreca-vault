@@ -69,12 +69,9 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script>
     (function(){
-      var reset='toreca-vault:v2-boot-reset:20260929-v1';
-      if(localStorage.getItem(reset)!=='done'){
-        localStorage.removeItem('toreca-vault:v2-only-cutover:20260928-v1');
-        localStorage.removeItem('toreca-vault:market-refresh:20260928-v8');
-        localStorage.setItem(reset,'done');
-      }
+      localStorage.setItem('toreca-vault:v2-only-cutover:20260928-v1','done');
+      localStorage.setItem('toreca-vault:market-refresh:20260928-v8','done');
+      localStorage.setItem('toreca-vault:v2-boot-maintenance-paused:20260929','1');
     })();
   </script>
   <script type="module" src="js/app.js?v=20260929-v2-formpost-v1"></script>
