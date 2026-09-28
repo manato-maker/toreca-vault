@@ -58,23 +58,12 @@ async function submitMarketControlForm_(action,token){
  });
 }
 async function postMarketControlVerified_(action,token,timeoutMs=300000){
- const before=await tryLoadV2ReadOnly(),beforeRevision=Number(before.revision||0),beforeHealth=before.canonical&&before.canonical.automation&&before.canonical.automation.health||{};
+ if(action!=='refresh-market-v2')throw new Error('未対応のV2制御アクションです');
+ const before=await tryLoadV2ReadOnly(),beforeAt=String(before.canonical&&before.canonical.automation&&before.canonical.automation.health&&before.canonical.automation.health.lastMarketRunAt||'');
  await submitMarketControlForm_(action,token);
- if(action==='clean-cutover-v2'){
-  const snapshot=await waitForV2Canonical_(snap=>{const h=snap.canonical&&snap.canonical.automation&&snap.canonical.automation.health||{};return String(h.v2OnlyCutoverVersion||'')==='20260928-v2-only-v1'&&String(h.marketStatus||'')!=='pending'&&Boolean(h.lastMarketRunAt)},timeoutMs);
-  return{ok:true,snapshot,result:{counts:(()=>{const c=v2MarketCounts_(snapshot.canonical),lots=(snapshot.canonical.inventoryLots||[]).filter(x=>Number(x.quantity)>0);return{activeLots:lots.length,cards:c.cards,marketQuotes:(snapshot.canonical.marketQuotes||[]).length,freshCardQuotes:c.freshCards}})()}};
- }
- if(action==='refresh-market-v2'||action==='refresh-single-market-v2'){
-  const beforeAt=String(beforeHealth.lastMarketRunAt||'');
-  const snapshot=await waitForV2Canonical_(snap=>String(snap.canonical&&snap.canonical.automation&&snap.canonical.automation.health&&snap.canonical.automation.health.lastMarketRunAt||'')!==beforeAt,timeoutMs);
-  const c=v2MarketCounts_(snapshot.canonical);
-  return{ok:true,snapshot,result:{report:{cardUpdated:c.freshCards,cardTotal:c.cards,review:c.review,updated:c.freshCards+c.freshSealed}}};
- }
- if(action==='process-command-queue-v2'){
-  const snapshot=await tryLoadV2ReadOnly(),processed=Number(snapshot.revision||0)>beforeRevision?1:0;
-  return{ok:true,snapshot,results:processed?[{ok:true}]:[]};
- }
- throw new Error('未対応のV2制御アクションです');
+ const snapshot=await waitForV2Canonical_(snap=>String(snap.canonical&&snap.canonical.automation&&snap.canonical.automation.health&&snap.canonical.automation.health.lastMarketRunAt||'')!==beforeAt,timeoutMs);
+ const c=v2MarketCounts_(snapshot.canonical);
+ return{ok:true,snapshot,result:{report:{cardUpdated:c.freshCards,cardTotal:c.cards,review:c.review,updated:c.freshCards+c.freshSealed}}};
 }
 function setSyncStatus(message,kind=''){const el=document.querySelector('#sync-status');if(!el)return;el.textContent=message;el.className=`notice ${kind}`.trim()}
 function fillSyncSettings(){const v2=getVaultV2Config(),url=document.querySelector('#sync-url'),token=document.querySelector('#sync-token');if(url&&!url.value)url.value=v2.url||'';if(token&&!token.value)token.value=v2.token||'';setSyncStatus(hasV2ReadOnly()?'V2接続設定済み':'V2接続が必要です',hasV2ReadOnly()?'success':'warning')}
@@ -287,49 +276,6 @@ let receiptSubmitting=false,entrySubmitting=false;
 document.querySelector('#entry-form').addEventListener('submit',async e=>{e.preventDefault();if(entrySubmitting)return;entrySubmitting=true;const type=e.currentTarget.dataset.type;if(v2ModeLocked()&&!v2Connected()){entrySubmitting=false;setSyncStatus('V2保存失敗 · V2接続が完了していません。ローカル保存を停止しました','warning');toast('V2保存失敗・未反映');alert('V2接続が完了していません。ローカル保存を停止しました');return}const data=Object.fromEntries(new FormData(e.currentTarget));for(const k of ['quantity','packQuantity','price','cost','marketPrice','buybackPrice','fee','estimatedValue'])if(k in data)data[k]=Number(data[k])||0;data.id=id();data.createdAt=new Date().toISOString();try{if(v2ModeLocked()){if(!isV2WriteEnabled(Number(remoteRevision)))throw new Error('V2確認モードは読み取り専用です');if(!canUseV2Entry(type))throw new Error('この入力はまだV2保存に対応していません');const result=await commitV2Transaction(({purchases:'purchase',sales:'sale',openings:'opening'})[type],v2EntryPayload(type,data));const check=acceptanceSnapshot(result.payload);if(!check.ok)throw new Error(`保存後の受入チェック失敗: ${check.issues.join(', ')}`);const projected=applyV2ReadOnlyToUi(state,{state:(await import('../v2/view-model.js')).v2ViewModel(result.payload),assets:check.assets,realizedProfit:check.realizedProfit,revision:result.revision,lastMutationId:result.lastMutationId});state=projected.state;v2AssetsCache=projected.assets;v2ProfitCache=projected.realizedProfit;remoteRevision=String(projected.revision);advanceV2WriteRevision(Number(remoteRevision));document.querySelector('#entry-dialog').close();render();setSyncStatus(`V2保存確認済み · rev ${projected.revision} · 書込継続中`,'success');toast('V2へ保存・再確認しました');return}if(type==='purchases')state=applyPurchase(state,data);else if(type==='sales')state=applySale(state,data);else if(type==='openings')state=applyOpening(state,data);else state[type].unshift(data);save(state);document.querySelector('#entry-dialog').close();render();toast('保存しました')}catch(err){setSyncStatus('V2保存失敗 · '+String(err.message||err),'warning');toast('V2保存失敗・未反映');alert(err.message)}finally{entrySubmitting=false}});
 addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).split('/');route=next||'dashboard';if(route==='inventory')subtype=['boxes','packs','cards'].includes(param)?param:'boxes';if(route==='ledger'&&param)subtype=param;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
-async function processPendingCommandQueueOnBoot(){
- const config=getVaultV2Config();if(!config.token||!v2Connected())return;
- try{
-  setSyncStatus('保留コマンドをV2へ確認中…');
-  const result=await postMarketControlVerified_('process-command-queue-v2',config.token,120000);
-  const failed=(result.results||[]).filter(x=>x&&!x.ok);if(failed.length)throw new Error(failed.map(x=>x.error||'コマンド処理失敗').join(' / '));
-  const processed=(result.results||[]).filter(x=>x&&x.ok).length;
-  const snapshot=result.snapshot||await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('コマンド反映後のV2受入チェックに失敗しました');
-  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));render();
-  if(processed){setSyncStatus('保留コマンド反映済み · '+processed+'件 · rev '+remoteRevision,'success');toast('保留コマンドをV2へ'+processed+'件反映しました')}
-  else setSyncStatus('V2確認OK · rev '+remoteRevision,'success');
- }catch(err){console.warn('保留コマンド自動反映に失敗しました',err);setSyncStatus('保留コマンド反映失敗 · '+String(err.message||err),'warning')}
-}
-async function ensureV2OnlyCutoverOnBoot(){
- const key='toreca-vault:v2-only-cutover:20260928-v1';
- if(localStorage.getItem(key)==='done')return false;
- const config=getVaultV2Config();if(!config.token||!v2Connected())return false;
- try{
-  setSyncStatus('V2正本をクリーン再構築中…');
-  const result=await postMarketControlVerified_('clean-cutover-v2',config.token,300000);
-  const snapshot=result.snapshot||await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('V2再構築後の受入チェックに失敗しました');
-  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));render();
-  localStorage.setItem(key,'done');
-  localStorage.setItem('toreca-vault:market-refresh:20260928-v8','done');
-  const info=result.result||{},counts=info.counts||{};
-  setSyncStatus('V2専用再構築済み · カード相場 '+Number(counts.freshCardQuotes||0)+'/'+Number(counts.cards||0)+'件 · rev '+remoteRevision,Number(counts.freshCardQuotes||0)<Number(counts.cards||0)?'warning':'success');
-  toast('旧相場を切り離してV2正本を再構築しました');
-  return true;
- }catch(err){console.warn('V2専用再構築に失敗しました',err);setSyncStatus('V2再構築失敗 · '+String(err.message||err),'warning');return false}
-}
-async function refreshMarketOnceOnBoot(){
- const key='toreca-vault:market-refresh:20260928-v8';
- if(localStorage.getItem(key)==='done')return;
- const config=getVaultV2Config();if(!config.token||!v2Connected())return;
- try{
-  setSyncStatus('最新相場を取得中…');
-  const result=await postMarketControlVerified_('refresh-market-v2',config.token,300000);
-  const snapshot=result.snapshot||await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error('相場更新後のV2受入チェックに失敗しました');
-  const applied=applyV2ReadOnlyToUi(state,snapshot);state=applied.state;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision);advanceV2WriteRevision(Number(remoteRevision));localStorage.setItem(key,'done');render();
-  const report=result.result&&result.result.report||{},cardUpdated=Number(report.cardUpdated||0),cardTotal=Number(report.cardTotal||0),review=Number(report.review||0),sealedUpdated=Math.max(0,Number(report.updated||0)-cardUpdated),summary='カード'+cardUpdated+'/'+cardTotal+'件 · BOX等'+sealedUpdated+'件'+(review?' · 要確認'+review+'件':'');
-  setSyncStatus('最新相場更新済み · '+summary+' · rev '+remoteRevision,review?'warning':'success');toast('最新相場更新 · '+summary);
- }catch(err){console.warn('相場自動更新に失敗しました',err);setSyncStatus('相場更新失敗 · '+String(err.message||err),'warning')}
-}
 async function bootRemote(){
  if(v2ModeLocked())v2ReadOnly=true;
  if(hasV2ReadOnly()){v2ReadOnly=true;render();setSyncStatus('V2へ自動再接続中…');try{const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);if(!check.ok)throw new Error(`V2受入チェック失敗: ${check.issues.join(', ')}`);const applied=applyV2ReadOnlyToUi(state,snapshot);if(applied.active){state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');render();setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');return}}catch(err){console.warn('V2読込に失敗しました',err);setSyncStatus(`V2読込失敗: ${err.message}`,'warning');return}}
