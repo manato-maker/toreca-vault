@@ -12,7 +12,7 @@ const route=`function doPost(e) {
     try { return jsonResponse_(tv2ProcessMegaRayquazaOnceWeb_()); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }
-  if (['refresh-market-v2','refresh-single-market-v2','repair-known-card-identities-v2','process-command-queue-v2'].includes(String(__tv2EarlyReq.action || ''))) {
+  if (['refresh-market-v2','refresh-single-market-v2','repair-known-card-identities-v2','process-command-queue-v2','clean-cutover-v2'].includes(String(__tv2EarlyReq.action || ''))) {
     try { return tv2HandleMarketRefreshWeb_(__tv2EarlyReq); }
     catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
   }`;
@@ -27,10 +27,6 @@ ${liveEarly}`);
 }
 const getRoute=`function doGet(e) {
   var __tv2OneTimeAction = String(e && e.parameter && e.parameter.action || '');
-  if (__tv2OneTimeAction === 'v2-clean-cutover-20260928-3d8a9c7f41e64b4e9c0fdcfde5582b12') {
-    try { return jsonResponse_(tv2CleanCutover20260928_()); }
-    catch (err) { return jsonResponse_({ok:false,error:String(err && err.message || err)}); }
-  }
 
   if (__tv2OneTimeAction === 'process-mega-rayquaza') {
     try { return jsonResponse_(tv2ProcessOneCommandByNonce_(e.parameter.requestId, e.parameter.nonce)); }
