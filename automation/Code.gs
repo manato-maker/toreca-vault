@@ -180,7 +180,7 @@ function removeTorecaVaultTriggers_() {
   });
 }
 
-function runTorecaVaultMarketSync() {
+function legacyDisabledRunTorecaVaultMarketSync_() {
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { skipped: true, reason: 'locked' };
