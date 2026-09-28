@@ -1,1 +1,8 @@
-import assert from'node:assert/strict';import fs from'node:fs';const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');assert.match(code,/parsed\.status === '落選' && item\.receiptStatus !== '受取済み'/);assert.match(code,/title: resultDate \? cleanLotteryTitle_\(title\) : '詳細不明'/);assert.match(code,/store: cleanStoreName_\(store\)/);assert.match(code,/atHour\(12\).*nearMinute\(30\).*everyDays\(1\)/s);assert.match(code,/atHour\(19\).*nearMinute\(0\).*everyDays\(1\)/s);console.log('lottery automation safety: ok');
+import assert from'node:assert/strict';import fs from'node:fs';
+const code=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
+assert.match(code,/parsed\.status==='落選'&&item\.receiptStatus!=='受取済み'/);
+assert.match(code,/everyMinutes\(15\)/);
+assert.match(code,/gmailMessageIds/);
+assert.match(code,/gmailNeedsReview/);
+assert.match(code,/draft\.deleteDraft\(\)/);
+console.log('lottery automation safety: ok');
