@@ -1,6 +1,12 @@
 const money=x=>Number(x)||0;
 const qty=x=>Number(x?.quantity)||0;
 const key=x=>String(x||'').trim().toLocaleLowerCase('ja');
+function embeddedCardSet(lot){
+ const source=String(lot?.product||lot?.productKey||'').trim();
+ const m=source.match(/(?:^|\s)([A-Za-z0-9-]{1,12})\s+(\d{3}\/(?:\d{3}|SV-P))\s*$/i);
+ if(!m||/^(?:EX|GX|V|VMAX|VSTAR)$/i.test(m[1]))return'';
+ return m[1]+' '+m[2];
+}
 
 function quoteMap(state){
  const byKey=new Map(),byLot=new Map();
@@ -22,7 +28,7 @@ export function v2ViewModel(state){
  const boxes=[],packs=[],cards=[];
  for(const l of state.inventoryLots||[]){
    const q=quoteFor(quotes,l);
-   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
+   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||embeddedCardSet(l)||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
    if(l.category==='BOX')boxes.push(base);else if(l.category==='パック')packs.push(base);else if(l.category==='カード')cards.push({...base,buybackPrice:q?.price??null});
  }
  const newestFirst=(a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.id||'').localeCompare(String(a.id||''));
