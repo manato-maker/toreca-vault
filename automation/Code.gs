@@ -335,8 +335,14 @@ function fetchCardrushMediaBuyback_(product, model, variant) {
 function tv2ToretokuNameMatches_(wanted,actual,model,variant){
   const w=normalize_(wanted),a=normalize_(actual),v=normalize_(variant||'');
   if(a===w)return true;
-  const stripped=normalize_(String(actual||'').replace(/[（(](?:マスターボールミラー|モンスターボールミラー|ミラー)[）)]/g,''));
+  const raw=String(actual||'').replace(/[（(](?:マスターボールミラー|モンスターボールミラー|ミラー)[）)]/g,'');
+  const stripped=normalize_(raw);
   if(stripped===w)return true;
+  // Reprint names can carry the historical LV. suffix while inventory keeps
+  // the canonical Pokémon name. The caller already requires an exact card
+  // number/set match, so removing only this suffix remains fail-closed.
+  const noLevel=normalize_(raw.replace(/\s*LV\.?\s*\d+(?:\.\d+)?\s*$/i,''));
+  if(noLevel===w)return true;
   // The owned M2a card was confirmed by the user as the normal print. Toretoku
   // lists its canonical name with the X that older imported inventory omitted.
   if(String(model||'').toUpperCase()==='223/193'&&w===normalize_('メガリザードンex')&&stripped===normalize_('メガリザードンXex'))return true;
