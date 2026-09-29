@@ -33,6 +33,10 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Inspect recent Apps Script processes
+        env:
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: node scripts/inspect-apps-script-processes.mjs
       - name: Build canonical Apps Script project
         run: |
           rm -rf .apps-script-automation
