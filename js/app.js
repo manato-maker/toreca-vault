@@ -1,7 +1,7 @@
 import{assets,storeStats}from'./calculations.js';
 import{id,emptyState}from'./schema.js';
 import{applyPurchase,applySale,applyOpening}from'./inventory.js';
-import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disableV2ReadOnly}from'./v2-readonly.js?v=20260926-v3';
+import{tryLoadV2ReadOnly,hasV2ReadOnly,applyV2ReadOnlyToUi,enableV2ReadOnly,disableV2ReadOnly}from'./v2-readonly.js?v=20260929-timeout-v1';
 import{requiresVaultV2,getVaultV2Config}from'../v2/browser-sync.js?v=20260927-permanent-v2';
 import{acceptanceSnapshot,pendingMigrationSnapshot}from'../v2/acceptance.js?v=20260927-migration-check-v2';
 import{commitV2Transaction,commitV2CardIdentity}from'../v2/ui-write.js?v=20260927-concurrent-verify-v1';
