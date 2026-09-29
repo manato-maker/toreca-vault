@@ -515,3 +515,18 @@ function refreshSealedMarketCandidates_(data, date, reviews) {
   });
   if(rows.length)data.marketCandidates=rows;
 }
+
+function doGet(e) {
+  const action=String(e&&e.parameter&&e.parameter.action||'');
+  if(action!=='automation-status')return ContentService.createTextOutput(JSON.stringify({ok:false,error:'unsupported action'})).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(tv2AutomationStatus())).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  let req={};
+  try{req=JSON.parse((e&&e.postData&&e.postData.contents)||'{}')}catch(_){}
+  if(String(req.action||'')!=='bootstrap-automation')return ContentService.createTextOutput(JSON.stringify({ok:false,error:'unsupported action'})).setMimeType(ContentService.MimeType.JSON);
+  const installed=installTv2Automation();
+  const run=runTv2Automation();
+  return ContentService.createTextOutput(JSON.stringify({ok:true,installed,run,status:tv2AutomationStatus()})).setMimeType(ContentService.MimeType.JSON);
+}
