@@ -33,10 +33,6 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
-      - name: Inspect Apps Script deployment types
-        env:
-          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
-        run: node scripts/inspect-apps-script-deployments.mjs
       - name: Build canonical Apps Script project
         run: |
           rm -rf .apps-script-automation
@@ -54,3 +50,7 @@ jobs:
           cmp -s automation/appsscript.json .apps-script-automation/appsscript.json
           cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
+      - name: Bootstrap simple automation via HEAD web app
+        env:
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: node scripts/bootstrap-apps-script-dev.mjs
