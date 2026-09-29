@@ -25,7 +25,9 @@ if(!depRes.ok)throw new Error('Deployment list failed: HTTP '+depRes.status);
 const deps=(await depRes.json()).deployments||[];
 const head=deps.find(d=>d.deploymentConfig?.versionNumber==null&&(d.entryPoints||[]).some(e=>e.entryPointType==='WEB_APP'));
 if(!head)throw new Error('HEAD web app deployment not found');
-const base='https://script.google.com/macros/s/'+head.deploymentId+'/dev';
+const webEntry=(head.entryPoints||[]).find(e=>e.entryPointType==='WEB_APP');
+const base=String(webEntry&&webEntry.webApp&&webEntry.webApp.url||'');
+if(!base)throw new Error('HEAD web app URL not available');
 
 async function request(url,options={}){
   const res=await fetch(url,{...options,headers:{authorization:'Bearer '+accessToken,...(options.headers||{})},redirect:'follow'});
