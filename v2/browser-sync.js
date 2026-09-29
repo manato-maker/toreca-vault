@@ -1,4 +1,4 @@
-import {loadV2,saveV2} from './api-client.js';
+import {loadV2,saveV2} from './api-client.js?v=20260929-timeout-v1';
 
 const clone=x=>structuredClone(x);
 const requiredArrays=['transactions','inventoryLots','lotteries','marketQuotes','auditLog'];
