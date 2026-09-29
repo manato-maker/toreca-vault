@@ -46,7 +46,8 @@ function runTv2LotteryAuto(options){
     // Revisit recent mail because delivery and trigger execution can be delayed.
     // Message IDs make this overlap idempotent.
     const since=last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000);
-    const processed=new Set(health.gmailMessageIds||[]),newIds=[],reviews=[];let changed=false;
+    const parserVersion='livepocket-title-v2',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    const processed=new Set(parserChanged?[]:(health.gmailMessageIds||[])),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
     const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
     for(let offset=0;offset<2000;offset+=100){
@@ -61,7 +62,7 @@ function runTv2LotteryAuto(options){
       if(!CARD_WORDS.test(text)||(!isResult&&!isApplication))return;report.scanned++;
       if(isApplication){
         const before=state.lotteries.length,r=upsertApplication_(state.lotteries,text,message,now);
-        if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
+        if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='updated'){report.updated++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
         newIds.push(id);return;
       }
       const geo=tv2ResolveGeoResult_(state,message,text,now);
@@ -77,6 +78,7 @@ function runTv2LotteryAuto(options){
         const parsed=parseResult_(text,message.getDate());if(!parsed.status){report.review++;reviews.push({messageId:id,reason:'当落を一意に判別できない',subject:message.getSubject()})}
         else{
           const item=match.item,old=JSON.stringify(item);
+          if(typeof applyLivePocketMetadata_==='function')applyLivePocketMetadata_(item,text,message,now);
           const conflict=(parsed.status==='落選'&&(['当選','購入済'].includes(item.status)||item.receiptStatus==='受取済み'))||
             (parsed.status==='当選'&&item.status==='落選');
           if(conflict){report.review++;reviews.push({messageId:id,reason:'既存の当落・購入・受取状態と結果メールが競合',subject:message.getSubject()})}
@@ -92,7 +94,7 @@ function runTv2LotteryAuto(options){
         }
       }newIds.push(id);
     }));
-    health.gmailMessageIds=[...processed,...newIds].slice(-3000);health.lastGmailRunAt=now.toISOString();health.gmailReview=report.review;health.gmailStatus=report.review?'review':'ok';health.gmailNeedsReview=[...(health.gmailNeedsReview||[]),...reviews].slice(-200);
+    health.gmailMessageIds=[...processed,...newIds].slice(-3000);health.gmailParserVersion=parserVersion;health.lastGmailRunAt=now.toISOString();health.gmailReview=report.review;health.gmailStatus=report.review?'review':'ok';health.gmailNeedsReview=[...(health.gmailNeedsReview||[]),...reviews].slice(-200);
     return {changed:true,report};
   });
 }
