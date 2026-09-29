@@ -258,7 +258,7 @@ function tv2TryMarketSource_(label,fn,reviews){
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),policy='cardrush-toretoku-v2',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),policy='cardrush-toretoku-v3',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
   if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy)return{changed:false,skipped:true,reason:'already-ran-today',report};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
   let rows=null;
