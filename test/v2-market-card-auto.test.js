@@ -86,6 +86,10 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   assert.equal(hit?.price,1700,'Toretoku parser accepts one exact name + full set/number match');
   assert.equal(hit?.source,'トレトク買取');
   assert.equal(vm.runInContext('tv2ToretokuNameMatches_',ctx)('リザードン','リザードン LV.76','137/103',''),true,'exact-number legacy LV suffix is accepted');
+  const nullRarityHtml='self.__next_f.push([1,"items:[{\\\"name\\\":\\\"ブラッキーex\\\",\\\"itemCode\\\":\\\"398351jat\\\",\\\"price\\\":7300,\\\"sellPrice\\\":10800,\\\"modelNumber\\\":\\\"MF 044/040\\\",\\\"imageUrl\\\":\\\"u\\\",\\\"rarity\\\":null}]"])';
+  ctx.UrlFetchApp={fetch:()=>({getResponseCode:()=>200,getContentText:()=>nullRarityHtml})};
+  const nullRarity=vm.runInContext('fetchToretokuBuyback_',ctx)('ブラッキーex','MF 044/040','044/040','');
+  assert.equal(nullRarity?.price,7300,'Toretoku exact rows with null rarity are accepted');
 }
 
 
