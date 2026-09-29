@@ -55,28 +55,42 @@ function matchLottery_(lotteries, text) {
 function upsertApplication_(lotteries, text, message, now) {
   let applicationNo = extractApplicationNo_(text);
   const sourceText=[text, String(message.getFrom ? message.getFrom() : '')].join('\n');
+  const isLivePocket = /livepocket\.jp|LivePocket/i.test(sourceText);
   const isToysRUs = /toysrus|トイザらス|las\.toysrus\.co\.jp/i.test(sourceText);
   const isSanyodo = /三洋堂|select-type\.com/i.test(sourceText);
   const isGeo = /geonet\.jp|ゲオ|GEO/i.test(sourceText);
   if (!applicationNo && (isToysRUs || isSanyodo || isGeo)) applicationNo = 'mail-' + message.getId();
   if (!applicationNo) return { kind: 'review', reason: '申込番号を抽出できない' };
-  if (lotteries.some(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo))) {
-    return { kind: 'duplicate' };
-  }
-  let title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
+
+  let title = isLivePocket ? extractLivePocketTitle_(text) : '';
+  if (!title) title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
   if (!title && isToysRUs) { const m = String(message.getSubject ? message.getSubject() : '').match(/[『「]\s*([^』」]+)[』」]/); if (m) title = m[1].trim(); }
   if (!title && isSanyodo) { const m = String(text).match(/^(.+?)抽選販売へご応募/m); if (m) title = m[1].trim(); }
   if (!title && isGeo) { const m = String(text).match(/\[(?:お申し込みいただいた商品|当選した商品)\]\s*\n\s*([^\r\n]+)/); if (m) title = m[1].trim(); }
+
   let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗|受取登録店舗)\s*[:：は]*\s*[「『]?/m).replace(/[」』]$/,'').trim();
   if (isToysRUs) { const sm=String(text).match(/受取登録店舗は[「『]([^」』]+)[」』]/); if(sm) store=sm[1].trim(); }
   if (!store && isSanyodo) { const answers=[...String(text).matchAll(/━回答内容━+\s*\n+\s*([^\r\n]+)/g)].map(m=>m[1].trim()); if(answers.length) store=answers[answers.length-1]; }
   if (!store && isGeo) store = 'GEO（受取店舗未確定）';
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
+
+  const existing=lotteries.find(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo));
+  if(existing){
+    const before=JSON.stringify(existing);
+    if(isLivePocket){
+      existing.title=cleanLotteryTitle_(title);
+      existing.store=cleanStoreName_(store);
+      existing.gmailMessageId=message.getId();
+      existing.updatedAt=now.toISOString();
+    }
+    return {kind:JSON.stringify(existing)===before?'duplicate':'updated',item:existing};
+  }
+
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: resultDate ? cleanLotteryTitle_(title) : '詳細不明',
+    title: isLivePocket ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -89,6 +103,59 @@ function upsertApplication_(lotteries, text, message, now) {
   });
   if ((store === 'KONAMI STYLE' || isGeo) && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
   return { kind: 'created' };
+}
+
+function extractLivePocketTitle_(text){
+  const src=String(text||'');
+  const ticket=extractLineValue_(src,/^チケット名\s*[:：]/m);
+  if(ticket)return cleanLivePocketProductText_(ticket);
+
+  const priced=src.split(/\r?\n/).map(x=>x.trim()).find(line =>
+    /[：:]\s*[¥￥]\s*0(?:\s|$)/.test(line) &&
+    !/(チケット料金|システム利用料|合計金額)/.test(line)
+  );
+  if(priced){
+    const value=priced.replace(/[：:]\s*[¥￥]\s*0.*$/,'').trim();
+    const cleaned=cleanLivePocketProductText_(value);
+    if(cleaned)return cleaned;
+  }
+
+  const reception=extractLineValue_(src,/^販売受付名\s*[:：]/m);
+  if(reception&&!/^(?:抽選販売受付|抽選受付|販売受付)$/.test(reception.trim())){
+    const cleaned=cleanLivePocketProductText_(reception);
+    if(cleaned)return cleaned;
+  }
+
+  const event=extractLineValue_(src,/^イベント名\s*[:：]/m);
+  return event?cleanLivePocketProductText_(event):'';
+}
+
+function cleanLivePocketProductText_(value){
+  let s=String(value||'').normalize('NFKC').trim();
+  s=s.replace(/^【[^】]+】\s*/,'').trim();
+  const parens=[...s.matchAll(/[（(]([^（）()]+)[）)]/g)];
+  if(parens.length){
+    const inner=String(parens[parens.length-1][1]||'').trim();
+    if(inner&&!/^(?:大阪府|奈良県|京都府|兵庫県|東京都|神奈川県|愛知県|その他)$/.test(inner))s=inner;
+  }
+  s=s.replace(/^(?:ポケカ|ポケモンカード(?:ゲーム)?)?\s*抽選\s*販売\s*/,'')
+     .replace(/^抽選販売\s*/,'')
+     .replace(/^販売受付\s*/,'')
+     .trim();
+  return cleanLotteryTitle_(s);
+}
+
+function applyLivePocketMetadata_(item,text,message,now){
+  const source=[String(text||''),String(message&&message.getFrom?message.getFrom():'')].join('\n');
+  if(!/livepocket\.jp|LivePocket/i.test(source)||!item)return false;
+  const title=extractLivePocketTitle_(text);
+  const store=extractLineValue_(text,/^(?:会場|店舗名)\s*[:：]\s*/m);
+  const before=JSON.stringify(item);
+  if(title)item.title=cleanLotteryTitle_(title);
+  if(store)item.store=cleanStoreName_(store);
+  if(message&&message.getId)item.gmailMessageId=message.getId();
+  item.updatedAt=now.toISOString();
+  return JSON.stringify(item)!==before;
 }
 
 function extractApplicationNo_(text) {
