@@ -85,6 +85,7 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   const hit=vm.runInContext('fetchToretokuBuyback_',ctx)('メガレックウザex','M6 095/076','095/076','');
   assert.equal(hit?.price,1700,'Toretoku parser accepts one exact name + full set/number match');
   assert.equal(hit?.source,'トレトク買取');
+  assert.equal(vm.runInContext('tv2ToretokuNameMatches_',ctx)('リザードン','リザードン LV.76','137/103',''),true,'exact-number legacy LV suffix is accepted');
 }
 
 
