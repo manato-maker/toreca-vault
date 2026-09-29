@@ -30,7 +30,8 @@ const rows=(json.deployments||[]).map(d=>({
  entryPoints:(d.entryPoints||[]).map(e=>({
    type:e.entryPointType||'',
    webAppAccess:e.webApp?.access||'',
-   executeAs:e.webApp?.executeAs||''
+   executeAs:e.webApp?.executeAs||'',
+   url:e.webApp?.url||''
  }))
 }));
 console.log(JSON.stringify(rows,null,2));
