@@ -366,7 +366,7 @@ function fetchToretokuBuyback_(product, setText, model, variant) {
     });
     if(response.getResponseCode()!==200)continue;
     const html=response.getContentText('UTF-8');
-    const re=/\{\\"name\\":\\"([^\\"]+)\\",\\"itemCode\\":\\"([^\\"]+)\\",\\"price\\":(\d+),\\"sellPrice\\":\d+,\\"modelNumber\\":\\"([^\\"]+)\\",\\"imageUrl\\":\\"[^\\"]+\\",\\"rarity\\":\\"([^\\"]*)\\"\}/g;
+    const re=/\{\\"name\\":\\"([^\\"]+)\\",\\"itemCode\\":\\"([^\\"]+)\\",\\"price\\":(\d+),\\"sellPrice\\":\d+,\\"modelNumber\\":\\"([^\\"]+)\\",\\"imageUrl\\":\\"[^\\"]+\\",\\"rarity\\":(?:\\"([^\\"]*)\\"|null)\}/g;
     let m;
     while((m=re.exec(html))){
       const name=String(m[1]||''),itemCode=String(m[2]||''),price=Number(m[3]),modelNumber=String(m[4]||''),rarity=String(m[5]||'');
