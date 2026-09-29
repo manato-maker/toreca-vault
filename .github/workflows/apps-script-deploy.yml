@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: node --test test/*.test.js
-      - name: Diagnose Toretoku response shape
+      - name: Diagnose Toretoku exact model retry
         run: node scripts/diagnose-cardrush-csv.mjs
   deploy:
     needs: test
