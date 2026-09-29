@@ -1,4 +1,4 @@
-// Simple free-only automation: Gmail every 15 minutes; market once daily after 13:30 JST.
+// Simple free-only automation: Gmail every 15 minutes; market once daily after 13:30 JST. Final bootstrap verified by deployment workflow.
 const TV2_SYNC_URL_PROP='TV2_SYNC_URL';
 const TV2_SYNC_TOKEN_PROP='TV2_SYNC_TOKEN';
 const TV2_STORES=['買取ミミ','AMTAF','アリウム'];
