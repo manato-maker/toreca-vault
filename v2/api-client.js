@@ -1,12 +1,20 @@
-async function postJson(url,body,label){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+const sleep_=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function postJsonOnce_(url,body,label){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),35000);
  try{
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal});
   return await r.json();
  }catch(err){
-  if(err&&err.name==='AbortError')throw new Error(label+'がタイムアウトしました');
+  if(err&&err.name==='AbortError'){const timeout=new Error(label+'がタイムアウトしました');timeout.code='TV2_TIMEOUT';throw timeout}
   throw err;
  }finally{clearTimeout(timer)}
+}
+async function postJson(url,body,label){
+ try{return await postJsonOnce_(url,body,label)}
+ catch(err){
+  if(err&&err.code==='TV2_TIMEOUT'){await sleep_(800);return postJsonOnce_(url,body,label)}
+  throw err;
+ }
 }
 export async function loadV2(url,token){
  const j=await postJson(url,{action:'load',token},'V2読込');if(!j.ok)throw new Error(j.error||'load failed');return j;
