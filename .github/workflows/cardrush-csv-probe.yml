@@ -1,0 +1,16 @@
+name: Temporary Cardrush CSV Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/cardrush-csv-probe.mjs'
+      - '.github/workflows/cardrush-csv-probe.yml'
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node scripts/cardrush-csv-probe.mjs
