@@ -43,10 +43,10 @@ function runTv2LotteryAuto(options){
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
+    const parserVersion='pokemoncenter-v3',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
     // Revisit recent mail because delivery and trigger execution can be delayed.
-    // Message IDs make this overlap idempotent.
-    const since=last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000);
-    const parserVersion='livepocket-title-v2',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    // A parser upgrade gets one 30-day pass so older application mail can be repaired.
+    const since=parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000));
     const processed=new Set(parserChanged?[]:(health.gmailMessageIds||[])),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
     const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
@@ -63,6 +63,14 @@ function runTv2LotteryAuto(options){
       if(isApplication){
         const before=state.lotteries.length,r=upsertApplication_(state.lotteries,text,message,now);
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='updated'){report.updated++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
+        newIds.push(id);return;
+      }
+      const pokemonCenter=tv2ResolvePokemonCenterResult_(state,message,text,now);
+      if(pokemonCenter){
+        if(pokemonCenter.kind==='created'){report.created++;changed=true}
+        else if(pokemonCenter.kind==='updated'){report.updated++;changed=true}
+        else if(pokemonCenter.kind==='duplicate')report.duplicate++;
+        else{report.review++;reviews.push({messageId:id,reason:pokemonCenter.reason,subject:message.getSubject()})}
         newIds.push(id);return;
       }
       const geo=tv2ResolveGeoResult_(state,message,text,now);
@@ -102,6 +110,52 @@ function runTv2LotteryAuto(options){
 
 
 
+
+function tv2ResolvePokemonCenterResult_(state,message,text,now){
+ const from=String(message&&message.getFrom?message.getFrom():'');
+ const subject=String(message&&message.getSubject?message.getSubject():'');
+ const source=[from,subject,String(text||'')].join('\n');
+ if(!/pokemoncenter-online\.com|ポケモンセンターオンライン/i.test(source)||!/当選|落選|抽選結果/.test(source))return null;
+ const parsed=parseResult_(text,message.getDate());
+ if(!parsed.status)return{kind:'review',reason:'ポケモンセンターの当落を一意に判別できない'};
+ const title=extractPokemonCenterTitle_(text),code=extractPokemonCenterProductCode_(text);
+ if(!title)return{kind:'review',reason:'ポケモンセンター結果メールから商品名を抽出できない'};
+ const candidates=(state.lotteries||[]).filter(x=>{
+   if(code&&(String(x.id||'').includes(code)||String(x.memo||'').includes(code)))return true;
+   return normalize_(x.store||'')===normalize_('ポケモンセンターオンライン')&&productMatches_(productKey_(x.title||''),productKey_(title));
+ });
+ if(candidates.length>1)return{kind:'review',reason:'ポケモンセンター結果メールに一致する登録済み抽選が複数あります'};
+ let item=candidates[0];
+ if(!item){
+   item={
+     id:'lottery-pokemoncenter-'+(code||message.getId()),
+     title:title,
+     store:'ポケモンセンターオンライン',
+     status:parsed.status,
+     resultDate:parsed.resultDate||'',
+     receiveDeadline:parsed.receiveDeadline||'',
+     receiptStatus:parsed.status==='当選'?'未受取':'対象外',
+     receivedDate:'',
+     memo:'自動登録｜ポケモンセンターオンライン'+(code?'｜商品コード '+code:''),
+     gmailMessageId:message.getId(),
+     createdAt:now.toISOString(),
+     updatedAt:now.toISOString()
+   };
+   state.lotteries.push(item);return{kind:'created',item};
+ }
+ const old=JSON.stringify(item);
+ if(typeof applyPokemonCenterMetadata_==='function')applyPokemonCenterMetadata_(item,text,message,now);
+ const conflict=(parsed.status==='落選'&&(['当選','購入済'].includes(item.status)||item.receiptStatus==='受取済み'))||
+   (parsed.status==='当選'&&item.status==='落選');
+ if(conflict)return{kind:'review',reason:'既存の当落・購入・受取状態とポケモンセンター結果メールが競合'};
+ if(['応募済','応募済み'].includes(item.status))item.status=parsed.status;
+ item.resultDate=parsed.resultDate||item.resultDate;
+ if(parsed.receiveDeadline)item.receiveDeadline=parsed.receiveDeadline;
+ if(parsed.status==='当選'&&!['受取済み','未受取'].includes(item.receiptStatus))item.receiptStatus='未受取';
+ if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
+ item.updatedAt=now.toISOString();
+ return{kind:JSON.stringify(item)===old?'duplicate':'updated',item};
+}
 
 function tv2ResolveGeoResult_(state,message,text,now){
  const from=String(message&&message.getFrom?message.getFrom():'');
