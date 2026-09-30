@@ -652,6 +652,89 @@ function runTv2ChatLottery(command){
 
 
 
+function runTv2PokemonCenterSpouseResult(command){
+ const input=command&&typeof command==='object'?command:{};
+ const requestId=String(input.requestId||'').trim(),resultDate=String(input.resultDate||'').trim();
+ const store='ポケモンセンターオンライン';
+ const celebrationTitle='MEGA 拡張パック 30th CELEBRATION BOX';
+ const futuristicTitle='MEGA 30th CELEBRATION FUTURISTIC BOX';
+ const ownerTag='嫁分';
+ if(!requestId||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('ポケモンセンター嫁分結果コマンドが不正です');
+ const isSpouse=x=>/(?:^|｜|\s)(?:嫁分|妻分|奥さん)(?:$|｜|\s)/.test(String(x&&x.memo||''))||String(x&&x.owner||'')===ownerTag;
+ const isStore=x=>normalize_(x&&x.store||'')===normalize_(store);
+ const isCelebration=x=>{
+  const t=normalize_(x&&x.title||'');
+  return t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'));
+ };
+ const isFuturistic=x=>normalize_(x&&x.title||'').includes(normalize_('30th CELEBRATION FUTURISTIC'));
+ const appendMemo=(value,parts)=>{
+  const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);
+  parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});
+  return out.join('｜');
+ };
+ const result=tv2Mutate_('chat-pokemoncenter-spouse-result',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.pokemonCenterSpouseResultIds=Array.isArray(state.automation.pokemonCenterSpouseResultIds)?state.automation.pokemonCenterSpouseResultIds:[];
+  const spouseCelebration=state.lotteries.filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x));
+  const pendingCelebration=spouseCelebration.filter(x=>['応募済','応募済み'].includes(String(x.status||'')));
+  if(state.automation.pokemonCenterSpouseResultIds.includes(requestId)){
+   if(spouseCelebration.length!==1)throw new Error('嫁分CELEBRATION BOXを一意に再確認できません');
+   const spouseFuturistic=state.lotteries.filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
+   if(spouseFuturistic.length!==1)throw new Error('嫁分FUTURISTIC BOXを一意に再確認できません');
+   return{duplicate:true,changed:false,celebrationId:spouseCelebration[0].id,futuristicId:spouseFuturistic[0].id};
+  }
+  if(pendingCelebration.length!==1)throw new Error('応募済みの嫁分CELEBRATION BOXを一意に特定できません: '+pendingCelebration.length+'件');
+  const celebration=pendingCelebration[0];
+  if(String(celebration.resultDate||'')&&String(celebration.resultDate).slice(0,10)!==resultDate)throw new Error('嫁分CELEBRATION BOXの結果日が想定と一致しません');
+  const now=new Date().toISOString();
+  celebration.title=celebrationTitle;
+  celebration.store=store;
+  celebration.status='落選';
+  celebration.resultDate=resultDate;
+  celebration.receiptStatus='対象外';
+  celebration.receivedDate='';
+  celebration.owner=ownerTag;
+  celebration.memo=appendMemo(celebration.memo,[ownerTag,'9/30 落選確認','ポケモンセンターオンライン']);
+  celebration.updatedAt=now;
+
+  let futuristicMatches=state.lotteries.filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
+  if(futuristicMatches.length>1)throw new Error('嫁分FUTURISTIC BOXが重複しています: '+futuristicMatches.length+'件');
+  let futuristic=futuristicMatches[0];
+  if(futuristic){
+   if(futuristic.status==='購入済'||futuristic.receiptStatus==='受取済み')throw new Error('嫁分FUTURISTIC BOXが購入済み/受取済みのため上書きを停止しました');
+  }else{
+   const id='lottery-pokemoncenter-wife-futuristic-20260930';
+   if(state.lotteries.some(x=>String(x.id||'')===id))throw new Error('FUTURISTIC BOX用IDが既に使用されています');
+   futuristic={id,title:futuristicTitle,store,status:'当選',resultDate,receiveDeadline:'2026-10-06',receiptStatus:'未受取',receivedDate:'',owner:ownerTag,memo:'',source:'chat',requestId,createdAt:now,updatedAt:now};
+   state.lotteries.push(futuristic);
+  }
+  futuristic.title=futuristicTitle;
+  futuristic.store=store;
+  futuristic.status='当選';
+  futuristic.resultDate=resultDate;
+  futuristic.receiveDeadline='2026-10-06';
+  if(futuristic.receiptStatus!=='受取済み')futuristic.receiptStatus='未受取';
+  futuristic.receivedDate=futuristic.receivedDate||'';
+  futuristic.owner=ownerTag;
+  futuristic.memo=appendMemo(futuristic.memo,[ownerTag,'価格 27,500円','9/30 当選確認','注文 9/30 17:00〜10/6 16:59','お届け 2027/3/13〜3/31','商品コード 4521329463872']);
+  futuristic.updatedAt=now;
+
+  state.automation.pokemonCenterSpouseResultIds.push(requestId);
+  state.automation.pokemonCenterSpouseResultIds=state.automation.pokemonCenterSpouseResultIds.slice(-100);
+  return{duplicate:false,changed:true,celebrationId:celebration.id,futuristicId:futuristic.id};
+ });
+ const check=tv2Load_(),state=check.payload||{};
+ const cMatches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.celebrationId||''));
+ const fMatches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.futuristicId||''));
+ if(cMatches.length!==1||cMatches[0].status!=='落選'||cMatches[0].title!==celebrationTitle||normalize_(cMatches[0].store)!==normalize_(store)||String(cMatches[0].owner||'')!==ownerTag)throw new Error('嫁分CELEBRATION BOXの再読込検証に失敗しました');
+ if(fMatches.length!==1||fMatches[0].status!=='当選'||fMatches[0].title!==futuristicTitle||normalize_(fMatches[0].store)!==normalize_(store)||String(fMatches[0].owner||'')!==ownerTag)throw new Error('嫁分FUTURISTIC BOXの再読込検証に失敗しました');
+ const spouseCelebrationFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x));
+ const spouseFuturisticFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
+ if(spouseCelebrationFinal.length!==1||spouseFuturisticFinal.length!==1)throw new Error('嫁分ポケモンセンター抽選の重複検証に失敗しました');
+ return{ok:true,revision:Number(check.revision),celebration:{id:cMatches[0].id,title:cMatches[0].title,status:cMatches[0].status},futuristic:{id:fMatches[0].id,title:fMatches[0].title,status:fMatches[0].status,receiveDeadline:fMatches[0].receiveDeadline},mutationResult:result};
+}
+
 function runTv2ChatLotteryBulk(command){
  const input=command&&typeof command==='object'?command:{};
  const dates=Array.isArray(input.resultDates)?input.resultDates.map(x=>String(x||'').trim()).filter(Boolean):[];
@@ -771,8 +854,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
