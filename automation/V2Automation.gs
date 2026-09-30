@@ -275,7 +275,13 @@ function tv2RepairKnownCardsNow_(){
 }
 
 
+function tv2CardMarketModel_(lot){
+ const fixed=String(lot&&lot.marketLookupModel||'').trim();
+ if(fixed)return fixed;
+ return extractModel_([lot&&lot.set,lot&&lot.product,lot&&lot.productKey].filter(Boolean).join(' '));
+}
 function tv2CardSetText_(lot,model){
+ const fixed=String(lot&&lot.marketLookupSet||'').trim();if(fixed)return fixed;
  const direct=String(lot&&lot.set||'').trim();if(direct)return direct;
  const source=String(lot&&(lot.product||lot.productKey)||'').trim();if(!source||!model)return'';
  const parts=source.split(/\s+/),index=parts.findIndex(p=>normalize_(p)===normalize_(model));
@@ -285,6 +291,8 @@ function tv2CardSetText_(lot,model){
  return code+' '+model;
 }
 function tv2CardMarketName_(lot,model){
+ const fixed=String(lot&&lot.marketLookupName||'').trim();
+ if(fixed)return fixed;
  let name=String(lot.product||lot.productKey||'').trim();
  if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
  const setCode=tv2CardSetText_(lot,model).split(/\s+/)[0]||'',parts=name.split(/\s+/);
@@ -334,14 +342,13 @@ function tv2TryMarketSource_(label,fn,reviews){
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-primary-v4',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-only-v5',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
-  // Cardrush is the canonical primary source for single-card buyback prices.
-  // Toretoku is fallback-only. If today's first refresh had to fall back,
-  // retry Cardrush once in the evening so a later same-day Cardrush update can
-  // replace the fallback quote without waiting until tomorrow.
-  const fallbackToday=cards.some(l=>{const q=tv2FindQuote_(state,l);return q&&String(q.checkedAt||'')===date&&Number(q.price)>0&&!/^カードラッシュ/.test(String(q.source||''))});
-  const eveningCardrushRetry=Boolean(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&fallbackToday&&hour>=20&&String(health.lastCardrushRetryDate||'')!==date);
+  // Single-card prices are Cardrush-only. No alternate shop/aggregator price
+  // may become canonical. If Cardrush could not resolve a card earlier today,
+  // retry once after 20:00 so late Cardrush updates can be picked up.
+  const needsCardrushRetry=cards.some(l=>{const q=tv2FindQuote_(state,l);return !q||String(q.checkedAt||'')!==date||!Number.isFinite(Number(q.price))||Number(q.price)<=0||!/^カードラッシュ/.test(String(q.source||''))||q.fresh===false});
+  const eveningCardrushRetry=Boolean(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&needsCardrushRetry&&hour>=20&&String(health.lastCardrushRetryDate||'')!==date);
   if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&!eveningCardrushRetry)return{changed:false,skipped:true,reason:'already-ran-today',report};
   let rows=null;
   if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
@@ -350,20 +357,29 @@ function runTv2MarketAuto(options){
     const key=String(lot.id||normalize_(lot.productKey||lot.product)+'|'+String(lot.condition||''));
     if(seen.has(key))return;seen.add(key);
     if(lot.identityNeedsReview===true){report.review++;report.cardReview++;reviews.push(lot.product+': カード番号は買取価格からの推定・現物確認まで前回価格維持');return}
-    const model=extractModel_([lot.set,lot.product].filter(Boolean).join(' '));
+    const model=tv2CardMarketModel_(lot);
     // The public buyback list describes standard condition. Other card conditions
     // cannot be priced from it without guessing a discount.
     if(!model||!['良品','美品',''].includes(String(lot.condition||''))){
       report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
-    const name=tv2CardMarketName_(lot,model),setText=tv2CardSetText_(lot,model),variant=tv2CardVariant_(lot);
-    // Every source is exact-match and fail-closed. One unavailable source must
-    // not abort the remaining inventory refresh.
+    const name=tv2CardMarketName_(lot,model),setText=tv2CardSetText_(lot,model),variant=String(lot.marketLookupVariant||'').trim()||tv2CardVariant_(lot);
+    // Cardrush-only and fail-closed. If Cardrush does not resolve exactly,
+    // never substitute another provider. Existing non-Cardrush quotes are
+    // invalidated so they cannot remain the displayed/current market price.
     let result=rows&&name?tv2TryMarketSource_('カードラッシュCSV',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('カードラッシュ',()=>fetchCardrushMediaBuyback_(name,model,variant),reviews);
-    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,setText,model,variant),reviews);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
-      report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': 完全一致の買取価格なし・前回価格維持');return;
+      const stale=tv2FindQuote_(state,lot);
+      if(stale){
+        stale.fresh=false;stale.trend='stale';
+        if(!/^カードラッシュ/.test(String(stale.source||''))){
+          stale.previousPrice=Number.isFinite(Number(stale.price))?Number(stale.price):(stale.previousPrice??null);
+          stale.previousSource=String(stale.source||'');
+          stale.price=null;stale.source='カードラッシュ未取得（要確認）';stale.checkedAt=date;
+        }
+      }
+      report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': カードラッシュ完全一致なし・スクショで検索名/型番を確認してください');return;
     }
     const quote=tv2FindQuote_(state,lot);
     if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;report.cardUnchanged++;return}
@@ -741,6 +757,43 @@ function runTv2PokemonCenterSpouseResult(command){
  return{ok:true,revision:Number(check.revision),celebration:{id:cMatches[0].id,title:cMatches[0].title,status:cMatches[0].status},futuristic:{id:fMatches[0].id,title:fMatches[0].title,status:fMatches[0].status,receiveDeadline:fMatches[0].receiveDeadline},mutationResult:result};
 }
 
+function runTv2ChatCardMarketLookup(command){
+ const input=command&&typeof command==='object'?command:{};
+ const requestId=String(input.requestId||'').trim(),lotId=String(input.lotId||'').trim();
+ const expectedProduct=String(input.product||input.expectedProduct||'').trim(),expectedSet=String(input.set||input.expectedSet||'').trim();
+ const lookupName=String(input.lookupName||input.cardrushName||'').trim(),lookupModel=String(input.lookupModel||input.cardrushModel||'').trim(),lookupSet=String(input.lookupSet||'').trim(),lookupVariant=String(input.lookupVariant||'').trim();
+ if(!requestId||!lookupName||!/^\d{3}\/(?:\d{3}|[A-Z0-9-]{3,})$/i.test(lookupModel))throw new Error('カードラッシュ検索固定コマンドが不正です');
+ const result=tv2Mutate_('chat-card-market-lookup',state=>{
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  state.marketQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.cardMarketLookupIds=Array.isArray(state.automation.cardMarketLookupIds)?state.automation.cardMarketLookupIds:[];
+  if(state.automation.cardMarketLookupIds.includes(requestId))return{duplicate:true,changed:false};
+  let matches=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category==='カード');
+  if(lotId)matches=matches.filter(l=>String(l.id||'')===lotId);
+  else{
+   if(!expectedProduct||!expectedSet)throw new Error('lotIdがない場合は商品名と収録・型番が必要です');
+   matches=matches.filter(l=>normalize_(l.product||l.productKey)===normalize_(expectedProduct)&&normalize_(l.set||'')===normalize_(expectedSet));
+  }
+  if(matches.length!==1)throw new Error('カードラッシュ検索固定対象を一意に特定できません: '+matches.length+'件');
+  const lot=matches[0];
+  if(expectedProduct&&normalize_(lot.product||lot.productKey)!==normalize_(expectedProduct))throw new Error('対象カード名が想定と一致しません');
+  if(expectedSet&&normalize_(lot.set||'')!==normalize_(expectedSet))throw new Error('対象カード型番が想定と一致しません');
+  lot.marketLookupName=lookupName;lot.marketLookupModel=lookupModel;
+  if(lookupSet)lot.marketLookupSet=lookupSet;else delete lot.marketLookupSet;
+  if(lookupVariant)lot.marketLookupVariant=lookupVariant;else delete lot.marketLookupVariant;
+  lot.marketLookupConfirmedBy='user-screenshot';lot.marketLookupConfirmedAt=new Date().toISOString();
+  const q=tv2FindQuote_(state,lot);
+  if(q&&!/^カードラッシュ/.test(String(q.source||''))){q.previousPrice=Number.isFinite(Number(q.price))?Number(q.price):(q.previousPrice??null);q.previousSource=String(q.source||'');q.price=null;q.fresh=false;q.trend='stale';q.source='カードラッシュ未取得（要確認）'}
+  state.automation.cardMarketLookupIds.push(requestId);state.automation.cardMarketLookupIds=state.automation.cardMarketLookupIds.slice(-200);
+  return{duplicate:false,changed:true,lotId:lot.id,lookupName,lookupModel};
+ });
+ const check=tv2Load_(),state=check.payload||{},matches=(state.inventoryLots||[]).filter(l=>String(l.id||'')===String(result.lotId||lotId));
+ if(result.duplicate)return{ok:true,revision:Number(check.revision),mutationResult:result};
+ if(matches.length!==1||String(matches[0].marketLookupName||'')!==lookupName||String(matches[0].marketLookupModel||'')!==lookupModel||String(matches[0].marketLookupConfirmedBy||'')!=='user-screenshot')throw new Error('カードラッシュ検索固定の再読込検証に失敗しました');
+ return{ok:true,revision:Number(check.revision),lot:{id:matches[0].id,product:matches[0].product,set:matches[0].set,marketLookupName:matches[0].marketLookupName,marketLookupModel:matches[0].marketLookupModel},mutationResult:result};
+}
+
 function runTv2ChatLotteryBulk(command){
  const input=command&&typeof command==='object'?command:{};
  const dates=Array.isArray(input.resultDates)?input.resultDates.map(x=>String(x||'').trim()).filter(Boolean):[];
@@ -860,8 +913,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
