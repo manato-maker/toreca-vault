@@ -1,4 +1,4 @@
-import{loadVaultV2,getVaultV2Config,setVaultV2Config,clearVaultV2Config}from'../v2/browser-sync.js?v=20260930-getfirst-v1';
+import{loadVaultV2,getVaultV2Config,setVaultV2Config,clearVaultV2Config}from'../v2/browser-sync.js?v=20260930-jsonp-v1';
 import{v2ViewModel,v2Assets,v2RealizedProfit}from'../v2/view-model.js';
 
 export async function tryLoadV2ReadOnly(){
