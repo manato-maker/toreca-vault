@@ -50,25 +50,26 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザードンXex','223/193','通常版')?.price,2500,'explicit normal print excludes error print');
 
 {
-  const fallbackState={inventoryLots:[{id:'f1',category:'カード',product:'ピカチュウ',set:'PROMO 001/SV-P',condition:'美品',quantity:1}],marketQuotes:[]};
+  const fallbackState={inventoryLots:[{id:'f1',category:'カード',product:'ピカチュウ',set:'PROMO 001/SV-P',condition:'美品',quantity:1}],marketQuotes:[{lotId:'f1',product:'ピカチュウ',category:'カード',condition:'美品',price:3200,checkedAt:'2026-09-25',source:'トレトク買取',fresh:true}]};
+  let toretokuCalls=0;
   const fallbackContext=vm.createContext({
     tv2Mutate_:(_kind,fn)=>fn(fallbackState),TZ:'Asia/Tokyo',
-    Utilities:{formatDate:()=> '2026-09-26'},
+    Utilities:{formatDate:(_d,_tz,fmt)=>fmt==='H'?'14':'2026-09-26'},
     normalize_:x=>String(x||'').toLowerCase(),
     extractModel_:x=>(String(x).match(/\d{3}\/(?:\d{3}|SV-P)/)||[])[0]||'',
     fetchCardrushRows_:()=>{throw new Error('feed down')},
     findCardrushBuyback_:()=>null,
     fetchCardrushMediaBuyback_:()=>null,
-    fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウ'&&set==='PROMO 001/SV-P'&&model==='001/SV-P'?{price:3200,source:'トレトク買取'}:null,
-    fetchToresiaBuyback_:()=>null,
-    fetchGamepediaBuyback_:()=>null,
-    fetchAltemaBuyback_:()=>null
+    fetchToretokuBuyback_:()=>{toretokuCalls++;return{price:999999,source:'トレトク買取'}}
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
   const fallbackResult=vm.runInContext('runTv2MarketAuto()',fallbackContext);
-  assert.equal(fallbackResult.report.cardUpdated,1,'cardrush fetch failure falls back to an exact official buyback result');
-  assert.equal(fallbackState.marketQuotes[0].price,3200);
-  assert.equal(fallbackState.marketQuotes[0].source,'トレトク買取');
+  assert.equal(fallbackResult.report.cardUpdated,0,'Cardrush failure must not fall back to another provider');
+  assert.equal(fallbackResult.report.cardReview,1);
+  assert.equal(toretokuCalls,0,'Toretoku must never be queried by the canonical card market job');
+  assert.equal(fallbackState.marketQuotes[0].price,null,'existing non-Cardrush quote is invalidated');
+  assert.equal(fallbackState.marketQuotes[0].source,'カードラッシュ未取得（要確認）');
+  assert.equal(fallbackState.marketQuotes[0].fresh,false);
 }
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
 
@@ -186,23 +187,19 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
 
 
 {
-  const embeddedState={inventoryLots:[{id:'e1',category:'カード',product:'ピカチュウex M6a 127/103',set:'',condition:'良品',quantity:1}],marketQuotes:[{lotId:'e1',product:'ピカチュウex M6a 127/103',category:'カード',condition:'良品',price:10000,checkedAt:'2026-09-23',source:'公開買取相場'}]};
+  const embeddedState={inventoryLots:[{id:'e1',category:'カード',product:'ピカチュウex M6a 127/103',set:'',condition:'良品',quantity:1,marketLookupName:'ピカチュウex',marketLookupModel:'127/103'}],marketQuotes:[]};
   const ctx=vm.createContext({
     tv2Mutate_:(_kind,fn)=>fn(embeddedState),TZ:'Asia/Tokyo',
-    Utilities:{formatDate:()=> '2026-09-28'},
+    Utilities:{formatDate:(_d,_tz,fmt)=>fmt==='H'?'14':'2026-09-28'},
     normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
     extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
-    fetchCardrushRows_:()=>[],
-    findCardrushBuyback_:()=>null,
-    fetchCardrushMediaBuyback_:()=>null,
-    fetchToretokuBuyback_:(name,set,model)=>name==='ピカチュウex'&&set==='M6a 127/103'&&model==='127/103'?{price:7300,source:'トレトク買取'}:null,
-    fetchToresiaBuyback_:()=>null,
-    fetchGamepediaBuyback_:()=>null,
-    fetchAltemaBuyback_:()=>null
+    fetchCardrushRows_:()=>[['ピカチュウex','127/103','7300']],
+    findCardrushBuyback_:(_rows,name,model)=>name==='ピカチュウex'&&model==='127/103'?{price:7300,source:'カードラッシュ'}:null,
+    fetchCardrushMediaBuyback_:()=>null
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),ctx);
   const hit=vm.runInContext('runTv2MarketAuto()',ctx);
-  assert.equal(hit.report.cardUpdated,1,'embedded set code is separated from the card name for exact market lookup');
+  assert.equal(hit.report.cardUpdated,1,'user-confirmed Cardrush lookup name/model can pin a difficult card');
   assert.equal(embeddedState.marketQuotes[0].price,7300);
-  assert.equal(embeddedState.marketQuotes[0].source,'トレトク買取');
+  assert.equal(embeddedState.marketQuotes[0].source,'カードラッシュ');
 }
