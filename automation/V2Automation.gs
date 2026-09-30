@@ -660,7 +660,7 @@ function runTv2PokemonCenterSpouseResult(command){
  const futuristicTitle='MEGA 30th CELEBRATION FUTURISTIC BOX';
  const ownerTag='嫁分';
  if(!requestId||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('ポケモンセンター嫁分結果コマンドが不正です');
- const isSpouse=x=>/(?:^|｜|\s)(?:嫁分|妻分|奥さん)(?:$|｜|\s)/.test(String(x&&x.memo||''))||String(x&&x.owner||'')===ownerTag;
+ const isSpouse=x=>/(嫁分|妻分|奥さん|嫁|妻)/.test([String(x&&x.memo||''),String(x&&x.title||'')].join('｜'))||String(x&&x.owner||'')===ownerTag;
  const isStore=x=>normalize_(x&&x.store||'')===normalize_(store);
  const isCelebration=x=>{
   const t=normalize_(x&&x.title||'');
@@ -676,7 +676,7 @@ function runTv2PokemonCenterSpouseResult(command){
   state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
   state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
   state.automation.pokemonCenterSpouseResultIds=Array.isArray(state.automation.pokemonCenterSpouseResultIds)?state.automation.pokemonCenterSpouseResultIds:[];
-  const spouseCelebration=state.lotteries.filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x));
+  const spouseCelebration=state.lotteries.filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
   const pendingCelebration=spouseCelebration.filter(x=>['応募済','応募済み'].includes(String(x.status||'')));
   if(state.automation.pokemonCenterSpouseResultIds.includes(requestId)){
    if(spouseCelebration.length!==1)throw new Error('嫁分CELEBRATION BOXを一意に再確認できません');
@@ -729,7 +729,7 @@ function runTv2PokemonCenterSpouseResult(command){
  const fMatches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.futuristicId||''));
  if(cMatches.length!==1||cMatches[0].status!=='落選'||cMatches[0].title!==celebrationTitle||normalize_(cMatches[0].store)!==normalize_(store)||String(cMatches[0].owner||'')!==ownerTag)throw new Error('嫁分CELEBRATION BOXの再読込検証に失敗しました');
  if(fMatches.length!==1||fMatches[0].status!=='当選'||fMatches[0].title!==futuristicTitle||normalize_(fMatches[0].store)!==normalize_(store)||String(fMatches[0].owner||'')!==ownerTag)throw new Error('嫁分FUTURISTIC BOXの再読込検証に失敗しました');
- const spouseCelebrationFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x));
+ const spouseCelebrationFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
  const spouseFuturisticFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
  if(spouseCelebrationFinal.length!==1||spouseFuturisticFinal.length!==1)throw new Error('嫁分ポケモンセンター抽選の重複検証に失敗しました');
  return{ok:true,revision:Number(check.revision),celebration:{id:cMatches[0].id,title:cMatches[0].title,status:cMatches[0].status},futuristic:{id:fMatches[0].id,title:fMatches[0].title,status:fMatches[0].status,receiveDeadline:fMatches[0].receiveDeadline},mutationResult:result};
