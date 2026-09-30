@@ -57,6 +57,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const sourceText=[text, String(message.getFrom ? message.getFrom() : '')].join('\n');
   const isLivePocket = /livepocket\.jp|LivePocket/i.test(sourceText);
   const isPokemonCenter = /pokemoncenter-online\.com|ポケモンセンターオンライン/i.test(sourceText);
+  const isYamada = /yamada-denki\.jp|ヤマダデンキ|ヤマダ電機|\[ヤマダ\]/i.test(sourceText);
   const isToysRUs = /toysrus|トイザらス|las\.toysrus\.co\.jp/i.test(sourceText);
   const isSanyodo = /三洋堂|select-type\.com/i.test(sourceText);
   const isGeo = /geonet\.jp|ゲオ|GEO/i.test(sourceText);
@@ -64,10 +65,11 @@ function upsertApplication_(lotteries, text, message, now) {
     const productCode=extractPokemonCenterProductCode_(text);
     applicationNo=productCode?'pokemoncenter-'+productCode:'mail-'+message.getId();
   }
+  if (!applicationNo && isYamada) applicationNo='yamada-mail-'+message.getId();
   if (!applicationNo && (isToysRUs || isSanyodo || isGeo)) applicationNo = 'mail-' + message.getId();
   if (!applicationNo) return { kind: 'review', reason: '申込番号を抽出できない' };
 
-  let title = isLivePocket ? extractLivePocketTitle_(text) : (isPokemonCenter ? extractPokemonCenterTitle_(text) : '');
+  let title = isLivePocket ? extractLivePocketTitle_(text) : (isPokemonCenter ? extractPokemonCenterTitle_(text) : (isYamada ? extractYamadaTitle_(text) : ''));
   if (!title) title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
   if (!title && isToysRUs) { const m = String(message.getSubject ? message.getSubject() : '').match(/[『「]\s*([^』」]+)[』」]/); if (m) title = m[1].trim(); }
   if (!title && isSanyodo) { const m = String(text).match(/^(.+?)抽選販売へご応募/m); if (m) title = m[1].trim(); }
@@ -78,13 +80,14 @@ function upsertApplication_(lotteries, text, message, now) {
   if (!store && isSanyodo) { const answers=[...String(text).matchAll(/━回答内容━+\s*\n+\s*([^\r\n]+)/g)].map(m=>m[1].trim()); if(answers.length) store=answers[answers.length-1]; }
   if (!store && isGeo) store = 'GEO（受取店舗未確定）';
   if (!store && isPokemonCenter) store = 'ポケモンセンターオンライン';
+  if (!store && isYamada) store = extractYamadaStore_(text);
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
 
   const existing=lotteries.find(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo));
   if(existing){
     const before=JSON.stringify(existing);
-    if(isLivePocket||isPokemonCenter){
+    if(isLivePocket||isPokemonCenter||isYamada){
       existing.title=cleanLotteryTitle_(title);
       existing.store=cleanStoreName_(store);
       existing.gmailMessageId=message.getId();
@@ -96,7 +99,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: (isLivePocket||isPokemonCenter) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
+    title: (isLivePocket||isPokemonCenter||isYamada) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -109,6 +112,29 @@ function upsertApplication_(lotteries, text, message, now) {
   });
   if ((store === 'KONAMI STYLE' || isGeo) && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
   return { kind: 'created' };
+}
+
+function extractBlockValue_(text,label){
+  const lines=String(text||'').split(/\r?\n/),index=lines.findIndex(x=>label.test(x.trim()));
+  if(index<0)return'';
+  for(let i=index+1;i<lines.length;i++){
+    const value=String(lines[i]||'').trim();
+    if(value)return value;
+  }
+  return'';
+}
+
+function extractYamadaTitle_(text){
+  const value=extractBlockValue_(text,/^＜お申込み商品/);
+  if(!value)return'';
+  return cleanLotteryTitle_(String(value).normalize('NFKC')
+    .replace(/\s+税込\s*[0-9,]+円.*$/,'')
+    .replace(/\s+[0-9,]+円\s*\(税込\).*$/,'')
+    .trim());
+}
+
+function extractYamadaStore_(text){
+  return cleanStoreName_(extractBlockValue_(text,/^＜受取希望店舗＞$/));
 }
 
 function extractPokemonCenterProductCode_(text){
