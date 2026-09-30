@@ -272,7 +272,8 @@ async function connectV2Remote_(manual=false){
   remoteRevision='';v2AssetsCache=null;v2ProfitCache=null;v2AutomationHealth={};state=emptyState();render();
   v2ReconnectAttempt++;
   const seconds=Math.round(v2ReconnectDelay_()/1000);
-  setSyncStatus(`V2一時切断 · ${seconds}秒後に自動再接続します`,'warning');
+  const reason=String(err&&err.message||err||'読込失敗').slice(0,180);
+  setSyncStatus(`V2一時切断: ${reason} · ${seconds}秒後に自動再接続します`,'warning');
   scheduleV2Reconnect_();
   return false;
  }finally{v2ReconnectBusy=false;if(v2ReconnectQueued){v2ReconnectQueued=false;setTimeout(()=>connectV2Remote_(),250)}}
