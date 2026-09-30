@@ -43,13 +43,16 @@ function runTv2LotteryAuto(options){
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
-    const parserVersion='pokemoncenter-v5',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    const parserVersion='yamada-v6',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
     // Revisit recent mail because delivery and trigger execution can be delayed.
     // A parser upgrade gets one 30-day pass so older application mail can be repaired.
     const since=parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000));
     const processed=new Set(parserChanged?[]:(health.gmailMessageIds||[])),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
-    const query='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd'),threads=[];
+    const after='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd');
+    const query=parserChanged
+      ? after+' {from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp}'
+      : after,threads=[];
     for(let offset=0;offset<2000;offset+=100){
       const page=GmailApp.search(query,offset,100);
       threads.push(...page);
