@@ -43,7 +43,7 @@ function runTv2LotteryAuto(options){
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
-    const parserVersion='pokemoncenter-v4',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    const parserVersion='pokemoncenter-v5',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
     // Revisit recent mail because delivery and trigger execution can be delayed.
     // A parser upgrade gets one 30-day pass so older application mail can be repaired.
     const since=parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000));
