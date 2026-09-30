@@ -17,9 +17,9 @@ function quoteMap(state){
  return {byKey,byLot};
 }
 const quoteFor=(quotes,lot)=>quotes.byLot.get(String(lot.id||''))||quotes.byKey.get([key(lot.productKey||lot.product),String(lot.condition||'')].join('::'));
-const cardrushPrice=q=>{
+const cardMarketPrice=q=>{
  const price=Number(q?.price),source=String(q?.source||'');
- return /^カードラッシュ/.test(source)&&Number.isFinite(price)&&price>0?price:null;
+ return /^(?:カードラッシュ|トレトク)/.test(source)&&Number.isFinite(price)&&price>0?price:null;
 };
 export function v2ViewModel(state){
  const quotes=quoteMap(state);
@@ -34,7 +34,7 @@ export function v2ViewModel(state){
    const q=quoteFor(quotes,l);
    const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||embeddedCardSet(l)||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
    if(l.category==='BOX')boxes.push(base);else if(l.category==='パック')packs.push(base);else if(l.category==='カード'){
-     const price=cardrushPrice(q),source=/^カードラッシュ/.test(String(q?.source||''))?String(q?.source||''):'カードラッシュ未取得（要確認）';
+     const price=cardMarketPrice(q),source=price!=null?String(q?.source||''):'買取価格未取得（要確認）';
      cards.push({...base,marketPrice:price,buybackPrice:price,marketSource:source});
    }
  }
@@ -44,7 +44,7 @@ export function v2ViewModel(state){
 }
 export function v2Assets(state){
  const q=quoteMap(state);let inventoryCost=0,boxes=0,packs=0,cards=0;
- for(const l of state.inventoryLots||[]){const n=qty(l),cost=l.unitCost==null?0:money(l.unitCost);inventoryCost+=cost*n;const quote=quoteFor(q,l);if(l.category==='カード'){cards+=(cardrushPrice(quote)??0)*n;continue}const value=(quote?.price==null?cost:money(quote.price))*n;if(l.category==='BOX')boxes+=value;else if(l.category==='パック')packs+=value}
+ for(const l of state.inventoryLots||[]){const n=qty(l),cost=l.unitCost==null?0:money(l.unitCost);inventoryCost+=cost*n;const quote=quoteFor(q,l);if(l.category==='カード'){cards+=(cardMarketPrice(quote)??0)*n;continue}const value=(quote?.price==null?cost:money(quote.price))*n;if(l.category==='BOX')boxes+=value;else if(l.category==='パック')packs+=value}
  const purchases=(state.transactions||[]).filter(t=>t.type==='purchase').reduce((n,t)=>n+(money(t.total)||money(t.price)*qty(t)),0);
  return {inventoryCost,boxes,packs,cards,total:boxes+packs+cards,purchases,difference:boxes+packs+cards-purchases};
 }
