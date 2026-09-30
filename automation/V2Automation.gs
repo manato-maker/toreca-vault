@@ -334,9 +334,15 @@ function tv2TryMarketSource_(label,fn,reviews){
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),policy='cardrush-toretoku-v3',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
-  if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy)return{changed:false,skipped:true,reason:'already-ran-today',report};
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-primary-v4',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
+  // Cardrush is the canonical primary source for single-card buyback prices.
+  // Toretoku is fallback-only. If today's first refresh had to fall back,
+  // retry Cardrush once in the evening so a later same-day Cardrush update can
+  // replace the fallback quote without waiting until tomorrow.
+  const fallbackToday=cards.some(l=>{const q=tv2FindQuote_(state,l);return q&&String(q.checkedAt||'')===date&&Number(q.price)>0&&!/^カードラッシュ/.test(String(q.source||''))});
+  const eveningCardrushRetry=Boolean(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&fallbackToday&&hour>=20&&String(health.lastCardrushRetryDate||'')!==date);
+  if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&!eveningCardrushRetry)return{changed:false,skipped:true,reason:'already-ran-today',report};
   let rows=null;
   if(cards.length){try{rows=fetchCardrushRows_()}catch(err){reviews.push('カードラッシュCSV取得失敗: '+String(err))}}
   const seen=new Set();
@@ -425,7 +431,7 @@ function runTv2MarketAuto(options){
     if(!quote)state.marketQuotes.push(target);
     if(quote&&previous===best.price)report.unchanged++;else report.updated++;
   });
-  health.lastMarketRunAt=now.toISOString();if(options&&options.scheduled){health.lastScheduledMarketDate=date;health.marketPolicyVersion=policy}health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
+  health.lastMarketRunAt=now.toISOString();if(options&&options.scheduled){health.lastScheduledMarketDate=date;health.marketPolicyVersion=policy;if(eveningCardrushRetry)health.lastCardrushRetryDate=date}health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);return{changed:true,report};
  });
  if(!(options&&options.skipScheduleEnsure))tv2EnsureMarketSchedule_();
  return outcome;
