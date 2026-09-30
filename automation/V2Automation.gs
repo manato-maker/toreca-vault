@@ -391,7 +391,7 @@ function runTv2MarketAuto(options){
     if(quote&&old===result.price){report.unchanged++;report.cardUnchanged++}else{report.updated++;report.cardUpdated++}
   });
   if(options&&options.singleOnly){
-    health.lastMarketRunAt=now.toISOString();health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);
+    health.lastMarketRunAt=now.toISOString();health.marketPolicyVersion=policy;health.marketReview=report.review;health.marketStatus=report.review?'review':'ok';health.marketNeedsReview=reviews.slice(-200);
     return{changed:true,report};
   }
   let feed={products:[],error:''};
@@ -789,6 +789,24 @@ function runTv2ChatCardMarketLookup(command){
  return{ok:true,revision:Number(check.revision),lot:{id:matches[0].id,product:matches[0].product,set:matches[0].set,marketLookupName:matches[0].marketLookupName,marketLookupModel:matches[0].marketLookupModel},mutationResult:result};
 }
 
+function runTv2ChatMarketRefresh(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
+ if(!requestId)throw new Error('カード相場再取得コマンドが不正です');
+ const result=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true});
+ const loaded=tv2Load_(),state=loaded.payload||{},quotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[],lots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+ const cards=lots.filter(l=>Number(l.quantity)>0&&l.category==='カード').map(l=>{
+   const q=quotes.find(x=>String(x.lotId||'')===String(l.id||''))||null;
+   return{id:l.id,product:l.product,set:l.set||'',quantity:Number(l.quantity)||0,price:q&&Number.isFinite(Number(q.price))?Number(q.price):null,source:q?String(q.source||''):'',checkedAt:q?String(q.checkedAt||''):'',fresh:q?q.fresh!==false:false};
+ });
+ const summary={ok:true,requestId,revision:Number(loaded.revision),report:result&&result.report?result.report:result,cards};
+ if(typeof GmailApp!=='undefined'){
+   const subject='[Toreca Vault Market Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+   if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
+ }
+ return summary;
+}
+
 function runTv2ChatLotteryBulk(command){
  const input=command&&typeof command==='object'?command:{};
  const dates=Array.isArray(input.resultDates)?input.resultDates.map(x=>String(x||'').trim()).filter(Boolean):[];
@@ -908,8 +926,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
