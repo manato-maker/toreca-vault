@@ -13,14 +13,15 @@ test('automation uses one 15-minute server-side runner with one daily market win
   assert.match(v2,/lastScheduledMarketDate/);
 });
 
-test('single-card writes use Cardrush only',()=>{
+test('single-card writes use Cardrush then Toretoku',()=>{
   const start=v2.indexOf("let result=rows&&name?tv2TryMarketSource_('カードラッシュCSV'");
   const end=v2.indexOf("if(!result||!Number.isFinite(result.price)||result.price<=0)",start);
   assert.ok(start>=0&&end>start);
   const chain=v2.slice(start,end);
   assert.match(chain,/fetchCardrushMediaBuyback_/);
-  assert.doesNotMatch(chain,/fetchToretokuBuyback_|fetchToresiaBuyback_|fetchGamepediaBuyback_|fetchAltemaBuyback_|fetchCardValueBuyback_/);
-  assert.match(v2,/cardrush-only-v5/);
+  assert.match(chain,/fetchToretokuBuyback_/);
+  assert.doesNotMatch(chain,/fetchToresiaBuyback_|fetchGamepediaBuyback_|fetchAltemaBuyback_|fetchCardValueBuyback_/);
+  assert.match(v2,/cardrush-toretoku-v6/);
 });
 
 test('browser boot only reconnects and reads V2',()=>{
