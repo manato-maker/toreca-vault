@@ -651,11 +651,13 @@ function runTv2ChatPurchase(command){
 function runTv2ChatLottery(command){
  const input=command&&typeof command==='object'?command:{};
  const title=String(input.title||input.product||'').trim(),store=String(input.store||'').trim(),requestId=String(input.requestId||'').trim();
- const status=String(input.status||'応募済').trim(),deadline=String(input.deadline||'').trim(),resultDate=String(input.resultDate||'').trim(),memo=String(input.memo||'').trim();
- const applicationDate=String(input.applicationDate||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
- if(!title||!store||!requestId||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(applicationDate))throw new Error('チャット抽選データが不正です');
+ const status=String(input.status||'応募済').trim(),deadline=String(input.deadline||'').trim(),resultDate=String(input.resultDate||'').trim(),receiveDeadline=String(input.receiveDeadline||'').trim(),memo=String(input.memo||'').trim(),owner=String(input.owner||'').trim();
+ const hasApplicationDate=Object.prototype.hasOwnProperty.call(input,'applicationDate');
+ const applicationDate=hasApplicationDate?String(input.applicationDate||'').trim():Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+ if(!title||!store||!requestId||(applicationDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(applicationDate)))throw new Error('チャット抽選データが不正です');
  if(!['応募前','応募済','当選','落選','購入済'].includes(status))throw new Error('チャット抽選状態が不正です');
  if(resultDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('チャット抽選結果日が不正です');
+ if(receiveDeadline&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(receiveDeadline))throw new Error('チャット抽選購入期限が不正です');
  return tv2Mutate_('chat-lottery',state=>{
   state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
   const id='chat-lottery-'+requestId,existing=state.lotteries.filter(x=>x.id===id);
@@ -663,9 +665,9 @@ function runTv2ChatLottery(command){
   if(existing.length>1)throw new Error('同一チャット抽選IDが重複しています');
   const now=new Date().toISOString();
   state.lotteries.push({
-   id,title,store,status,deadline,resultDate,
+   id,title,store,status,deadline,resultDate,receiveDeadline,
    receiptStatus:status==='当選'?'未受取':status==='購入済'?'受取済み':'対象外',
-   receivedDate:'',shrinkStatus:'未選択',memo,
+   receivedDate:'',shrinkStatus:'未選択',memo,owner,
    applicationDate,source:'chat',requestId,createdAt:now,updatedAt:now
   });
   return{duplicate:false,lotteryId:id,changed:true};
