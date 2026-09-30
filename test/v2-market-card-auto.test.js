@@ -64,12 +64,13 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'メガリザ�
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),fallbackContext);
   const fallbackResult=vm.runInContext('runTv2MarketAuto()',fallbackContext);
-  assert.equal(fallbackResult.report.cardUpdated,0,'Cardrush failure must not fall back to another provider');
-  assert.equal(fallbackResult.report.cardReview,1);
-  assert.equal(toretokuCalls,0,'Toretoku must never be queried by the canonical card market job');
-  assert.equal(fallbackState.marketQuotes[0].price,null,'existing non-Cardrush quote is invalidated');
-  assert.equal(fallbackState.marketQuotes[0].source,'カードラッシュ未取得（要確認）');
-  assert.equal(fallbackState.marketQuotes[0].fresh,false);
+  assert.equal(fallbackResult.report.cardUpdated,1,'Cardrush failure falls back to one exact Toretoku result');
+  assert.equal(fallbackResult.report.cardReview,0);
+  assert.equal(toretokuCalls,1,'Toretoku is queried only after Cardrush misses');
+  assert.equal(fallbackState.marketQuotes[0].price,999999);
+  assert.equal(fallbackState.marketQuotes[0].source,'トレトク買取');
+  assert.equal(fallbackState.marketQuotes[0].checkedAt,'2026-09-26');
+  assert.equal(fallbackState.marketQuotes[0].fresh,true);
 }
 assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュウ','025/165','マスターボールミラー')?.price,45000);
 
