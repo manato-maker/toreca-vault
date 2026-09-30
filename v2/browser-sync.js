@@ -1,4 +1,4 @@
-import {loadV2,saveV2} from './api-client.js?v=20260929-htmlfallback-v1';
+import {loadV2,saveV2} from './api-client.js?v=20260930-fast-read-v1';
 
 const clone=x=>structuredClone(x);
 const requiredArrays=['transactions','inventoryLots','lotteries','marketQuotes','auditLog'];
