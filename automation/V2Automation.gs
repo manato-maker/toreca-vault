@@ -43,26 +43,26 @@ function runTv2LotteryAuto(options){
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
-    const parserVersion='yamada-v6',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
-    // Revisit recent mail because delivery and trigger execution can be delayed.
-    // A parser upgrade gets one 30-day pass so older application mail can be repaired.
-    const since=parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-2*86400000):new Date(now.getTime()-7*86400000));
+    const parserVersion='gmail-efficient-v7',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    // Keep a bounded overlap for late delivery without rereading two full days
+    // of Gmail every 15 minutes. Parser upgrades get one provider-scoped pass.
+    const since=parserChanged?new Date(now.getTime()-7*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-6*3600000):new Date(now.getTime()-24*3600000));
     const processed=new Set(parserChanged?[]:(health.gmailMessageIds||[])),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
-    const after='after:'+Utilities.formatDate(since,TZ,'yyyy/MM/dd');
+    const after='after:'+Math.floor(since.getTime()/1000);
     const query=parserChanged
       ? after+' {from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp}'
-      : after,threads=[];
-    for(let offset=0;offset<2000;offset+=100){
+      : after+' {抽選 当選 落選 応募 申込}',threads=[];
+    for(let offset=0;offset<500;offset+=100){
       const page=GmailApp.search(query,offset,100);
       threads.push(...page);
       if(page.length<100)break;
-      if(offset===1900)throw new Error('Gmail検索が2000スレッドを超えました。対象期間を確認してください');
+      if(offset===400)throw new Error('Gmail検索が500スレッドを超えました。検索条件を確認してください');
     }
     threads.forEach(th=>th.getMessages().forEach(message=>{
       if(message.getDate()<=since)return;const id=message.getId();if(processed.has(id))return;
-      const text=[message.getSubject(),message.getPlainBody()].join('\n'),isApplication=tv2IsApplicationMessage_(message,text),isResult=tv2IsResultMessage_(message,text);
-      if(!CARD_WORDS.test(text)||(!isResult&&!isApplication))return;report.scanned++;
+      const text=[message.getSubject(),message.getPlainBody()].join('\n'),normalizedText=String(text).normalize('NFKC'),isApplication=tv2IsApplicationMessage_(message,text),isResult=tv2IsResultMessage_(message,text);
+      if(!CARD_WORDS.test(normalizedText)||(!isResult&&!isApplication))return;report.scanned++;
       if(isApplication){
         const before=state.lotteries.length,r=upsertApplication_(state.lotteries,text,message,now);
         if(r.kind==='created'){report.created++;changed=true}else if(r.kind==='updated'){report.updated++;changed=true}else if(r.kind==='duplicate')report.duplicate++;else{report.review++;reviews.push({messageId:id,reason:r.reason,subject:message.getSubject()})}
@@ -123,10 +123,16 @@ function tv2ResolvePokemonCenterResult_(state,message,text,now){
  if(!parsed.status)return{kind:'review',reason:'ポケモンセンターの当落を一意に判別できない'};
  const title=extractPokemonCenterTitle_(text),code=extractPokemonCenterProductCode_(text);
  if(!title)return{kind:'review',reason:'ポケモンセンター結果メールから商品名を抽出できない'};
- const candidates=(state.lotteries||[]).filter(x=>{
-   if(code&&(String(x.id||'').includes(code)||String(x.memo||'').includes(code)))return true;
-   return normalize_(x.store||'')===normalize_('ポケモンセンターオンライン')&&productMatches_(productKey_(x.title||''),productKey_(title));
- });
+ const all=state.lotteries||[],productCandidates=all.filter(x=>
+   normalize_(x.store||'')===normalize_('ポケモンセンターオンライン')&&
+   productMatches_(productKey_(x.title||''),productKey_(title))
+ );
+ const byCode=code?productCandidates.filter(x=>String(x.id||'').includes(code)||String(x.memo||'').includes(code)):[];
+ const sameDate=productCandidates.filter(x=>String(x.resultDate||'')===String(parsed.resultDate||''));
+ const pendingSameDate=sameDate.filter(x=>['応募済','応募済み'].includes(String(x.status||'')));
+ const preferredManual=pendingSameDate.filter(x=>!/自動登録｜申込番号 pokemoncenter-/.test(String(x.memo||''))&&!/lottery-livepocket-pokemoncenter-/.test(String(x.id||'')));
+ let candidates=byCode.length?byCode:(preferredManual.length===1?preferredManual:(pendingSameDate.length?pendingSameDate:productCandidates));
+ if(candidates.length>1&&preferredManual.length===1)candidates=preferredManual;
  if(candidates.length>1)return{kind:'review',reason:'ポケモンセンター結果メールに一致する登録済み抽選が複数あります'};
  let item=candidates[0];
  if(!item){
@@ -157,6 +163,17 @@ function tv2ResolvePokemonCenterResult_(state,message,text,now){
  if(parsed.status==='当選'&&!['受取済み','未受取'].includes(item.receiptStatus))item.receiptStatus='未受取';
  if(parsed.status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
  item.updatedAt=now.toISOString();
+
+ // Remove only parser-created pending duplicates for the same product/date after
+ // a unique canonical record has been selected.
+ state.lotteries=all.filter(x=>{
+   if(x===item)return true;
+   if(!/lottery-livepocket-pokemoncenter-/.test(String(x.id||'')))return true;
+   if(!['応募済','応募済み'].includes(String(x.status||'')))return true;
+   if(String(x.resultDate||'')!==String(item.resultDate||''))return true;
+   if(normalize_(x.store||'')!==normalize_('ポケモンセンターオンライン'))return true;
+   return !productMatches_(productKey_(x.title||''),productKey_(item.title||''));
+ });
  return{kind:JSON.stringify(item)===old?'duplicate':'updated',item};
 }
 
