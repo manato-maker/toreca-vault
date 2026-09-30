@@ -1,6 +1,6 @@
 import test from'node:test';import assert from'node:assert/strict';import{loadV2}from'../v2/api-client.js';
 
-test('loadV2 uses the lock-free read-only GET endpoint first',async()=>{
+test('loadV2 uses the lock-free read-only GET endpoint first outside the browser',async()=>{
  const calls=[];globalThis.fetch=async(url,options)=>{calls.push({url,options});return{text:async()=>JSON.stringify({ok:true,payload:{schemaVersion:2,transactions:[],inventoryLots:[],lotteries:[],marketQuotes:[],auditLog:[]},revision:1,lastMutationId:'m'})}};
  await loadV2('https://example.test/exec','secret-token');
  assert.equal(calls.length,1);
