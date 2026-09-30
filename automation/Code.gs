@@ -88,7 +88,7 @@ function upsertApplication_(lotteries, text, message, now) {
   if(existing){
     const before=JSON.stringify(existing);
     if(isLivePocket||isPokemonCenter||isYamada){
-      existing.title=cleanLotteryTitle_(title);
+      existing.title=isYamada?String(title).trim():cleanLotteryTitle_(title);
       existing.store=cleanStoreName_(store);
       existing.gmailMessageId=message.getId();
       existing.updatedAt=now.toISOString();
@@ -99,7 +99,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: (isLivePocket||isPokemonCenter||isYamada) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
+    title: isYamada ? String(title).trim() : ((isLivePocket||isPokemonCenter) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明')),
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -127,10 +127,10 @@ function extractBlockValue_(text,label){
 function extractYamadaTitle_(text){
   const value=extractBlockValue_(text,/^＜お申込み商品/);
   if(!value)return'';
-  return cleanLotteryTitle_(String(value).normalize('NFKC')
+  return String(value).normalize('NFKC')
     .replace(/\s+税込\s*[0-9,]+円.*$/,'')
     .replace(/\s+[0-9,]+円\s*\(税込\).*$/,'')
-    .trim());
+    .trim();
 }
 
 function extractYamadaStore_(text){
