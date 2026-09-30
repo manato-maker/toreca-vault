@@ -38,6 +38,11 @@ function runTv2Automation(){
   const hour=Number(Utilities.formatDate(new Date(),TZ,'H')),minute=Number(Utilities.formatDate(new Date(),TZ,'m'));
   let market={skipped:true,reason:'before-13:30'};
   if(hour>13||(hour===13&&minute>=30))market=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
+  else{
+    const loaded=tv2Load_(),health=loaded&&loaded.payload&&loaded.payload.automation&&loaded.payload.automation.health||{};
+    if(String(health.marketPolicyVersion||'')!=='cardrush-toretoku-v6')
+      market=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true});
+  }
   return{ok:true,gmail,market};
 }
 function runTv2LotteryAuto(options){
