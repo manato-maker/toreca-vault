@@ -6,7 +6,8 @@ for(const re of [
  /hour>13\|\|\(hour===13&&minute>=30\)/,
  /lastScheduledMarketDate/,
  /fetchCardrushMediaBuyback_/,
- /fetchToretokuBuyback_/,
+ /cardrush-only-v5/,
+ /marketLookupName/,
  /free-public-feed-only/,
  /parsed\.status==='落選'&&item\.receiptStatus!=='受取済み'/
 ])assert.match(v2,re);
