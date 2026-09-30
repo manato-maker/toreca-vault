@@ -1,4 +1,7 @@
 name: Apps Script Automation Deploy
+concurrency:
+  group: toreca-vault-automation-apps-script
+  cancel-in-progress: false
 on:
   workflow_dispatch:
   push:
