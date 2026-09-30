@@ -42,20 +42,25 @@ async function loadViaGet_(url,token){
   const raw=await fetchText_(url+'?'+query.toString(),{method:'GET',cache:'no-store',redirect:'follow',signal:controller.signal});
   return parseJsonResponse_(raw,'V2読込');
  }catch(err){
-  if(err&&err.name==='AbortError')throw new Error('V2読込がタイムアウトしました');
+  if(err&&err.name==='AbortError'){const timeout=new Error('V2読込がタイムアウトしました');timeout.code='TV2_TIMEOUT';throw timeout}
   throw err;
  }finally{clearTimeout(timer)}
 }
 
 export async function loadV2(url,token){
- let j;
+ let j,getErr=null;
  try{
-  // Reads should never sit behind a slow Apps Script POST for a minute.
-  // Give POST a short chance, then use the read-only GET endpoint.
-  j=await postJsonOnce_(url,{action:'load',token},'V2読込',8000);
- }catch(err){
-  if(!err||!['TV2_TIMEOUT','TV2_NON_JSON'].includes(err.code))throw err;
+  // The V2 API exposes a lock-free read-only GET path. Use it first so browser
+  // reconnects are not blocked by Apps Script POST locks/CORS redirects.
   j=await loadViaGet_(url,token);
+ }catch(err){
+  getErr=err;
+  try{
+   j=await postJsonOnce_(url,{action:'load',token},'V2読込',8000);
+  }catch(postErr){
+   const reason=[getErr&&getErr.message,postErr&&postErr.message].filter(Boolean).join(' / ');
+   const failed=new Error(reason||'V2読込に失敗しました');failed.code='TV2_READ_FAILED';throw failed;
+  }
  }
  if(!j.ok)throw new Error(j.error||'load failed');
  return j;
