@@ -19,13 +19,14 @@ test('Gmail command and lottery processing remain idempotent and review-safe',as
   assert.match(s,/draft\.deleteDraft\(\)/);
 });
 
-test('single market source is Cardrush only',async()=>{
+test('single market sources are Cardrush then Toretoku only',async()=>{
   const s=await read('automation/V2Automation.gs');
   const start=s.indexOf("let result=rows&&name?tv2TryMarketSource_('カードラッシュCSV'");
   const end=s.indexOf("if(!result||!Number.isFinite(result.price)||result.price<=0)",start);
   const chain=s.slice(start,end);
   assert.match(chain,/fetchCardrushMediaBuyback_/);
-  assert.doesNotMatch(chain,/fetchToretokuBuyback_|fetchToresiaBuyback_|fetchGamepediaBuyback_|fetchAltemaBuyback_|fetchCardValueBuyback_/);
+  assert.match(chain,/fetchToretokuBuyback_/);
+  assert.doesNotMatch(chain,/fetchToresiaBuyback_|fetchGamepediaBuyback_|fetchAltemaBuyback_|fetchCardValueBuyback_/);
   assert.match(s,/marketLookupName/);
   assert.match(s,/user-screenshot/);
 });
