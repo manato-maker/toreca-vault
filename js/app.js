@@ -239,7 +239,7 @@ let receiptSubmitting=false,entrySubmitting=false;
 document.querySelector('#entry-form').addEventListener('submit',async e=>{e.preventDefault();if(entrySubmitting)return;entrySubmitting=true;const type=e.currentTarget.dataset.type;if(v2ModeLocked()&&!v2Connected()){entrySubmitting=false;setSyncStatus('V2保存失敗 · V2接続が完了していません。ローカル保存を停止しました','warning');toast('V2保存失敗・未反映');alert('V2接続が完了していません。ローカル保存を停止しました');return}const data=Object.fromEntries(new FormData(e.currentTarget));for(const k of ['quantity','packQuantity','price','cost','marketPrice','buybackPrice','fee','estimatedValue'])if(k in data)data[k]=Number(data[k])||0;data.id=id();data.createdAt=new Date().toISOString();try{if(v2ModeLocked()){if(!isV2WriteEnabled(Number(remoteRevision)))throw new Error('V2確認モードは読み取り専用です');if(!canUseV2Entry(type))throw new Error('この入力はまだV2保存に対応していません');const result=await commitV2Transaction(({purchases:'purchase',sales:'sale',openings:'opening'})[type],v2EntryPayload(type,data));const check=acceptanceSnapshot(result.payload);if(!check.ok)throw new Error(`保存後の受入チェック失敗: ${check.issues.join(', ')}`);const projected=applyV2ReadOnlyToUi(state,{state:(await import('../v2/view-model.js')).v2ViewModel(result.payload),assets:check.assets,realizedProfit:check.realizedProfit,revision:result.revision,lastMutationId:result.lastMutationId});state=projected.state;v2AssetsCache=projected.assets;v2ProfitCache=projected.realizedProfit;remoteRevision=String(projected.revision);advanceV2WriteRevision(Number(remoteRevision));document.querySelector('#entry-dialog').close();render();setSyncStatus(`V2保存確認済み · rev ${projected.revision} · 書込継続中`,'success');toast('V2へ保存・再確認しました');return}if(type==='purchases')state=applyPurchase(state,data);else if(type==='sales')state=applySale(state,data);else if(type==='openings')state=applyOpening(state,data);else state[type].unshift(data);save(state);document.querySelector('#entry-dialog').close();render();toast('保存しました')}catch(err){setSyncStatus('V2保存失敗 · '+String(err.message||err),'warning');toast('V2保存失敗・未反映');alert(err.message)}finally{entrySubmitting=false}});
 addEventListener('hashchange',()=>{const [next,param]=location.hash.slice(1).split('/');route=next||'dashboard';if(route==='inventory')subtype=['boxes','packs','cards'].includes(param)?param:'boxes';if(route==='ledger'&&param)subtype=param;render()});
 document.querySelector('#today-label').textContent=dateFmt.format(new Date());render();
-let v2ReconnectTimer=null,v2ReconnectBusy=false,v2ReconnectQueued=false,v2ReconnectAttempt=0;
+let v2ReconnectTimer=null,v2ReconnectBusy=false,v2ReconnectQueued=false,v2ReconnectAttempt=0,v2LastSuccessAt=0;
 const v2ReconnectDelay_=()=>[2000,5000,10000,20000,30000][Math.min(v2ReconnectAttempt,4)];
 function scheduleV2Reconnect_(){
  if(v2ReconnectTimer||!hasV2ReadOnly())return;
@@ -247,14 +247,15 @@ function scheduleV2Reconnect_(){
  v2ReconnectTimer=setTimeout(()=>{v2ReconnectTimer=null;connectV2Remote_()},delay);
 }
 async function connectV2Remote_(manual=false){
- if(v2ReconnectBusy){v2ReconnectQueued=true;if(manual)setSyncStatus('V2接続確認中…');return false}
+ if(v2ReconnectBusy){if(manual){v2ReconnectQueued=true;setSyncStatus('V2接続確認中…')}return false}
  if(!hasV2ReadOnly()){
   v2ReadOnly=true;remoteRevision='';render();
   setSyncStatus('V2接続情報の再確認が必要です。V1/ローカルデータは使用しません','warning');
   return false;
  }
+ const hadConnection=v2Connected();
  v2ReconnectBusy=true;v2ReadOnly=true;
- if(!v2Connected())render();
+ if(!hadConnection)render();
  setSyncStatus(manual?'V2を再確認中…':'V2へ自動再接続中…');
  try{
   const snapshot=await tryLoadV2ReadOnly(),check=acceptanceSnapshot(snapshot.canonical);
@@ -262,25 +263,26 @@ async function connectV2Remote_(manual=false){
   const applied=applyV2ReadOnlyToUi(state,snapshot);
   if(!applied.active)throw new Error('V2正本を画面へ反映できませんでした');
   state=applied.state;v2ReadOnly=true;v2AssetsCache=applied.assets;v2ProfitCache=applied.realizedProfit;v2AutomationHealth=applied.automationHealth||{};remoteRevision=String(applied.revision??'');
-  v2ReconnectAttempt=0;
+  v2ReconnectAttempt=0;v2LastSuccessAt=Date.now();
   if(v2ReconnectTimer){clearTimeout(v2ReconnectTimer);v2ReconnectTimer=null}
   render();
   setSyncStatus(`V2確認OK · rev ${applied.revision} · 取引${check.counts.transactions}件 · 在庫${check.counts.inventoryQuantity}点`,'success');
   return true;
  }catch(err){
   console.warn('V2読込に失敗しました',err);
-  remoteRevision='';v2AssetsCache=null;v2ProfitCache=null;v2AutomationHealth={};state=emptyState();render();
+  if(!hadConnection){remoteRevision='';v2AssetsCache=null;v2ProfitCache=null;v2AutomationHealth={};state=emptyState();render()}
   v2ReconnectAttempt++;
   const seconds=Math.round(v2ReconnectDelay_()/1000);
   const reason=String(err&&err.message||err||'読込失敗').slice(0,180);
-  setSyncStatus(`V2一時切断: ${reason} · ${seconds}秒後に自動再接続します`,'warning');
+  setSyncStatus(hadConnection?`V2更新待ち: ${reason} · 表示中のV2データを維持して再試行します`:`V2一時切断: ${reason} · ${seconds}秒後に自動再接続します`,'warning');
   scheduleV2Reconnect_();
   return false;
  }finally{v2ReconnectBusy=false;if(v2ReconnectQueued){v2ReconnectQueued=false;setTimeout(()=>connectV2Remote_(),250)}}
 }
 async function bootRemote(){if(v2ModeLocked())v2ReadOnly=true;await connectV2Remote_()}
 bootRemote();
-addEventListener('online',()=>connectV2Remote_());
-addEventListener('pageshow',()=>connectV2Remote_());
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')connectV2Remote_()});
+const refreshV2OnResume_=()=>{if(!v2Connected()||Date.now()-v2LastSuccessAt>60000)connectV2Remote_()};
+addEventListener('online',refreshV2OnResume_);
+addEventListener('pageshow',refreshV2OnResume_);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshV2OnResume_()});
 if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.warn));
