@@ -16,8 +16,8 @@ async function fetchText_(url,options){
  throw new Error('V2 API response body is unavailable');
 }
 
-async function postJsonOnce_(url,body,label){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),35000);
+async function postJsonOnce_(url,body,label,timeoutMs=35000){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
  try{
   const raw=await fetchText_(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal,redirect:'follow'});
   return parseJsonResponse_(raw,label);
@@ -36,7 +36,7 @@ async function postJson(url,body,label){
 }
 
 async function loadViaGet_(url,token){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),35000);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
  try{
   const query=new URLSearchParams({action:'load',token,ts:String(Date.now())});
   const raw=await fetchText_(url+'?'+query.toString(),{method:'GET',cache:'no-store',redirect:'follow',signal:controller.signal});
@@ -50,12 +50,11 @@ async function loadViaGet_(url,token){
 export async function loadV2(url,token){
  let j;
  try{
-  j=await postJson(url,{action:'load',token},'V2読込');
+  // Reads should never sit behind a slow Apps Script POST for a minute.
+  // Give POST a short chance, then use the read-only GET endpoint.
+  j=await postJsonOnce_(url,{action:'load',token},'V2読込',8000);
  }catch(err){
   if(!err||!['TV2_TIMEOUT','TV2_NON_JSON'].includes(err.code))throw err;
-  // Apps Script web apps occasionally return an intermediate Google HTML page
-  // for cross-origin POST reads. GET is supported by the fixed V2 API and is
-  // used only as a read-only fallback; writes remain POST-only.
   j=await loadViaGet_(url,token);
  }
  if(!j.ok)throw new Error(j.error||'load failed');
