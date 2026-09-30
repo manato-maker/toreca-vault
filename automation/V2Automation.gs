@@ -343,11 +343,11 @@ function tv2TryMarketSource_(label,fn,reviews){
 
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
- const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-only-v5',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
+ const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-toretoku-v6',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
   const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
-  // Single-card prices are Cardrush-only. No alternate shop/aggregator price
-  // may become canonical. If Cardrush could not resolve a card earlier today,
-  // retry once after 20:00 so late Cardrush updates can be picked up.
+  // Single-card prices prefer Cardrush and fall back to Toretoku only.
+  // If today's quote came from Toretoku, retry Cardrush once after 20:00 so
+  // a later Cardrush update can replace the fallback without waiting a day.
   const needsCardrushRetry=cards.some(l=>{const q=tv2FindQuote_(state,l);return !q||String(q.checkedAt||'')!==date||!Number.isFinite(Number(q.price))||Number(q.price)<=0||!/^カードラッシュ/.test(String(q.source||''))||q.fresh===false});
   const eveningCardrushRetry=Boolean(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&needsCardrushRetry&&hour>=20&&String(health.lastCardrushRetryDate||'')!==date);
   if(options&&options.scheduled&&String(health.lastScheduledMarketDate||'')===date&&String(health.marketPolicyVersion||'')===policy&&!eveningCardrushRetry)return{changed:false,skipped:true,reason:'already-ran-today',report};
@@ -365,22 +365,15 @@ function runTv2MarketAuto(options){
       report.review++;report.cardReview++;reviews.push(lot.product+': 型番・状態を確認できず前回価格維持');return;
     }
     const name=tv2CardMarketName_(lot,model),setText=tv2CardSetText_(lot,model),variant=String(lot.marketLookupVariant||'').trim()||tv2CardVariant_(lot);
-    // Cardrush-only and fail-closed. If Cardrush does not resolve exactly,
-    // never substitute another provider. Existing non-Cardrush quotes are
-    // invalidated so they cannot remain the displayed/current market price.
+    // Priority is Cardrush -> Toretoku, both exact-match and fail-closed.
+    // No other provider may write the canonical single-card quote.
     let result=rows&&name?tv2TryMarketSource_('カードラッシュCSV',()=>findCardrushBuyback_(rows,name,model,variant),reviews):null;
     if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('カードラッシュ',()=>fetchCardrushMediaBuyback_(name,model,variant),reviews);
+    if((!result||!Number.isFinite(result.price)||result.price<=0)&&name)result=tv2TryMarketSource_('トレトク',()=>fetchToretokuBuyback_(name,setText,model,variant),reviews);
     if(!result||!Number.isFinite(result.price)||result.price<=0){
       const stale=tv2FindQuote_(state,lot);
-      if(stale){
-        stale.fresh=false;stale.trend='stale';
-        if(!/^カードラッシュ/.test(String(stale.source||''))){
-          stale.previousPrice=Number.isFinite(Number(stale.price))?Number(stale.price):(stale.previousPrice??null);
-          stale.previousSource=String(stale.source||'');
-          stale.price=null;stale.source='カードラッシュ未取得（要確認）';stale.checkedAt=date;
-        }
-      }
-      report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': カードラッシュ完全一致なし・スクショで検索名/型番を確認してください');return;
+      if(stale){stale.fresh=false;stale.trend='stale'}
+      report.review++;report.cardReview++;reviews.push(lot.product+' '+model+(variant?' '+variant:'')+': カードラッシュ/トレトク完全一致なし・前回価格維持');return;
     }
     const quote=tv2FindQuote_(state,lot);
     if(quote&&String(quote.checkedAt||'')>date){report.unchanged++;report.cardUnchanged++;return}
