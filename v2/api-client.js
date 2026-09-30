@@ -35,8 +35,26 @@ async function postJson(url,body,label){
  }
 }
 
+async function loadViaJsonp_(url,token){
+ if(typeof document==='undefined'||typeof window==='undefined'){
+  const unavailable=new Error('JSONP unavailable');unavailable.code='TV2_JSONP_UNAVAILABLE';throw unavailable;
+ }
+ return await new Promise((resolve,reject)=>{
+  const callback='__tv2_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const script=document.createElement('script');
+  const cleanup=()=>{clearTimeout(timer);try{delete window[callback]}catch{};try{script.remove()}catch{}};
+  const fail=(message,code='TV2_JSONP_FAILED')=>{cleanup();const err=new Error(message);err.code=code;reject(err)};
+  const timer=setTimeout(()=>fail('V2読込がタイムアウトしました','TV2_TIMEOUT'),5000);
+  window[callback]=data=>{cleanup();resolve(data)};
+  script.async=true;
+  script.src=url+'?'+new URLSearchParams({action:'load',token,callback,ts:String(Date.now())}).toString();
+  script.onerror=()=>fail('V2読込でGoogleへの接続に失敗しました');
+  document.head.appendChild(script);
+ });
+}
+
 async function loadViaGet_(url,token){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);
  try{
   const query=new URLSearchParams({action:'load',token,ts:String(Date.now())});
   const raw=await fetchText_(url+'?'+query.toString(),{method:'GET',cache:'no-store',redirect:'follow',signal:controller.signal});
@@ -48,17 +66,22 @@ async function loadViaGet_(url,token){
 }
 
 export async function loadV2(url,token){
- let j,getErr=null;
- try{
-  // The V2 API exposes a lock-free read-only GET path. Use it first so browser
-  // reconnects are not blocked by Apps Script POST locks/CORS redirects.
-  j=await loadViaGet_(url,token);
- }catch(err){
-  getErr=err;
+ let j,jsonpErr=null,getErr=null;
+ if(typeof document!=='undefined'&&typeof window!=='undefined'){
   try{
-   j=await postJsonOnce_(url,{action:'load',token},'V2読込',8000);
-  }catch(postErr){
-   const reason=[getErr&&getErr.message,postErr&&postErr.message].filter(Boolean).join(' / ');
+   // Apps Script JSONP uses the existing lock-free doGet path and avoids CORS/
+   // redirect instability seen with fetch in installed mobile browsers.
+   j=await loadViaJsonp_(url,token);
+  }catch(err){jsonpErr=err}
+ }
+ if(!j){
+  try{j=await loadViaGet_(url,token)}
+  catch(err){getErr=err}
+ }
+ if(!j){
+  try{j=await postJsonOnce_(url,{action:'load',token},'V2読込',5000)}
+  catch(postErr){
+   const reason=[jsonpErr&&jsonpErr.message,getErr&&getErr.message,postErr&&postErr.message].filter(Boolean).join(' / ');
    const failed=new Error(reason||'V2読込に失敗しました');failed.code='TV2_READ_FAILED';throw failed;
   }
  }
