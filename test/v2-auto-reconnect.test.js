@@ -6,6 +6,9 @@ test('V2 reconnects automatically and refreshes whenever the app resumes',()=>{
  assert.match(app,/V2一時切断/);
  assert.match(app,/addEventListener\('online',\(\)=>connectV2Remote_\(\)\)/);
  assert.match(app,/addEventListener\('pageshow',\(\)=>connectV2Remote_\(\)\)/);
+ assert.match(app,/refreshV2OnResume_/);
+ assert.match(app,/Date\.now\(\)-v2LastSuccessAt>60000/);
+ assert.match(app,/V2更新待ち/);
  assert.match(app,/visibilitychange/);
  assert.match(app,/最新データ確認まで資産額は表示しません/);
 });
