@@ -20,7 +20,7 @@ function runTv2AutomationBootstrap_(){
 }
 function tv2EnsureSimpleAutomationSchedule_(force){
   if(typeof ScriptApp==='undefined'||typeof PropertiesService==='undefined')return;
-  const version='simple-15m-market-1330-v2',handler='runTv2Automation';
+  const version='simple-15m-market-1330-v3',handler='runTv2Automation';
   const managed=['runTv2Automation','runTv2LotteryAuto','runTv2MarketAuto','runTv2PickupAuto','runTorecaVaultLotterySync','runTorecaVaultMarketSync'];
   const props=PropertiesService.getScriptProperties(),triggers=ScriptApp.getProjectTriggers();
   const ours=triggers.filter(t=>managed.includes(t.getHandlerFunction()));
