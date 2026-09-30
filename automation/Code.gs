@@ -56,13 +56,18 @@ function upsertApplication_(lotteries, text, message, now) {
   let applicationNo = extractApplicationNo_(text);
   const sourceText=[text, String(message.getFrom ? message.getFrom() : '')].join('\n');
   const isLivePocket = /livepocket\.jp|LivePocket/i.test(sourceText);
+  const isPokemonCenter = /pokemoncenter-online\.com|ポケモンセンターオンライン/i.test(sourceText);
   const isToysRUs = /toysrus|トイザらス|las\.toysrus\.co\.jp/i.test(sourceText);
   const isSanyodo = /三洋堂|select-type\.com/i.test(sourceText);
   const isGeo = /geonet\.jp|ゲオ|GEO/i.test(sourceText);
+  if (!applicationNo && isPokemonCenter) {
+    const productCode=extractPokemonCenterProductCode_(text);
+    applicationNo=productCode?'pokemoncenter-'+productCode:'mail-'+message.getId();
+  }
   if (!applicationNo && (isToysRUs || isSanyodo || isGeo)) applicationNo = 'mail-' + message.getId();
   if (!applicationNo) return { kind: 'review', reason: '申込番号を抽出できない' };
 
-  let title = isLivePocket ? extractLivePocketTitle_(text) : '';
+  let title = isLivePocket ? extractLivePocketTitle_(text) : (isPokemonCenter ? extractPokemonCenterTitle_(text) : '');
   if (!title) title = extractLineValue_(text, /^(?:イベント名|商品名)\s*[:：]/m);
   if (!title && isToysRUs) { const m = String(message.getSubject ? message.getSubject() : '').match(/[『「]\s*([^』」]+)[』」]/); if (m) title = m[1].trim(); }
   if (!title && isSanyodo) { const m = String(text).match(/^(.+?)抽選販売へご応募/m); if (m) title = m[1].trim(); }
@@ -72,13 +77,14 @@ function upsertApplication_(lotteries, text, message, now) {
   if (isToysRUs) { const sm=String(text).match(/受取登録店舗は[「『]([^」』]+)[」』]/); if(sm) store=sm[1].trim(); }
   if (!store && isSanyodo) { const answers=[...String(text).matchAll(/━回答内容━+\s*\n+\s*([^\r\n]+)/g)].map(m=>m[1].trim()); if(answers.length) store=answers[answers.length-1]; }
   if (!store && isGeo) store = 'GEO（受取店舗未確定）';
+  if (!store && isPokemonCenter) store = 'ポケモンセンターオンライン';
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
 
   const existing=lotteries.find(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo));
   if(existing){
     const before=JSON.stringify(existing);
-    if(isLivePocket){
+    if(isLivePocket||isPokemonCenter){
       existing.title=cleanLotteryTitle_(title);
       existing.store=cleanStoreName_(store);
       existing.gmailMessageId=message.getId();
@@ -90,7 +96,7 @@ function upsertApplication_(lotteries, text, message, now) {
   const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
-    title: isLivePocket ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
+    title: (isLivePocket||isPokemonCenter) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明'),
     store: cleanStoreName_(store),
     status: '応募済',
     resultDate: resultDate,
@@ -103,6 +109,47 @@ function upsertApplication_(lotteries, text, message, now) {
   });
   if ((store === 'KONAMI STYLE' || isGeo) && !resultDate) lotteries[lotteries.length - 1].title = cleanLotteryTitle_(title);
   return { kind: 'created' };
+}
+
+function extractPokemonCenterProductCode_(text){
+  const src=String(text||'').normalize('NFKC');
+  const block=src.match(/【商品情報】\s*\n\s*(\d{12,14})\b/);
+  if(block)return block[1];
+  const url=src.match(/pokemoncenter-online\.com\/(\d{12,14})\.html/i);
+  return url?url[1]:'';
+}
+
+function extractPokemonCenterTitle_(text){
+  const src=String(text||'').normalize('NFKC');
+  const product=src.match(/【商品情報】\s*\n\s*(?:\d{12,14}\s+)?([^\r\n]+)/);
+  if(product)return cleanPokemonCenterTitle_(product[1]);
+  const subject=src.match(/【件名】\s*\n\s*([^\r\n]+)/);
+  return subject?cleanPokemonCenterTitle_(subject[1]):'';
+}
+
+function cleanPokemonCenterTitle_(value){
+  let s=String(value||'').normalize('NFKC').trim();
+  s=s.replace(/^\d{12,14}\s+/,'')
+     .replace(/\s+[0-9,]+円(?:\s*[（(]\s*\d+個\s*[）)])?.*$/,'')
+     .replace(/^(?:【[^】]+】\s*)+/,'')
+     .replace(/^ポケモンカードゲーム\s+MEGA\s+拡張パック\s+/i,'')
+     .replace(/^ポケモンカードゲーム\s+MEGA\s+/i,'')
+     .replace(/^ポケモンカードゲーム\s+/i,'')
+     .trim();
+  return cleanLotteryTitle_(s);
+}
+
+function applyPokemonCenterMetadata_(item,text,message,now){
+  const source=[String(text||''),String(message&&message.getFrom?message.getFrom():'')].join('\n');
+  if(!/pokemoncenter-online\.com|ポケモンセンターオンライン/i.test(source)||!item)return false;
+  const title=extractPokemonCenterTitle_(text),before=JSON.stringify(item);
+  if(title)item.title=title;
+  item.store='ポケモンセンターオンライン';
+  const code=extractPokemonCenterProductCode_(text);
+  if(code&&!String(item.memo||'').includes(code))item.memo=[item.memo,'商品コード '+code].filter(Boolean).join('｜');
+  if(message&&message.getId)item.gmailMessageId=message.getId();
+  item.updatedAt=now.toISOString();
+  return JSON.stringify(item)!==before;
 }
 
 function extractLivePocketTitle_(text){
@@ -200,7 +247,7 @@ function parseResult_(text, receivedAt) {
   const win = /(ご当選|当選しました|当選されました|当選となりました|当選のお知らせ|当選者)/.test(text);
   const loss = /(落選|残念ながら|ご用意できません|当選に至りません)/.test(text);
   const result = { status: win !== loss ? (win ? '当選' : '落選') : '', resultDate: Utilities.formatDate(receivedAt, TZ, 'yyyy-MM-dd') };
-  result.receiveDeadline = contextualDate_(text, /(購入期限|購入期間|お支払期限|引取期限|受取期限)/);
+  result.receiveDeadline = contextualDate_(text, /(購入期限|購入期間|注文期間|お支払期限|引取期限|受取期限)/);
   result.receivePeriod = contextualText_(text, /(受取期間|引取期間|受け取り期間|イベント開催日)/);
   result.shippingSchedule = contextualText_(text, /(発送予定|発送時期|お届け予定)/);
   return result;
