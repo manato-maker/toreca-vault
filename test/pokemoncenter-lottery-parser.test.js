@@ -2,7 +2,7 @@ import test from'node:test';import assert from'node:assert/strict';import fs fro
 
 const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
 const start=code.indexOf('function upsertApplication_('),end=code.indexOf('function sendReport_(',start);
-const ctx=vm.createContext({Utilities:{formatDate:()=> '2026'}});
+const ctx=vm.createContext({TZ:'Asia/Tokyo',Utilities:{formatDate:()=> '2026'}});
 vm.runInContext(code.slice(start,end),ctx);
 const message=(id,subject)=>({getId:()=>id,getFrom:()=>'ポケモンセンターオンライン <info@pokemoncenter-online.com>',getSubject:()=>subject});
 
