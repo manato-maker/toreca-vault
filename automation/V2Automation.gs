@@ -759,6 +759,107 @@ function runTv2PokemonCenterSpouseResult(command){
  return{ok:true,revision:Number(check.revision),celebration:{id:cMatches[0].id,title:cMatches[0].title,status:cMatches[0].status},futuristic:{id:fMatches[0].id,title:fMatches[0].title,status:fMatches[0].status,receiveDeadline:fMatches[0].receiveDeadline},mutationResult:result};
 }
 
+function runTv2ReconcileResults20260930(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
+ if(!requestId)throw new Error('9/30結果整理コマンドが不正です');
+ const resultDate='2026-09-30',store='ポケモンセンターオンライン',wife='嫁分',self='本人分';
+ const titles={
+  celebration:'ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX',
+  futuristic:'ポケモンカードゲーム MEGA 30th CELEBRATION FUTURISTIC BOX',
+  set9:'ポケモンカードゲーム MEGA 30th CELEBRATION カードセット (9種セット)'
+ };
+ const n=x=>normalize_(x||''),isPc=x=>n(x&&x.store)===n(store);
+ const isWife=x=>String(x&&x.owner||'')===wife||/(嫁分|妻分|奥さん|嫁|妻)/.test(String(x&&x.memo||''));
+ const isCelebration=x=>{const t=n(x&&x.title);return t.includes(n('30th CELEBRATION'))&&t.includes(n('BOX'))&&!t.includes(n('FUTURISTIC'))&&!t.includes(n('9種セット'))&&!t.includes(n('カードセット'))};
+ const isFuturistic=x=>n(x&&x.title).includes(n('30th CELEBRATION FUTURISTIC'));
+ const isSet9=x=>{const t=n(x&&x.title);return t.includes(n('30th CELEBRATION'))&&(t.includes(n('9種セット'))||t.includes(n('カードセット')))};
+
+ const appendMemo=(value,parts)=>{const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});return out.join('｜')};
+ const score=x=>{
+  let s=0;
+  if(x&&x.source==='chat')s+=20;
+  if(!/自動登録/.test(String(x&&x.memo||'')))s+=10;
+  if(String(x&&x.owner||''))s+=5;
+  if(String(x&&x.applicationDate||''))s+=2;
+  if(String(x&&x.deadline||''))s++;
+  return s;
+ };
+ const mergeGroup=(state,items,spec)=>{
+  if(!items.length){
+   const now=new Date().toISOString(),id='lottery-'+spec.id;
+   const created={id,title:spec.title,store,status:spec.status,resultDate,receiveDeadline:spec.receiveDeadline||'',receiptStatus:spec.status==='当選'?'未受取':'対象外',receivedDate:'',shrinkStatus:'未選択',owner:spec.owner,memo:appendMemo('',spec.memo||[]),source:'chat',requestId,createdAt:now,updatedAt:now};
+   state.lotteries.push(created);return created;
+  }
+  const sorted=items.slice().sort((a,b)=>score(b)-score(a)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))),keep=sorted[0],remove=new Set(sorted.slice(1).map(x=>String(x.id||'')));
+  sorted.slice(1).forEach(x=>{
+   for(const k of ['applicationDate','deadline','gmailMessageId','createdAt']){
+    if(!keep[k]&&x[k])keep[k]=x[k];
+   }
+   if(x.memo)keep.memo=appendMemo(keep.memo,String(x.memo).split('｜'));
+  });
+  keep.title=spec.title;keep.store=store;keep.status=spec.status;keep.resultDate=resultDate;keep.receiveDeadline=spec.receiveDeadline||keep.receiveDeadline||'';
+  keep.receiptStatus=spec.status==='当選'?(keep.receiptStatus==='受取済み'?'受取済み':'未受取'):'対象外';
+  if(spec.status==='落選')keep.receivedDate='';
+  keep.owner=spec.owner;keep.memo=appendMemo(keep.memo,spec.memo||[]);keep.updatedAt=new Date().toISOString();
+  state.lotteries=state.lotteries.filter(x=>x===keep||!remove.has(String(x.id||'')));
+  return keep;
+ };
+ const mutation=tv2Mutate_('reconcile-results-20260930',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.resultReconcileIds=Array.isArray(state.automation.resultReconcileIds)?state.automation.resultReconcileIds:[];
+  if(state.automation.resultReconcileIds.includes(requestId))return{duplicate:true,changed:false};
+
+  const pc=state.lotteries.filter(isPc);
+  const celebration=pc.filter(isCelebration),futuristic=pc.filter(isFuturistic),set9=pc.filter(isSet9);
+
+  const selfCelebration=mergeGroup(state,celebration.filter(x=>!isWife(x)),{id:'pokemoncenter-self-celebration-20260930',title:titles.celebration,status:'当選',owner:self,receiveDeadline:'2026-10-06',memo:[self,'9/30 当選確認','商品コード 9900000008284','価格 7,200円']});
+  const wifeCelebration=mergeGroup(state,celebration.filter(isWife),{id:'pokemoncenter-wife-celebration-20260930',title:titles.celebration,status:'落選',owner:wife,receiveDeadline:'',memo:[wife,'9/30 落選確認']});
+  const selfFuturistic=mergeGroup(state,futuristic.filter(x=>!isWife(x)),{id:'pokemoncenter-self-futuristic-20260930',title:titles.futuristic,status:'当選',owner:self,receiveDeadline:'2026-10-06',memo:[self,'9/30 当選確認','商品コード 4521329463872','価格 27,500円']});
+  const wifeFuturistic=mergeGroup(state,futuristic.filter(isWife),{id:'pokemoncenter-wife-futuristic-20260930',title:titles.futuristic,status:'当選',owner:wife,receiveDeadline:'2026-10-06',memo:[wife,'9/30 当選確認','商品コード 4521329463872','価格 27,500円']});
+
+  // User correction: the 9-card set was not entered by the user; all Pokemon
+  // Center records for this product belong to the spouse. Merge them into one.
+  const set9All=(state.lotteries||[]).filter(x=>isPc(x)&&isSet9(x));
+  const wifeSet9=mergeGroup(state,set9All,{id:'pokemoncenter-wife-cardset9-20260930',title:titles.set9,status:'当選',owner:wife,receiveDeadline:'2026-10-06',memo:[wife,'本人分は応募なし','9/30 当選確認','価格 10,800円']});
+
+  const bee=(state.lotteries||[]).filter(x=>/bee本舗/i.test(String(x.store||''))||/bee本舗/i.test(String(x.title||'')));
+  const beeTargets=bee.filter(x=>String(x.resultDate||'').slice(0,10)===resultDate||['応募済','応募済み'].includes(String(x.status||'')));
+  beeTargets.forEach(x=>{if(x.status==='購入済'||x.receiptStatus==='受取済み')throw new Error('Bee本舗に購入済み/受取済みがあり変更停止');x.status='落選';x.resultDate=resultDate;x.receiptStatus='対象外';x.receivedDate='';x.updatedAt=new Date().toISOString();x.memo=appendMemo(x.memo,['9/30 落選確認'])});
+
+  state.automation.resultReconcileIds.push(requestId);state.automation.resultReconcileIds=state.automation.resultReconcileIds.slice(-100);
+  return{duplicate:false,changed:true,ids:{selfCelebration:selfCelebration.id,wifeCelebration:wifeCelebration.id,selfFuturistic:selfFuturistic.id,wifeFuturistic:wifeFuturistic.id,wifeSet9:wifeSet9.id},beeUpdated:beeTargets.length};
+ });
+
+ const check=tv2Load_(),state=check.payload||{},all=state.lotteries||[];
+ const pc=all.filter(isPc);
+ const groups={
+  selfCelebration:pc.filter(x=>isCelebration(x)&&!isWife(x)),
+  wifeCelebration:pc.filter(x=>isCelebration(x)&&isWife(x)),
+  selfFuturistic:pc.filter(x=>isFuturistic(x)&&!isWife(x)),
+  wifeFuturistic:pc.filter(x=>isFuturistic(x)&&isWife(x)),
+  wifeSet9:pc.filter(x=>isSet9(x)&&isWife(x)),
+  selfSet9:pc.filter(x=>isSet9(x)&&!isWife(x))
+ };
+ const ok=groups.selfCelebration.length===1&&groups.selfCelebration[0].status==='当選'&&
+   groups.wifeCelebration.length===1&&groups.wifeCelebration[0].status==='落選'&&
+   groups.selfFuturistic.length===1&&groups.selfFuturistic[0].status==='当選'&&
+   groups.wifeFuturistic.length===1&&groups.wifeFuturistic[0].status==='当選'&&
+   groups.wifeSet9.length===1&&groups.wifeSet9[0].status==='当選'&&groups.selfSet9.length===0;
+ if(!ok)throw new Error('9/30ポケモンセンター結果の再読込検証に失敗しました');
+ const beeNow=all.filter(x=>(/bee本舗/i.test(String(x.store||''))||/bee本舗/i.test(String(x.title||'')))&&(String(x.resultDate||'').slice(0,10)===resultDate||/9\/30 落選確認/.test(String(x.memo||''))));
+ if(beeNow.some(x=>x.status!=='落選'))throw new Error('Bee本舗の落選再読込検証に失敗しました');
+ const summary={ok:true,revision:Number(check.revision),requestId,bee:beeNow.map(x=>({id:x.id,title:x.title,store:x.store,status:x.status})),pokemonCenter:{
+  celebration:{self:{id:groups.selfCelebration[0].id,status:'当選'},wife:{id:groups.wifeCelebration[0].id,status:'落選'}},
+  futuristic:{self:{id:groups.selfFuturistic[0].id,status:'当選'},wife:{id:groups.wifeFuturistic[0].id,status:'当選'}},
+  set9:{self:'未応募（レコードなし）',wife:{id:groups.wifeSet9[0].id,status:'当選'}}
+ },mutation};
+ const subject='[Toreca Vault 9/30 Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+ if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
+ return summary;
+}
+
 function runTv2ChatCardMarketLookup(command){
  const input=command&&typeof command==='object'?command:{};
  const requestId=String(input.requestId||'').trim(),lotId=String(input.lotId||'').trim();
@@ -933,8 +1034,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
