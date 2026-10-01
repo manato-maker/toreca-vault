@@ -860,6 +860,72 @@ function runTv2ReconcileResults20260930(command){
  return summary;
 }
 
+function runTv2DedupeBeeHonpo20260930(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
+ if(!requestId)throw new Error('Bee本舗重複整理コマンドが不正です');
+ const result=tv2Mutate_('dedupe-beehonpo-20260930',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.beeHonpoDedupeIds=Array.isArray(state.automation.beeHonpoDedupeIds)?state.automation.beeHonpoDedupeIds:[];
+  if(state.automation.beeHonpoDedupeIds.includes(requestId))return{duplicate:true,changed:false};
+
+  const isBee=x=>/bee本舗/i.test(String(x&&x.store||''))||/bee本舗/i.test(String(x&&x.title||''));
+  const isCelebration=x=>{
+   const t=normalize_(x&&x.title||'');
+   return t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'))&&!t.includes(normalize_('9種セット'))&&!t.includes(normalize_('カードセット'));
+  };
+  const matches=state.lotteries.filter(x=>isBee(x)&&isCelebration(x));
+  if(matches.length===0)throw new Error('Bee本舗 30th CELEBRATION BOXが見つかりません');
+  const blocked=matches.filter(x=>x.status==='購入済'||x.receiptStatus==='受取済み');
+  if(blocked.length)throw new Error('Bee本舗に購入済み/受取済みが含まれるため重複整理を停止しました');
+
+  const score=x=>{
+   let s=0;
+   if(String(x.status||'')==='落選')s+=20;
+   if(String(x.resultDate||'').slice(0,10)==='2026-09-30')s+=15;
+   if(String(x.source||'')==='chat')s+=10;
+   if(String(x.id||'').startsWith('chat-lottery-'))s+=5;
+   if(String(x.applicationDate||''))s+=2;
+   if(String(x.deadline||''))s++;
+   return s;
+  };
+  const sorted=matches.slice().sort((a,b)=>score(b)-score(a)||String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+  const keep=sorted[0],remove=sorted.slice(1);
+  const appendMemo=(value,parts)=>{const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});return out.join('｜')};
+  remove.forEach(x=>{
+   ['applicationDate','deadline','gmailMessageId','createdAt'].forEach(k=>{if(!keep[k]&&x[k])keep[k]=x[k]});
+   if(x.memo)keep.memo=appendMemo(keep.memo,String(x.memo).split('｜'));
+  });
+  keep.title='30th CELEBRATION BOX';
+  keep.store=String(keep.store||'').trim()||'Bee本舗';
+  keep.status='落選';
+  keep.resultDate='2026-09-30';
+  keep.receiptStatus='対象外';
+  keep.receivedDate='';
+  keep.memo=appendMemo(keep.memo,['9/30 落選確認','重複整理済み']);
+  keep.updatedAt=new Date().toISOString();
+
+  const removeIds=new Set(remove.map(x=>String(x.id||'')));
+  state.lotteries=state.lotteries.filter(x=>x===keep||!removeIds.has(String(x.id||'')));
+  state.automation.beeHonpoDedupeIds.push(requestId);
+  state.automation.beeHonpoDedupeIds=state.automation.beeHonpoDedupeIds.slice(-100);
+  return{duplicate:false,changed:true,keptId:keep.id,removedIds:[...removeIds],matchedBefore:matches.length};
+ });
+
+ const check=tv2Load_(),state=check.payload||{};
+ const after=(state.lotteries||[]).filter(x=>{
+  const bee=/bee本舗/i.test(String(x&&x.store||''))||/bee本舗/i.test(String(x&&x.title||''));
+  const t=normalize_(x&&x.title||'');
+  return bee&&t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'))&&!t.includes(normalize_('9種セット'))&&!t.includes(normalize_('カードセット'));
+ });
+ if(after.length!==1||after[0].status!=='落選'||String(after[0].resultDate||'').slice(0,10)!=='2026-09-30')throw new Error('Bee本舗重複整理の再読込検証に失敗しました');
+ const summary={ok:true,revision:Number(check.revision),requestId,bee:{id:after[0].id,title:after[0].title,store:after[0].store,status:after[0].status,resultDate:after[0].resultDate},mutation:result};
+ const subject='[Toreca Vault Bee Dedupe Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+ if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
+ return summary;
+}
+
 function runTv2ChatCardMarketLookup(command){
  const input=command&&typeof command==='object'?command:{};
  const requestId=String(input.requestId||'').trim(),lotId=String(input.lotId||'').trim();
@@ -1034,8 +1100,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
