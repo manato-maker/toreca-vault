@@ -30,3 +30,8 @@ test('receipt submit shows immediate progress and is single-flight',()=>{
   assert.match(source,/button\.textContent='V2へ保存中…'/);
   assert.match(source,/finally\{receiptSubmitting=false;/);
 });
+
+test('calendar prefers result date and falls back to application deadline only when result date is missing',()=>{
+  assert.match(source,/if\(resultDate\)add\(resultDate,x,'結果','result'\);else if\(deadline\)add\(deadline,x,'応募締切（結果日未設定）','deadline'\)/);
+  assert.doesNotMatch(source,/add\(\(x\.deadline\|\|''\)\.slice\(0,10\),x,'応募締切','deadline'\);add\(x\.resultDate,x,'結果','result'\)/);
+});
