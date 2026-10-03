@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "catalogType": "package-image-reference",
   "purpose": "Recognition-time reference catalog; not model training data",
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-10-04",
   "sourcePolicy": {
     "primary": [
       "manufacturer official product pages",
@@ -40,7 +40,7 @@
         "通常の拡張パックより高価格帯の6枚入りキラカード仕様"
       ],
       "officialProductUrl": "https://www.30th.pokemon-card.com/product/m6a",
-      "verifiedAt": "2026-09-27",
+      "verifiedAt": "2026-10-04",
       "status": "confirmed"
     },
     {
@@ -66,7 +66,7 @@
         "三兄弟（ルフィ・エース・サボ）と3rd Anniversary要素"
       ],
       "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op13/",
-      "verifiedAt": "2026-09-27",
+      "verifiedAt": "2026-10-04",
       "status": "confirmed"
     },
     {
@@ -79,8 +79,8 @@
       "packageForms": [
         {
           "type": "PACK",
-          "officialImageUrl": null,
-          "status": "needs_review"
+          "officialImageUrl": "https://bandai-a.akamaihd.net/bc/img/model/b/1000255342_1.jpg",
+          "officialImageSourceUrl": "https://www.bandai.co.jp/catalog/item.php?jan_cd=4582770058390000"
         },
         {
           "type": "BOX",
@@ -90,16 +90,19 @@
       ],
       "frontRecognitionFeatures": [
         "「世界最強の戦士」「OP-17」の表記",
-        "4周年・エルバフ編の商品として公式掲載"
+        "濃紺〜紫を基調とした背景",
+        "中央のモンキー・D・ルフィと、周囲のシャンクス・バギー・マーシャル・D・ティーチなど複数キャラクター",
+        "正面左下の「4th Anniversary」表記",
+        "正面右下のONE PIECE CARD GAMEロゴ"
       ],
       "officialProductUrl": "https://www.onepiece-cardgame.com/products/boosters/op17/",
-      "verifiedAt": "2026-09-27",
+      "verifiedAt": "2026-10-04",
       "status": "needs_review",
-      "reviewReason": "公式商品ページの存在・名称・コード・発売日は確認済みだが、今回の取得ではページがタイムアウトし公式画像URLを確定できず"
+      "reviewReason": "バンダイ公式商品ページでPACK正面画像を確認済み。BOX単体の公式画像URLは未確認"
     }
   ],
   "changeSummary": {
-    "baseline": "2026-09-20版との比較",
+    "baseline": "2026-09-27版との比較",
     "newProducts": [],
     "designChanges": [
       {
@@ -130,8 +133,14 @@
     ],
     "insufficientInformation": [
       "M6aのBOX単体公式画像URL",
-      "OP-17のPACK/BOX公式画像URLと詳細な正面識別特徴",
+      "OP-17のBOX単体公式画像URL",
       "ポケモンBOX外装仕様変更の対象商品コード一覧"
+    ],
+    "resolvedInformation": [
+      {
+        "id": "onepiece-op17-worlds-strongest-warriors",
+        "note": "バンダイ公式商品ページでPACK正面画像URLと識別特徴を確認"
+      }
     ]
   },
   "recognitionNotices": [
@@ -146,7 +155,7 @@
         "変更は外装のみで、商品内容は変更なし"
       ],
       "officialNoticeUrl": "https://www.pokemon-card.com/info/003599.html",
-      "verifiedAt": "2026-09-27",
+      "verifiedAt": "2026-10-04",
       "status": "confirmed",
       "note": "公式告知は対象商品を個別列挙していないため、特定の商品コードへ一律適用せず認識時の横断注意事項として扱う"
     }
