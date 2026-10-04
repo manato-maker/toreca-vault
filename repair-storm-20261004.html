@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101722">
+  <title>Storm Emeralda Repair - Toreca Vault</title>
+  <style>
+    body{margin:0;background:#0b121b;color:#eef4fb;font-family:system-ui,-apple-system,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}
+    main{width:min(680px,100%);background:#111c2a;border:1px solid #294057;border-radius:18px;padding:24px;box-sizing:border-box}
+    h1{font-size:1.35rem;margin:0 0 12px}p{line-height:1.65}.ok{color:#58d6ad}.err{color:#ff8f8f}.muted{color:#9eb0c3;font-size:.92rem}
+    a{color:#58d6ad}
+  </style>
+</head>
+<body>
+<main>
+  <h1>ストームエメラルダ在庫補正</h1>
+  <p id="status">V2正本を確認しています…</p>
+  <p class="muted">2026/10/03 の買取ミミ売却（シュリンクあり 9,200円／シュリンクなし 7,500円）と、現物在庫0を整合します。</p>
+</main>
+<script type="module">
+import {getVaultV2Config} from './v2/browser-sync.js?v=20261004-storm-repair-v2';
+import {loadV2,saveV2} from './v2/api-client.js?v=20260930-jsonp-v1';
+
+const status=document.querySelector('#status');
+const REPAIR_ID='repair-storm-emeralda-sales-zero-20261004-v2';
+const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[\s　・_＿\-]/g,'');
+const productKey=norm('ストームエメラルダ');
+const isStormBox=l=>Number(l?.quantity)>0&&String(l?.category||'').toUpperCase()==='BOX'&&norm(l?.productKey||l?.product)===productKey;
+const storeMatches=s=>norm(s).includes(norm('買取ミミ'));
+const conditionKind=value=>{
+  const v=norm(value);
+  if(['あり','シュリンクあり','シュリンク有','有'].map(norm).includes(v))return'yes';
+  if(['なし','シュリンクなし','シュリンク無','無'].map(norm).includes(v))return'no';
+  return'';
+};
+const specs=[
+  {requestId:'20261003-sale-storm-emeralda-shrink-yes-9200',price:9200,condition:'あり',kind:'yes'},
+  {requestId:'20261003-sale-storm-emeralda-shrink-no-7500',price:7500,condition:'なし',kind:'no'}
+];
+const exactTxId=s=>'chat-sale-'+s.requestId;
+
+function semanticMatches(state,spec){
+  return (state.transactions||[]).filter(t=>t.type==='sale'&&norm(t.productKey||t.product)===productKey&&String(t.date||'')==='2026-10-03'&&storeMatches(t.store||t.soldTo)&&Number(t.quantity||0)===1&&Number(t.price||0)===spec.price);
+}
+
+function renameSemanticIfNeeded(state,spec){
+  const targetId=exactTxId(spec);
+  const exact=(state.transactions||[]).filter(t=>String(t.id||'')===targetId);
+  if(exact.length>1)throw new Error('同一売却IDが重複しています: '+targetId);
+  if(exact.length===1)return exact[0];
+  const semantic=semanticMatches(state,spec);
+  if(semantic.length>1)throw new Error(spec.price+'円の既存売却が複数あり、自動補正を停止しました');
+  if(semantic.length===1){
+    const oldId=String(semantic[0].id||'');
+    semantic[0].id=targetId;
+    semantic[0].requestId=spec.requestId;
+    for(const a of state.auditLog||[]){if(String(a.transactionId||'')===oldId)a.transactionId=targetId}
+    return semantic[0];
+  }
+  return null;
+}
+
+function consumeMatchingLot(state,spec){
+  const lots=(state.inventoryLots||[]).filter(l=>isStormBox(l)&&conditionKind(l.condition)===spec.kind)
+    .sort((a,b)=>String(a.acquiredAt||'').localeCompare(String(b.acquiredAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
+  if(!lots.length)return{cost:null,consumedLotId:''};
+  const lot=lots[0],raw=lot.unitCost,cost=(raw===null||raw===undefined||raw===''||!Number.isFinite(Number(raw)))?null:Number(raw);
+  lot.quantity=Number(lot.quantity)-1;
+  return{cost,consumedLotId:String(lot.id||'')};
+}
+
+function ensureSale(state,spec){
+  const existing=renameSemanticIfNeeded(state,spec);
+  if(existing)return{created:false,id:existing.id,consumedLotId:''};
+  const consumed=consumeMatchingLot(state,spec),id=exactTxId(spec);
+  state.transactions.push({
+    id,type:'sale',product:'ストームエメラルダ',productKey:'ストームエメラルダ',category:'BOX',condition:spec.condition,
+    quantity:1,price:spec.price,fee:0,date:'2026-10-03',store:'買取ミミ',soldTo:'買取ミミ',source:'chat-reconcile',requestId:spec.requestId,
+    acquisitionCost:consumed.cost,memo:'ユーザー確認済み売却｜2026/10/04 在庫整合補正'
+  });
+  return{created:true,id,consumedLotId:consumed.consumedLotId};
+}
+
+async function run(){
+  const config=getVaultV2Config();
+  if(!config.url||!config.token)throw new Error('V2接続情報がありません。先にToreca Vault本体を同じブラウザで開いてください。');
+  const before=await loadV2(config.url,config.token),state=structuredClone(before.payload);
+  if(!state||Number(state.schemaVersion)!==2)throw new Error('V2正本を読み込めませんでした');
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  state.marketQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
+  state.auditLog=Array.isArray(state.auditLog)?state.auditLog:[];
+
+  const already=state.auditLog.some(a=>String(a.mutationId||'')===REPAIR_ID);
+  const activeBefore=state.inventoryLots.filter(isStormBox).reduce((n,l)=>n+Number(l.quantity||0),0);
+  const saleResults=specs.map(spec=>ensureSale(state,spec));
+
+  const leftoverIds=new Set(state.inventoryLots.filter(isStormBox).map(l=>String(l.id||'')));
+  const correctedQty=state.inventoryLots.filter(l=>leftoverIds.has(String(l.id||''))).reduce((n,l)=>n+Number(l.quantity||0),0);
+  state.inventoryLots=state.inventoryLots.filter(l=>!leftoverIds.has(String(l.id||''))&&Number(l.quantity||0)>0);
+  state.marketQuotes=state.marketQuotes.filter(q=>!leftoverIds.has(String(q.lotId||'')));
+
+  const exactCounts=specs.map(spec=>state.transactions.filter(t=>String(t.id||'')===exactTxId(spec)).length);
+  if(exactCounts.some(n=>n!==1))throw new Error('売却履歴の一意性確認に失敗しました');
+
+  const changed=!already||activeBefore>0||saleResults.some(x=>x.created)||correctedQty>0;
+  if(changed){
+    state.revision=Number(before.revision)+1;
+    state.lastMutationId=REPAIR_ID;
+    state.auditLog=state.auditLog.filter(a=>String(a.mutationId||'')!==REPAIR_ID);
+    state.auditLog.push({
+      mutationId:REPAIR_ID,revision:state.revision,type:'inventory-sale-reconciliation',at:new Date().toISOString(),
+      product:'ストームエメラルダ',activeBefore,remainingRemoved:correctedQty,
+      sales:specs.map((s,i)=>({transactionId:exactTxId(s),price:s.price,condition:s.condition,created:saleResults[i].created,consumedLotId:saleResults[i].consumedLotId}))
+    });
+    await saveV2(config.url,config.token,state,before.revision);
+  }
+
+  const check=await loadV2(config.url,config.token);
+  const remaining=(check.payload.inventoryLots||[]).filter(isStormBox).reduce((n,l)=>n+Number(l.quantity||0),0);
+  const verifiedSales=specs.every(spec=>(check.payload.transactions||[]).filter(t=>String(t.id||'')===exactTxId(spec)).length===1);
+  if(remaining!==0||!verifiedSales)throw new Error('保存後検証に失敗しました（在庫 '+remaining+' / 売却履歴 '+(verifiedSales?'OK':'NG')+'）');
+  status.className='ok';
+  status.innerHTML='補正完了。ストームエメラルダのBOX在庫は <strong>0</strong>、10/3の売却2件も整合済みです。<br><a href="./?v=20261004-storm-repair-v2#inventory/boxes">在庫画面へ戻る</a>';
+  setTimeout(()=>location.href='./?v=20261004-storm-repair-v2#inventory/boxes',1200);
+}
+
+run().catch(err=>{status.className='err';status.textContent='補正失敗: '+String(err&&err.message||err)});
+</script>
+</body>
+</html>
