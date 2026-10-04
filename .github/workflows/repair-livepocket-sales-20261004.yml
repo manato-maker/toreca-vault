@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
 jobs:
-  repair:
+  patch:
     runs-on: ubuntu-latest
     environment: v2-apps-script
     steps:
@@ -17,16 +17,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Patch sale matching and add verified repair runner
-        run: python3 -c "import gzip,base64;exec(gzip.decompress(base64.b64decode('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')).decode())"
+      - name: Make repair queue-safe and date-scope historical reconciliation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('automation/V2Automation.gs')
+          s=p.read_text()
+          s=s.replace("function runTv2RepairCurrent20261004(){\n const requests={", "function runTv2RepairCurrent20261004(options){\n const fromQueue=Boolean(options&&options.fromQueue);\n const requests={", 1)
+          s=s.replace(" const schedule=installTv2Automation();\n const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});", " const schedule=fromQueue?tv2AutomationStatus():installTv2Automation();\n const gmail=fromQueue?{skipped:true,reason:'queue-repair'}:runTv2LotteryAuto({skipScheduleEnsure:true});", 1)
+          old="if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');"
+          new="if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');"
+          if old not in s and new not in s: raise SystemExit('command type anchor missing')
+          s=s.replace(old,new,1)
+          old_dispatch="const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):runTv2RepairReceiptSale(command);"
+          new_dispatch="const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):runTv2RepairReceiptSale(command);"
+          if old_dispatch not in s and new_dispatch not in s: raise SystemExit('dispatch anchor missing')
+          s=s.replace(old_dispatch,new_dispatch,1)
+          old_set9="const set9All=(state.lotteries||[]).filter(x=>isPc(x)&&isSet9(x));"
+          new_set9="const set9All=(state.lotteries||[]).filter(x=>{if(!isPc(x)||!isSet9(x))return false;const d=String(x.resultDate||'').slice(0,10),r=String(x.requestId||'');return d===resultDate||/20260930/.test(r)||(!d&&['応募済','応募済み'].includes(String(x.status||'')));});"
+          if old_set9 not in s and new_set9 not in s: raise SystemExit('set9 anchor missing')
+          s=s.replace(old_set9,new_set9,1)
+          p.write_text(s)
+          PY
       - name: Run regression tests
         run: node --test test/*.test.js
-      - name: Commit production patch
+      - name: Commit source patch
         run: |
           git config user.name 'manato-maker'
           git config user.email 'manato.pt@gmail.com'
           git add automation/V2Automation.gs
-          git commit -m 'Fix sale queue matching and add verified repair runner'
+          git commit -m 'Queue verified repair and protect historical 9-card records' || true
           git push origin main
       - run: npm install --no-save @google/clasp
       - name: Configure clasp
@@ -38,7 +58,7 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":".apps-script-automation"}' "$TV2_SCRIPT_ID" > .clasp.json
-      - name: Build and push Apps Script
+      - name: Push Apps Script
         run: |
           rm -rf .apps-script-automation
           mkdir -p .apps-script-automation
@@ -46,5 +66,3 @@ jobs:
           cp automation/Code.gs .apps-script-automation/Code.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
           npx clasp push --force
-      - name: Run canonical repair and verify
-        run: npx clasp run runTv2RepairCurrent20261004
