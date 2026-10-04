@@ -75,7 +75,7 @@ function upsertApplication_(lotteries, text, message, now) {
   if (!title && isSanyodo) { const m = String(text).match(/^(.+?)抽選販売へご応募/m); if (m) title = m[1].trim(); }
   if (!title && isGeo) { const m = String(text).match(/\[(?:お申し込みいただいた商品|当選した商品)\]\s*\n\s*([^\r\n]+)/); if (m) title = m[1].trim(); }
 
-  let store = extractLineValue_(text, /^(?:会場|店舗名|受取店舗|受取登録店舗)\s*[:：は]*\s*[「『]?/m).replace(/[」』]$/,'').trim();
+  let store = isLivePocket ? extractLivePocketStore_(text) : extractLineValue_(text, /^(?:会場|店舗名|受取店舗|受取登録店舗)\s*[:：は]*\s*[「『]?/m).replace(/[」』]$/,'').trim();
   if (isToysRUs) { const sm=String(text).match(/受取登録店舗は[「『]([^」』]+)[」』]/); if(sm) store=sm[1].trim(); }
   if (!store && isSanyodo) { const answers=[...String(text).matchAll(/━回答内容━+\s*\n+\s*([^\r\n]+)/g)].map(m=>m[1].trim()); if(answers.length) store=answers[answers.length-1]; }
   if (!store && isGeo) store = 'GEO（受取店舗未確定）';
@@ -84,6 +84,7 @@ function upsertApplication_(lotteries, text, message, now) {
   if (!store && (/konamistyle\.jp/i.test(String(message.getFrom ? message.getFrom() : '')) || /コナミスタイル|KONAMI STYLE/i.test(text))) store = 'KONAMI STYLE';
   if (!title || !store) return { kind: 'review', reason: '商品名または店舗名を抽出できない' };
 
+  const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   const existing=lotteries.find(x => String(x.id || '').includes(applicationNo) || String(x.memo || '').includes(applicationNo));
   if(existing){
     const before=JSON.stringify(existing);
@@ -93,10 +94,10 @@ function upsertApplication_(lotteries, text, message, now) {
       existing.gmailMessageId=message.getId();
       existing.updatedAt=now.toISOString();
     }
+    if(resultDate)existing.resultDate=resultDate;
+    if(applicationNo&&!String(existing.memo||'').includes(applicationNo))existing.memo=[existing.memo,'申込番号 '+applicationNo].filter(Boolean).join('｜');
     return {kind:JSON.stringify(existing)===before?'duplicate':'updated',item:existing};
   }
-
-  const resultDate = contextualDate_(text, /(当選発表予定日|当選発表|当選者の発表|結果発表|当選メール)/);
   lotteries.push({
     id: 'lottery-livepocket-' + applicationNo,
     title: isYamada ? String(title).trim() : ((isLivePocket||isPokemonCenter) ? cleanLotteryTitle_(title) : (resultDate ? cleanLotteryTitle_(title) : '詳細不明')),
@@ -178,18 +179,44 @@ function applyPokemonCenterMetadata_(item,text,message,now){
   return JSON.stringify(item)!==before;
 }
 
+function extractLivePocketZeroTicket_(text){
+  const src=String(text||'');
+  const line=src.split(/\r?\n/).map(x=>x.trim()).find(x=>
+    /[：:]\s*[¥￥]\s*0(?:\s|$)/.test(x)&&!/(チケット料金|システム利用料|合計金額)/.test(x)
+  );
+  return line?line.replace(/[：:]\s*[¥￥]\s*0.*$/,'').trim():'';
+}
+
+function livePocketLooksLikeProductText_(value){
+  return /(ポケモン|ポケカ|ONE ?PIECE|ワンピース|ドラゴンボール|30th|CELEBRATION|ストームエメラルダ|インフェルノX|BOX|ボックス|パック|デッキ|カードセット|購入権)/i.test(String(value||''));
+}
+
+function livePocketLooksLikeStoreText_(value){
+  const s=String(value||'').trim();
+  return !!s&&!livePocketLooksLikeProductText_(s)&&/(本店|支店|店|GAMESHOP|ショップ|書店|センター|館)/i.test(s);
+}
+
+function extractLivePocketStore_(text){
+  const selected=extractLivePocketZeroTicket_(text);
+  if(selected&&livePocketLooksLikeStoreText_(selected))return cleanStoreName_(selected);
+  const venue=extractLineValue_(text,/^(?:会場|店舗名)\s*[:：]\s*/m);
+  return cleanStoreName_(venue);
+}
+
 function extractLivePocketTitle_(text){
   const src=String(text||'');
   const ticket=extractLineValue_(src,/^チケット名\s*[:：]/m);
-  if(ticket)return cleanLivePocketProductText_(ticket);
+  if(ticket&&livePocketLooksLikeProductText_(ticket))return cleanLivePocketProductText_(ticket);
 
-  const priced=src.split(/\r?\n/).map(x=>x.trim()).find(line =>
-    /[：:]\s*[¥￥]\s*0(?:\s|$)/.test(line) &&
-    !/(チケット料金|システム利用料|合計金額)/.test(line)
-  );
-  if(priced){
-    const value=priced.replace(/[：:]\s*[¥￥]\s*0.*$/,'').trim();
-    const cleaned=cleanLivePocketProductText_(value);
+  const priced=extractLivePocketZeroTicket_(src);
+  if(priced&&livePocketLooksLikeProductText_(priced)){
+    const cleaned=cleanLivePocketProductText_(priced);
+    if(cleaned)return cleaned;
+  }
+
+  const event=extractLineValue_(src,/^イベント名\s*[:：]/m);
+  if(event){
+    const cleaned=cleanLivePocketProductText_(event);
     if(cleaned)return cleaned;
   }
 
@@ -198,22 +225,28 @@ function extractLivePocketTitle_(text){
     const cleaned=cleanLivePocketProductText_(reception);
     if(cleaned)return cleaned;
   }
-
-  const event=extractLineValue_(src,/^イベント名\s*[:：]/m);
-  return event?cleanLivePocketProductText_(event):'';
+  return'';
 }
 
 function cleanLivePocketProductText_(value){
   let s=String(value||'').normalize('NFKC').trim();
   s=s.replace(/^【[^】]+】\s*/,'').trim();
+  const quoted=[...s.matchAll(/「([^」]+)」/g)];
+  if(quoted.length){
+    const inner=String(quoted[quoted.length-1][1]||'').trim();
+    if(inner&&livePocketLooksLikeProductText_(inner))s=inner;
+  }
   const parens=[...s.matchAll(/[（(]([^（）()]+)[）)]/g)];
   if(parens.length){
     const inner=String(parens[parens.length-1][1]||'').trim();
-    if(inner&&!/^(?:大阪府|奈良県|京都府|兵庫県|東京都|神奈川県|愛知県|その他)$/.test(inner))s=inner;
+    if(inner&&!/^(?:大阪府|奈良県|京都府|兵庫県|東京都|神奈川県|愛知県|その他)$/.test(inner)&&livePocketLooksLikeProductText_(inner))s=inner;
   }
   s=s.replace(/^(?:ポケカ|ポケモンカード(?:ゲーム)?)?\s*抽選\s*販売\s*/,'')
      .replace(/^抽選販売\s*/,'')
      .replace(/^販売受付\s*/,'')
+     .replace(/^ポケモンカードゲーム\s*MEGA\s*拡張パック\s*/i,'')
+     .replace(/^ポケモンカードゲーム\s*MEGA\s*/i,'')
+     .replace(/^ポケモンカードゲーム\s*/i,'')
      .trim();
   return cleanLotteryTitle_(s);
 }
@@ -222,7 +255,7 @@ function applyLivePocketMetadata_(item,text,message,now){
   const source=[String(text||''),String(message&&message.getFrom?message.getFrom():'')].join('\n');
   if(!/livepocket\.jp|LivePocket/i.test(source)||!item)return false;
   const title=extractLivePocketTitle_(text);
-  const store=extractLineValue_(text,/^(?:会場|店舗名)\s*[:：]\s*/m);
+  const store=extractLivePocketStore_(text);
   const before=JSON.stringify(item);
   if(title)item.title=cleanLotteryTitle_(title);
   if(store)item.store=cleanStoreName_(store);

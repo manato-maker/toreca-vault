@@ -50,16 +50,16 @@ function runTv2LotteryAuto(options){
   if(typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
   return tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
-    const parserVersion='gmail-efficient-v7',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
+    const parserVersion='gmail-efficient-v8-livepocket-complete',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
     // Keep a bounded overlap for late delivery without rereading two full days
     // of Gmail every 15 minutes. Parser upgrades get one provider-scoped pass.
-    const since=parserChanged?new Date(now.getTime()-7*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-6*3600000):new Date(now.getTime()-24*3600000));
+    const since=parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-6*3600000):new Date(now.getTime()-24*3600000));
     const processed=new Set(parserChanged?[]:(health.gmailMessageIds||[])),newIds=[],reviews=[];let changed=false;
     const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
     const after='after:'+Math.floor(since.getTime()/1000);
     const query=parserChanged
       ? after+' {from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp}'
-      : after+' {抽選 当選 落選 応募 申込}',threads=[];
+      : after+' {from:noreply@livepocket.jp 抽選 当選 落選 応募 申込}',threads=[];
     for(let offset=0;offset<500;offset+=100){
       const page=GmailApp.search(query,offset,100);
       threads.push(...page);
