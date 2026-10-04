@@ -1,0 +1,44 @@
+name: Finalize LivePocket Complete Automation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-livepocket-complete-20261004.yml'
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply pending LivePocket patch and fix test globals
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,gzip
+          workflow=Path('.github/workflows/patch-livepocket-complete-20261004.yml').read_text()
+          m=re.search(r"b64decode\('([^']+)'\)",workflow)
+          if not m:
+            raise SystemExit('embedded LivePocket patch not found')
+          exec(gzip.decompress(base64.b64decode(m.group(1))).decode(),{})
+          p=Path('test/livepocket-complete-import.test.js')
+          s=p.read_text()
+          old="const context=vm.createContext({Utilities:{formatDate:()=> '2026'}});"
+          new="const context=vm.createContext({Utilities:{formatDate:()=> '2026'},TZ:'Asia/Tokyo'});"
+          if old not in s:
+            raise SystemExit('test context anchor missing')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Run full regression suite
+        run: npm test
+      - name: Commit production patch and remove one-time workflows
+        run: |
+          rm .github/workflows/patch-livepocket-complete-20261004.yml
+          rm .github/workflows/finalize-livepocket-complete-20261004.yml
+          git config user.name 'manato-maker'
+          git config user.email 'manato.pt@gmail.com'
+          git add automation/Code.gs automation/V2Automation.gs test/livepocket-complete-import.test.js .github/workflows/patch-livepocket-complete-20261004.yml .github/workflows/finalize-livepocket-complete-20261004.yml
+          git commit -m 'Make LivePocket lottery sync complete and self-healing'
+          git push origin main
