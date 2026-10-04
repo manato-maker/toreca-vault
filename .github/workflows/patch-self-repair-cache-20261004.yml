@@ -1,0 +1,32 @@
+name: Publish Verified Self Repair Cache Bust
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-self-repair-cache-20261004.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bust app repair cache
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html');s=p.read_text();s=s.replace('v2/one-time-repairs.js?v=20261004-livepocket-v1','v2/one-time-repairs.js?v=20261004-verified-repair-v2');p.write_text(s)
+          p=Path('sw.js');s=p.read_text();s=s.replace("const CACHE='toreca-vault-v60';","const CACHE='toreca-vault-v61';");p.write_text(s)
+          PY
+      - name: Run regression tests
+        run: node --test test/*.test.js
+      - name: Commit and remove workflow
+        run: |
+          rm .github/workflows/patch-self-repair-cache-20261004.yml
+          git config user.name 'manato-maker'
+          git config user.email 'manato.pt@gmail.com'
+          git add index.html sw.js .github/workflows/patch-self-repair-cache-20261004.yml
+          git commit -m 'Publish verified self-repair and bust cache'
+          git push origin main
