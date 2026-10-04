@@ -579,11 +579,24 @@ function tv2Load_(){const j=tv2Call_({action:'load'});if(!j.payload||Number(j.pa
 function tv2Mutate_(kind,fn){const lock=LockService.getScriptLock();if(!lock.tryLock(30000))return{skipped:true,reason:'locked'};try{const before=tv2Load_(),next=JSON.parse(JSON.stringify(before.payload)),result=fn(next)||{};if(result.changed===false)return Object.assign({revision:Number(before.revision),unchanged:true},result);next.revision=Number(before.revision)+1;next.lastMutationId=kind+'-'+Utilities.getUuid();next.auditLog=Array.isArray(next.auditLog)?next.auditLog:[];next.auditLog.push({mutationId:next.lastMutationId,revision:next.revision,type:kind,at:new Date().toISOString()});tv2Call_({expectedRevision:before.revision,mutationId:next.lastMutationId,payload:next});const check=tv2Load_();if(Number(check.revision)!==next.revision||check.lastMutationId!==next.lastMutationId)throw new Error('V2保存後検証失敗');return Object.assign({revision:check.revision},result)}finally{lock.releaseLock()}}
 
 
+function tv2ConditionKey_(value){
+ const v=normalize_(String(value||''));
+ if(/シュリンク/.test(v)){
+  if(/なし|無/.test(v))return'shrink-no';
+  if(/あり|有/.test(v))return'shrink-yes';
+ }
+ if(/テープ/.test(v)){
+  if(/なし|無/.test(v))return'tape-no';
+  if(/あり|有|付|付き/.test(v))return'tape-yes';
+ }
+ return v;
+}
+
 function runTv2ChatSale(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),store=String(input.store||'').trim(),category=String(input.category||'BOX').trim();
  const condition=String(input.condition||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
- const quantity=Number(input.quantity),unitPrice=Number(input.unitPrice),requestId=String(input.requestId||'').trim();
+ const quantity=Number(input.quantity),unitPrice=Number(input.unitPrice!==undefined?input.unitPrice:input.price),requestId=String(input.requestId||'').trim();
  if(!product||!store||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitPrice)||unitPrice<=0)throw new Error('チャット売却データが不正です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット売却カテゴリが不正です');
  return tv2Mutate_('chat-sale',state=>{
@@ -591,7 +604,7 @@ function runTv2ChatSale(command){
   const existing=(state.transactions||[]).filter(t=>t.id===txId);
   if(existing.length===1)return{duplicate:true,transactionId:txId,changed:false};
   if(existing.length>1)throw new Error('同一チャット売却IDが重複しています');
-  const key=normalize_(product),lots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category===category&&normalize_(l.productKey||l.product)===key&&(!condition||String(l.condition||'')===condition));
+  const key=normalize_(product),conditionKey=tv2ConditionKey_(condition),lots=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category===category&&normalize_(l.productKey||l.product)===key&&(!condition||tv2ConditionKey_(l.condition)===conditionKey));
   if(!condition&&new Set(lots.map(l=>String(l.condition||''))).size>1)throw new Error('V2正本の対象在庫の状態が複数あるため条件指定が必要です');
   const available=lots.reduce((n,l)=>n+Number(l.quantity||0),0);
   if(available<quantity)throw new Error('V2正本の対象在庫が不足しています');
@@ -1181,4 +1194,81 @@ function tv2ProcessMegaRayquazaOnceWeb_(){
   '20260927-storm-emeralda-mega-rayquaza-ex-m6-095-076-sr',
   'mr-20260927-5fa3c78b1e6249d8a6c1f047b39e52ad'
  );
+}
+
+
+
+function runTv2RepairCurrent20261004(){
+ const requests={
+  stormYes:'20261003-sale-storm-emeralda-shrink-yes-9200',
+  stormNo:'20261003-sale-storm-emeralda-shrink-no-7500',
+  dragon:'20261003-sale-dragonball-brightness-of-hope-tape-8300',
+  sylveon:'20261004-sale-sylveon-v-s8b-231-184-5000'
+ };
+ const repair=tv2Mutate_('repair-current-20261004',state=>{
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
+  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  state.marketQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  const changes=[];
+  const norm=v=>normalize_(String(v||''));
+  const storeMatch=(t,name)=>norm(t.store||t.soldTo).includes(norm(name));
+  const consume=(lots,qty)=>{
+   let remaining=qty,cost=0,unknown=false,used=[];
+   lots.sort((a,b)=>String(a.acquiredAt||'').localeCompare(String(b.acquiredAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
+   for(const lot of lots){if(!remaining)break;const take=Math.min(Number(lot.quantity||0),remaining);if(take<=0)continue;const raw=lot.unitCost;if(raw===null||raw===undefined||raw===''||!Number.isFinite(Number(raw)))unknown=true;else cost+=take*Number(raw);lot.quantity=Number(lot.quantity)-take;remaining-=take;used.push({id:String(lot.id||''),quantity:take})}
+   return{remaining,cost:unknown?null:cost,used};
+  };
+  const hasSemantic=(product,date,store,price)=>state.transactions.find(t=>t.type==='sale'&&norm(t.productKey||t.product).includes(norm(product))&&String(t.date||'')===date&&storeMatch(t,store)&&Number(t.price||t.unitPrice||0)===price&&Number(t.quantity||0)===1);
+  const ensureSale=spec=>{
+   const txId='chat-sale-'+spec.requestId;
+   let tx=state.transactions.find(t=>String(t.id||'')===txId)||hasSemantic(spec.matchProduct,spec.date,spec.store,spec.price);
+   if(tx)return{created:false,id:String(tx.id||''),used:[]};
+   const lots=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category===spec.category&&spec.matchLot(l));
+   const consumed=consume(lots,1);
+   tx={id:txId,type:'sale',product:spec.product,productKey:spec.product,category:spec.category,condition:spec.condition||'',set:spec.set||'',quantity:1,price:spec.price,date:spec.date,store:spec.store,soldTo:spec.store,source:'chat-reconcile',requestId:spec.requestId,acquisitionCost:consumed.remaining?null:consumed.cost,memo:'ユーザー確認済み売却｜2026/10/04 自動整合補正'};
+   state.transactions.push(tx);changes.push('sale:'+spec.requestId);return{created:true,id:txId,used:consumed.used,unmatchedInventory:Boolean(consumed.remaining)};
+  };
+  const stormBase=l=>Number(l.quantity)>0&&l.category==='BOX'&&norm(l.productKey||l.product)===norm('ストームエメラルダ');
+  const stormYes=ensureSale({requestId:requests.stormYes,product:'ストームエメラルダ',matchProduct:'ストームエメラルダ',category:'BOX',condition:'シュリンクあり',date:'2026-10-03',store:'買取ミミ',price:9200,matchLot:l=>stormBase(l)&&tv2ConditionKey_(l.condition)==='shrink-yes'});
+  const stormNo=ensureSale({requestId:requests.stormNo,product:'ストームエメラルダ',matchProduct:'ストームエメラルダ',category:'BOX',condition:'シュリンクなし',date:'2026-10-03',store:'買取ミミ',price:7500,matchLot:l=>stormBase(l)&&tv2ConditionKey_(l.condition)==='shrink-no'});
+  const stormLeftIds=new Set(state.inventoryLots.filter(stormBase).map(l=>String(l.id||'')));
+  const stormRemoved=state.inventoryLots.filter(l=>stormLeftIds.has(String(l.id||''))).reduce((n,l)=>n+Number(l.quantity||0),0);
+  if(stormRemoved){changes.push('storm-inventory-zero:'+stormRemoved);state.inventoryLots=state.inventoryLots.filter(l=>!stormLeftIds.has(String(l.id||'')));state.marketQuotes=state.marketQuotes.filter(q=>!stormLeftIds.has(String(q.lotId||'')))}
+  const dragon=ensureSale({requestId:requests.dragon,product:'ドラゴンボール BRIGHTNESS OF HOPE',matchProduct:'BRIGHTNESS OF HOPE',category:'BOX',condition:'テープ付き',date:'2026-10-03',store:'買取ミミ',price:8300,matchLot:l=>Number(l.quantity)>0&&l.category==='BOX'&&norm(l.productKey||l.product).includes(norm('BRIGHTNESS OF HOPE'))&&tv2ConditionKey_(l.condition)==='tape-yes'});
+  const sylveon=ensureSale({requestId:requests.sylveon,product:'ニンフィアV',matchProduct:'ニンフィアV',category:'カード',condition:'',set:'S8b 231/184',date:'2026-10-04',store:'三洋堂トレカ館 桜井店',price:5000,matchLot:l=>{
+   if(Number(l.quantity)<=0||l.category!=='カード')return false;
+   const combined=norm(String(l.product||l.productKey||'')+' '+String(l.set||''));
+   return combined.includes(norm('ニンフィアV'))&&combined.includes(norm('231/184'));
+  }});
+  const appNo='1054301100',lotId='lottery-livepocket-'+appNo;
+  let lottery=state.lotteries.find(x=>String(x.id||'')===lotId||String(x.memo||'').includes(appNo));
+  if(!lottery){lottery={id:lotId,createdAt:new Date().toISOString(),receiptStatus:'対象外',receivedDate:''};state.lotteries.push(lottery);changes.push('livepocket:'+appNo)}
+  const beforeLottery=JSON.stringify(lottery);
+  lottery.title='30th CELEBRATION';lottery.store='イエローサブマリン なんば本店';
+  if(!['当選','落選','購入済'].includes(String(lottery.status||'')))lottery.status='応募済';
+  lottery.resultDate='2026-10-10';lottery.gmailMessageId='1a1045fa729f0163';lottery.updatedAt=new Date().toISOString();
+  if(!String(lottery.memo||'').includes(appNo))lottery.memo=[lottery.memo,'自動登録｜申込番号 '+appNo].filter(Boolean).join('｜');
+  if(JSON.stringify(lottery)!==beforeLottery&&!changes.includes('livepocket:'+appNo))changes.push('livepocket-update:'+appNo);
+  state.inventoryLots=state.inventoryLots.filter(l=>Number(l.quantity)>0);
+  return{changed:changes.length>0,changes,stormYes,stormNo,dragon,sylveon};
+ });
+ const handled=new Set(Object.values(requests));
+ const deletedDrafts=[];
+ GmailApp.getDrafts().forEach(d=>{
+  if(String(d.getMessage().getSubject()||'').trim()!=='[Toreca Vault Command]')return;
+  try{const c=JSON.parse(String(d.getMessage().getPlainBody()||'').trim());if(handled.has(String(c.requestId||''))){deletedDrafts.push(String(c.requestId));d.deleteDraft()}}catch(e){}
+ });
+ const schedule=installTv2Automation();
+ const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});
+ const final=tv2Load_(),state=final.payload||{};
+ const stormQty=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='BOX'&&normalize_(l.productKey||l.product)===normalize_('ストームエメラルダ')).reduce((n,l)=>n+Number(l.quantity||0),0);
+ const sales={};
+ Object.keys(requests).forEach(k=>sales[k]=(state.transactions||[]).filter(t=>String(t.requestId||'')===requests[k]||String(t.id||'')==='chat-sale-'+requests[k]).map(t=>({id:t.id,product:t.product,set:t.set||'',date:t.date,store:t.store||t.soldTo,price:t.price,quantity:t.quantity})));
+ const lp=(state.lotteries||[]).filter(x=>String(x.id||'').includes('1054301100')||String(x.memo||'').includes('1054301100')).map(x=>({id:x.id,title:x.title,store:x.store,status:x.status,resultDate:x.resultDate}));
+ const summary={ok:stormQty===0&&sales.stormYes.length===1&&sales.stormNo.length===1&&sales.dragon.length===1&&sales.sylveon.length===1&&lp.length===1&&lp[0].resultDate==='2026-10-10',revision:Number(final.revision),repair,deletedDrafts,schedule,gmail,stormQty,sales,livepocket:lp};
+ const subject='[Toreca Vault Repair Result] 20261004-livepocket-sales-final';
+ GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'')===subject).forEach(d=>d.deleteDraft());
+ GmailApp.createDraft(Session.getEffectiveUser().getEmail(),subject,JSON.stringify(summary,null,2));
+ return summary;
 }
