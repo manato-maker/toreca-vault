@@ -833,7 +833,7 @@ function runTv2ReconcileResults20260930(command){
 
   // User correction: the 9-card set was not entered by the user; all Pokemon
   // Center records for this product belong to the spouse. Merge them into one.
-  const set9All=(state.lotteries||[]).filter(x=>isPc(x)&&isSet9(x));
+  const set9All=(state.lotteries||[]).filter(x=>{if(!isPc(x)||!isSet9(x))return false;const d=String(x.resultDate||'').slice(0,10),r=String(x.requestId||'');return d===resultDate||/20260930/.test(r)||(!d&&['応募済','応募済み'].includes(String(x.status||'')));});
   const wifeSet9=mergeGroup(state,set9All,{id:'pokemoncenter-wife-cardset9-20260930',title:titles.set9,status:'当選',owner:wife,receiveDeadline:'2026-10-06',memo:[wife,'本人分は応募なし','9/30 当選確認','価格 10,800円']});
 
   const bee=(state.lotteries||[]).filter(x=>/bee本舗/i.test(String(x.store||''))||/bee本舗/i.test(String(x.title||'')));
@@ -1113,8 +1113,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    const type=String(command&&command.type||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
@@ -1198,7 +1198,8 @@ function tv2ProcessMegaRayquazaOnceWeb_(){
 
 
 
-function runTv2RepairCurrent20261004(){
+function runTv2RepairCurrent20261004(options){
+ const fromQueue=Boolean(options&&options.fromQueue);
  const requests={
   stormYes:'20261003-sale-storm-emeralda-shrink-yes-9200',
   stormNo:'20261003-sale-storm-emeralda-shrink-no-7500',
@@ -1259,8 +1260,8 @@ function runTv2RepairCurrent20261004(){
   if(String(d.getMessage().getSubject()||'').trim()!=='[Toreca Vault Command]')return;
   try{const c=JSON.parse(String(d.getMessage().getPlainBody()||'').trim());if(handled.has(String(c.requestId||''))){deletedDrafts.push(String(c.requestId));d.deleteDraft()}}catch(e){}
  });
- const schedule=installTv2Automation();
- const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});
+ const schedule=fromQueue?tv2AutomationStatus():installTv2Automation();
+ const gmail=fromQueue?{skipped:true,reason:'queue-repair'}:runTv2LotteryAuto({skipScheduleEnsure:true});
  const final=tv2Load_(),state=final.payload||{};
  const stormQty=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='BOX'&&normalize_(l.productKey||l.product)===normalize_('ストームエメラルダ')).reduce((n,l)=>n+Number(l.quantity||0),0);
  const sales={};
