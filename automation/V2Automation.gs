@@ -34,6 +34,7 @@ function tv2EnsureSimpleAutomationSchedule_(force){
 }
 function runTv2Automation(){
   tv2EnsureSimpleAutomationSchedule_(false);
+  const retail=typeof tv2EnforceRetailPricePolicy_==='function'?tv2EnforceRetailPricePolicy_():{skipped:true,reason:'retail-policy-unavailable'};
   const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});
   const hour=Number(Utilities.formatDate(new Date(),TZ,'H')),minute=Number(Utilities.formatDate(new Date(),TZ,'m'));
   let market={skipped:true,reason:'before-13:30'};
@@ -43,7 +44,7 @@ function runTv2Automation(){
     if(String(health.marketPolicyVersion||'')!=='cardrush-toretoku-v6')
       market=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true});
   }
-  return{ok:true,gmail,market};
+  return{ok:true,retail,gmail,market};
 }
 function runTv2LotteryAuto(options){
   if(!(options&&options.skipScheduleEnsure))tv2EnsureSimpleAutomationSchedule_(false);
@@ -622,16 +623,19 @@ function runTv2ChatSale(command){
 
 function tv2NormalizeProductCategory_(product,category){
  const name=String(product||'');
- if(/スタートデッキ|デッキセット|構築済みデッキ/.test(name))return'BOX';
+ if(/スタートデッキ|デッキセット|構築済みデッキ|カードセット/.test(name))return'BOX';
  return String(category||'BOX').trim();
 }
 
 function runTv2ChatPurchase(command){
  const input=command&&typeof command==='object'?command:{};
  const product=String(input.product||'').trim(),category=tv2NormalizeProductCategory_(product,input.category),condition=String(input.condition||'').trim(),store=String(input.store||'').trim(),date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim();
- const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();
+ const quantity=Number(input.quantity),enteredUnitCost=Number(input.unitCost!==undefined?input.unitCost:input.price),requestId=String(input.requestId||'').trim();
+ const retailInfo=category==='カード'?null:tv2RetailPriceInfo_(product,category),unitCost=retailInfo?retailInfo.price:enteredUnitCost;
  const openingBox=String(input.openingBoxProduct||'').trim(),rawCardSet=String(input.cardSet||input.cardCode||'').trim(),cardSet=rawCardSet.replace(/^(M6)\s+(\d{3})-(\d{3})$/,'$1 $2/$3'),rarity=String(input.rarity||'').trim();
- if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');
+ if(!product||!requestId||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0)throw new Error('チャット購入データが不正です');
+ if(category==='カード'&&(!Number.isFinite(unitCost)||unitCost<0))throw new Error('チャット購入データが不正です');
+ if(category!=='カード'&&!retailInfo)throw new Error('定価未登録の商品です。公式価格を確認して定価マスターへ追加してください');
  if(!['BOX','パック','カード'].includes(category))throw new Error('チャット購入カテゴリが不正です');
  if(openingBox&&(category!=='カード'||quantity!==1||!cardSet))throw new Error('開封獲得カード情報が不正です');
  return tv2Mutate_('chat-purchase',state=>{
@@ -653,8 +657,8 @@ function runTv2ChatPurchase(command){
    state.transactions.push({id:openingId,type:'opening',product:openingBox,productKey:openingBox,category:'BOX',condition:String(box.condition||''),quantity:1,price:0,date,source:'chat',memo:'BOX開封',requestId,acquisitionCost:Number.isFinite(cost)?cost:null});
    source='opening';memo='開封獲得'+(rarity?'｜'+rarity:'')+'｜'+openingBox+' 1BOX開封';
   }
-  state.inventoryLots.push({id:lotId,product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,unitCost,acquiredAt:date,store,source,requestId,memo});
-  state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,price:unitCost,total:unitCost*quantity,date,store,source,requestId,memo});
+  const lot={id:lotId,product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,unitCost,acquiredAt:date,store,source,requestId,memo};if(retailInfo){lot.priceBasis='希望小売価格';lot.retailPriceSource=retailInfo.source;}state.inventoryLots.push(lot);
+  const tx={id:txId,type:'purchase',product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,price:unitCost,total:unitCost*quantity,date,store,source,requestId,memo};if(retailInfo){tx.priceBasis='希望小売価格';tx.retailPriceSource=retailInfo.source;if(Number.isFinite(enteredUnitCost)&&enteredUnitCost>=0&&enteredUnitCost!==unitCost){tx.actualPaid=enteredUnitCost;tx.actualPaidTotal=enteredUnitCost*quantity}}state.transactions.push(tx);
   return{duplicate:false,transactionId:txId,lotId,openingId:openingBox?openingId:'',changed:true};
  });
 }

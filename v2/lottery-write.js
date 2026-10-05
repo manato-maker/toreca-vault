@@ -1,4 +1,5 @@
 import{validateState,applyTransaction}from'./core.js';
+import{retailPriceInfo}from'./retail-price.js';
 import{loadVaultV2,getVaultV2Config}from'./browser-sync.js';
 import{saveV2}from'./api-client.js';
 import{assertV2WriteEnabled}from'./write-gate.js';
@@ -72,24 +73,26 @@ export function applyLotteryReceiptPurchase(state,input,mutationId){
  validateState(state);if(!mutationId)throw new Error('mutationId が必要です');
  const data=input&&typeof input==='object'?input:{},id=text(data.id),next=clone(state),item=(next.lotteries||[]).find(x=>text(x.id)===id);
  if(!item)throw new Error('対象の抽選データが見つかりません');
- const receivedDate=text(data.receivedDate),product=text(data.product||item.title),store=text(data.store||item.store),category=text(data.category||'BOX'),quantity=Number(data.quantity||1),total=Number(data.total||0),addPurchase=data.addPurchase!==false;
+ const receivedDate=text(data.receivedDate),product=text(data.product||item.title),store=text(data.store||item.store),category=text(data.category||'BOX'),quantity=Number(data.quantity||1),enteredTotal=Number(data.total||0),addPurchase=data.addPurchase!==false;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate))throw new Error('受取日が不正です');
  if(!product||!store)throw new Error('商品名・店舗名が必要です');
  if(!['BOX','パック','カード'].includes(category))throw new Error('購入種別が不正です');
  if(!Number.isInteger(quantity)||quantity<=0)throw new Error('数量は正の整数が必要です');
- if(addPurchase&&(!Number.isFinite(total)||total<=0))throw new Error('購入合計金額を入力してください');
+ const retail=category==='カード'?null:retailPriceInfo(product,category),accountingTotal=retail?retail.price*quantity:enteredTotal;
+ if(addPurchase&&category==='カード'&&(!Number.isFinite(enteredTotal)||enteredTotal<=0))throw new Error('購入合計金額を入力してください');
+ if(addPurchase&&category!=='カード'&&!retail)throw new Error('定価未登録の商品です。公式価格を確認して定価マスターへ追加してください');
  item.status='購入済';item.receiptStatus='受取済み';item.receivedDate=receivedDate;item.shrinkStatus=text(data.shrinkStatus||item.shrinkStatus||'未選択');
  if(data.receiptPhoto)item.receiptPhoto=data.receiptPhoto;
- item.receiptAmount=Number.isFinite(total)&&total>0?total:item.receiptAmount;
+ if(Number.isFinite(enteredTotal)&&enteredTotal>=0)item.receiptPaidAmount=enteredTotal;item.receiptAmount=retail?accountingTotal:(Number.isFinite(enteredTotal)&&enteredTotal>0?enteredTotal:item.receiptAmount);if(retail){item.receiptPriceBasis='希望小売価格';item.retailPriceSource=retail.source;}
  item.receiptProduct=product;item.receiptStore=store;item.receiptQuantity=quantity;item.receiptCategory=category;item.updatedAt=new Date().toISOString();
  const txId='lottery-receipt-purchase-'+id;
  if(addPurchase){
-  const price=total/quantity,existing=next.transactions.find(x=>x.id===txId);
+  const price=accountingTotal/quantity,existing=next.transactions.find(x=>x.id===txId);
   if(existing){
    const same=text(existing.product)===product&&text(existing.store)===store&&text(existing.date)===receivedDate&&Number(existing.quantity)===quantity&&Number(existing.price)===price&&text(existing.category)===category;
    if(!same)throw new Error('この抽選の購入履歴は既に登録済みです。購入履歴への追加をOFFにして受取情報だけ更新してください');
   }else{
-   const tx={id:txId,type:'purchase',product,productKey:product,store,date:receivedDate,quantity,price,total,category,condition:receiptCondition(category,data.shrinkStatus),sourceLotteryId:id,memo:'抽選受取｜レシート確認'};
+   const tx={id:txId,type:'purchase',product,productKey:product,store,date:receivedDate,quantity,price,total:accountingTotal,category,condition:receiptCondition(category,data.shrinkStatus),sourceLotteryId:id,memo:'抽選受取｜レシート確認'};if(retail){tx.priceBasis='希望小売価格';tx.retailPriceSource=retail.source;if(Number.isFinite(enteredTotal)&&enteredTotal>=0&&enteredTotal!==accountingTotal){tx.actualPaid=enteredTotal/quantity;tx.actualPaidTotal=enteredTotal;}}
    const applied=applyTransaction(next,tx,mutationId+'-purchase');
    next.transactions=applied.transactions;next.inventoryLots=applied.inventoryLots;next.auditLog=applied.auditLog;
   }
