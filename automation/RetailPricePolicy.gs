@@ -8,7 +8,6 @@ const TV2_RETAIL_PRICE_CATALOG=[
  {test:/30th celebration.*カードセット/i,fixed:1200,source:'ポケモンカード公式 30周年商品'},
  {test:/スペシャルbox ポケモンセンター(?:トウホク|フクオカ|ヒロシマ)/i,fixed:2090,source:'ポケモンカード公式 商品情報'},
  {test:/スタートデッキ100.*バトルコレクション|mega スタートデッキ100/i,fixed:891,source:'ポケモンカード公式 商品情報'},
- {test:/マクドナルド.*プロモカードパック/i,fixed:0,source:'非売品プロモ（購入原価0円）'},
  {test:/30th celebration/i,pack:360,box:7200,source:'ポケモンカード公式 30周年商品'},
  {test:/ストームエメラルダ/,pack:200,box:6000,source:'ポケモンカード公式'},
  {test:/アビスアイ/,pack:200,box:6000,source:'ポケモンカード公式'},
