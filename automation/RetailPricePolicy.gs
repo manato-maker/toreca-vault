@@ -1,4 +1,5 @@
 // Fixed MSRP accounting for all non-single purchases; actual paid amount is retained separately.
+// v2 expands official-price coverage for legacy sealed-product names and bundles.
 const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v2';
 const TV2_RETAIL_PRICE_CATALOG=[
  {test:/30th celebration.*カードセット.*9種|カードセット.*9種/i,fixed:10800,source:'ポケモンカード公式 30周年商品（9種セット）'},
