@@ -1,0 +1,207 @@
+name: Apply MSRP accounting policy
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-msrp-policy.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply MSRP policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          retail_js = r'''export const RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v1';
+const norm=x=>String(x||'').normalize('NFKC').toLocaleLowerCase('ja').replace(/\s+/g,' ').trim();
+const CATALOG=[
+ {category:'BOX',test:/30th celebration.*カードセット.*9種|カードセット.*9種/,price:10800,source:'ポケモンカード公式 30周年商品（9種セット）',url:'https://www.pokemon-card.com/info/005510.html'},
+ {category:'BOX',test:/30th celebration.*futuristic box|futuristic box/,price:27500,source:'ポケモンカード公式 30周年商品',url:'https://www.30th.pokemon-card.com/product/furbox'},
+ {category:'BOX',test:/30th celebration.*プレミアムデッキセット|プレミアムデッキセット.*エーフィ.*ブラッキー/,price:6200,source:'ポケモンカード公式 30周年商品',url:'https://www.pokemon-card.com/info/005510.html'},
+ {category:'BOX',test:/30th celebration.*カードセット/,price:1200,source:'ポケモンカード公式 30周年商品',url:'https://www.30th.pokemon-card.com/product/cardset'},
+ {category:'BOX',test:/30th celebration/,price:7200,source:'ポケモンカード公式 30周年商品',url:'https://www.pokemon-card.com/info/005510.html'},
+ {category:'パック',test:/30th celebration/,price:360,source:'ポケモンカード公式 30周年商品',url:'https://www.30th.pokemon-card.com/product/m6a'},
+ {category:'BOX',test:/ストームエメラルダ/,price:6000,source:'ポケモンカード公式（1パック200円×30パック）',url:'https://www.pokemon-card.com/ex/m6/'},
+ {category:'パック',test:/ストームエメラルダ/,price:200,source:'ポケモンカード公式',url:'https://www.pokemon-card.com/ex/m6/'},
+ {category:'BOX',test:/インフェルノx/,price:5400,source:'ポケモンカード公式（1パック180円×30パック）',url:'https://www.pokemon-card.com/ex/m2/'},
+ {category:'パック',test:/インフェルノx/,price:180,source:'ポケモンカード公式',url:'https://www.pokemon-card.com/ex/m2/'},
+ {category:'BOX',test:/brightness of hope/,price:5760,source:'ドラゴンボール フュージョンワールド公式（1BOX 24パック）',url:'https://www.dbs-cardgame.com/fw/jp/events/01_495.html'},
+ {category:'パック',test:/brightness of hope/,price:240,source:'ドラゴンボール フュージョンワールド公式',url:'https://www.dbs-cardgame.com/fw/jp/products/'}
+];
+export function retailPriceInfo(product,category){
+ const c=String(category||'').trim(),n=norm(product);if(!n||c==='カード')return null;
+ const hit=CATALOG.find(x=>x.category===c&&x.test.test(n));return hit?{price:hit.price,source:hit.source,url:hit.url,basis:'希望小売価格'}:null;
+}
+'''
+          Path('v2/retail-price.js').write_text(retail_js)
+
+          retail_gs = r'''const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v1';
+const TV2_RETAIL_PRICE_CATALOG=[
+ {category:'BOX',test:/30th celebration.*カードセット.*9種|カードセット.*9種/i,price:10800,source:'ポケモンカード公式 30周年商品（9種セット）'},
+ {category:'BOX',test:/30th celebration.*futuristic box|futuristic box/i,price:27500,source:'ポケモンカード公式 30周年商品'},
+ {category:'BOX',test:/30th celebration.*プレミアムデッキセット|プレミアムデッキセット.*エーフィ.*ブラッキー/i,price:6200,source:'ポケモンカード公式 30周年商品'},
+ {category:'BOX',test:/30th celebration.*カードセット/i,price:1200,source:'ポケモンカード公式 30周年商品'},
+ {category:'BOX',test:/30th celebration/i,price:7200,source:'ポケモンカード公式 30周年商品'},
+ {category:'パック',test:/30th celebration/i,price:360,source:'ポケモンカード公式 30周年商品'},
+ {category:'BOX',test:/ストームエメラルダ/,price:6000,source:'ポケモンカード公式（1パック200円×30パック）'},
+ {category:'パック',test:/ストームエメラルダ/,price:200,source:'ポケモンカード公式'},
+ {category:'BOX',test:/インフェルノx/i,price:5400,source:'ポケモンカード公式（1パック180円×30パック）'},
+ {category:'パック',test:/インフェルノx/i,price:180,source:'ポケモンカード公式'},
+ {category:'BOX',test:/brightness of hope/i,price:5760,source:'ドラゴンボール フュージョンワールド公式（1BOX 24パック）'},
+ {category:'パック',test:/brightness of hope/i,price:240,source:'ドラゴンボール フュージョンワールド公式'}
+];
+function tv2RetailPriceInfo_(product,category){
+ const c=String(category||'').trim(),n=String(product||'').normalize('NFKC').replace(/\s+/g,' ').trim();if(!n||c==='カード')return null;
+ const hit=TV2_RETAIL_PRICE_CATALOG.find(x=>x.category===c&&x.test.test(n));return hit?{price:hit.price,source:hit.source,basis:'希望小売価格'}:null;
+}
+function tv2EnforceRetailPricePolicy_(){
+ const result=tv2Mutate_('retail-price-policy',state=>{
+  const health=tv2Health_(state),beforeVersion=String(health.retailPricePolicyVersion||''),beforeReview=JSON.stringify(health.retailPriceNeedsReview||[]),changes=[],review=new Set();
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  for(const t of state.transactions){
+   if(String(t.category||'')==='カード')continue;const info=tv2RetailPriceInfo_(t.productKey||t.product,t.category);if(!info){if(['purchase','sale','opening'].includes(String(t.type||'')))review.add(String(t.product||t.productKey||''));continue}
+   const q=Math.max(1,Number(t.quantity)||1);
+   if(t.type==='purchase'){
+    const old=Number(t.price!==undefined?t.price:t.unitCost);if(Number.isFinite(old)&&old>=0&&old!==info.price&&t.actualPaid==null)t.actualPaid=old;
+    if(Number(t.price)!==info.price||Number(t.total)!==info.price*q||Number(t.unitCost)!==info.price)changes.push('purchase:'+String(t.id||t.product));
+    t.price=info.price;t.total=info.price*q;t.unitCost=info.price;t.priceBasis='希望小売価格';t.retailPriceSource=info.source;
+   }else if(t.type==='sale'||t.type==='opening'){
+    const target=info.price*q;if(Number(t.acquisitionCost)!==target)changes.push(String(t.type)+':'+String(t.id||t.product));t.acquisitionCost=target;t.acquisitionCostBasis='希望小売価格';t.retailPriceSource=info.source;
+   }
+  }
+  for(const l of state.inventoryLots){
+   if(String(l.category||'')==='カード')continue;const info=tv2RetailPriceInfo_(l.productKey||l.product,l.category);if(!info){review.add(String(l.product||l.productKey||''));continue}
+   if(Number(l.unitCost)!==info.price)changes.push('lot:'+String(l.id||l.product));l.unitCost=info.price;l.priceBasis='希望小売価格';l.retailPriceSource=info.source;
+  }
+  for(const item of state.lotteries){
+   const category=String(item.receiptCategory||'').trim();if(!category||category==='カード')continue;const info=tv2RetailPriceInfo_(item.receiptProduct||item.title,category);if(!info)continue;
+   const q=Math.max(1,Number(item.receiptQuantity)||1),target=info.price*q,old=Number(item.receiptAmount);
+   if(Number.isFinite(old)&&old>=0&&old!==target&&item.receiptPaidAmount==null)item.receiptPaidAmount=old;
+   if(Number(item.receiptAmount)!==target)changes.push('receipt:'+String(item.id||item.title));item.receiptAmount=target;item.receiptPriceBasis='希望小売価格';item.retailPriceSource=info.source;
+  }
+  const reviews=[...review].filter(Boolean).sort();health.retailPricePolicyVersion=TV2_RETAIL_PRICE_POLICY_VERSION;health.retailPriceNeedsReview=reviews;
+  const changed=changes.length>0||beforeVersion!==TV2_RETAIL_PRICE_POLICY_VERSION||beforeReview!==JSON.stringify(reviews);
+  return{changed,changes,review:reviews,policy:TV2_RETAIL_PRICE_POLICY_VERSION};
+ });
+ if(result&&result.changed&&!result.unchanged){
+  const subject='[Toreca Vault MSRP Policy Result] '+TV2_RETAIL_PRICE_POLICY_VERSION,to=Session.getEffectiveUser().getEmail();
+  GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+  if(to)GmailApp.createDraft(to,subject,JSON.stringify(result,null,2));
+ }
+ return result;
+}
+'''
+          Path('automation/RetailPricePolicy.gs').write_text(retail_gs)
+
+          p=Path('v2/ui-entry.js');s=p.read_text()
+          if "from'./retail-price.js'" not in s:s="import{retailPriceInfo}from'./retail-price.js';\n"+s
+          anchor=" const condition=String(data.condition||data.shrinkStatus||'').trim();if(['purchases','sales','openings'].includes(type)&&(!condition||condition==='未選択'))throw new Error('V2では在庫状態を選択してください');out.condition=condition;if(type==='openings')out.category='BOX'\n return out;"
+          repl=" const condition=String(data.condition||data.shrinkStatus||'').trim();if(['purchases','sales','openings'].includes(type)&&(!condition||condition==='未選択'))throw new Error('V2では在庫状態を選択してください');out.condition=condition;if(type==='openings')out.category='BOX'\n if(type==='purchases'&&out.category!=='カード'){const retail=retailPriceInfo(out.product,out.category);if(!retail)throw new Error('定価未登録の商品です。公式価格を確認して定価マスターへ追加してください');const entered=Number(data.price??data.unitCost);if(Number.isFinite(entered)&&entered>=0&&entered!==retail.price)out.actualPaid=entered;out.price=retail.price;out.unitCost=retail.price;out.total=retail.price*(Number(out.quantity)||1);out.priceBasis='希望小売価格';out.retailPriceSource=retail.source;}\n return out;"
+          if anchor not in s: raise SystemExit('ui-entry anchor missing')
+          s=s.replace(anchor,repl,1);p.write_text(s)
+
+          p=Path('v2/lottery-write.js');s=p.read_text()
+          s=s.replace("import{validateState,applyTransaction}from'./core.js';","import{validateState,applyTransaction}from'./core.js';\nimport{retailPriceInfo}from'./retail-price.js';",1)
+          old="const receivedDate=text(data.receivedDate),product=text(data.product||item.title),store=text(data.store||item.store),category=text(data.category||'BOX'),quantity=Number(data.quantity||1),total=Number(data.total||0),addPurchase=data.addPurchase!==false;"
+          new="const receivedDate=text(data.receivedDate),product=text(data.product||item.title),store=text(data.store||item.store),category=text(data.category||'BOX'),quantity=Number(data.quantity||1),enteredTotal=Number(data.total||0),addPurchase=data.addPurchase!==false;"
+          if old not in s: raise SystemExit('lottery receipt total anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace(" if(addPurchase&&(!Number.isFinite(total)||total<=0))throw new Error('購入合計金額を入力してください');"," const retail=category==='カード'?null:retailPriceInfo(product,category),accountingTotal=retail?retail.price*quantity:enteredTotal;\n if(addPurchase&&category==='カード'&&(!Number.isFinite(enteredTotal)||enteredTotal<=0))throw new Error('購入合計金額を入力してください');\n if(addPurchase&&category!=='カード'&&!retail)throw new Error('定価未登録の商品です。公式価格を確認して定価マスターへ追加してください');",1)
+          s=s.replace(" item.receiptAmount=Number.isFinite(total)&&total>0?total:item.receiptAmount;"," if(Number.isFinite(enteredTotal)&&enteredTotal>=0)item.receiptPaidAmount=enteredTotal;item.receiptAmount=retail?accountingTotal:(Number.isFinite(enteredTotal)&&enteredTotal>0?enteredTotal:item.receiptAmount);if(retail){item.receiptPriceBasis='希望小売価格';item.retailPriceSource=retail.source;}",1)
+          s=s.replace("  const price=total/quantity,existing=next.transactions.find(x=>x.id===txId);","  const price=accountingTotal/quantity,existing=next.transactions.find(x=>x.id===txId);",1)
+          oldtx="   const tx={id:txId,type:'purchase',product,productKey:product,store,date:receivedDate,quantity,price,total,category,condition:receiptCondition(category,data.shrinkStatus),sourceLotteryId:id,memo:'抽選受取｜レシート確認'};"
+          newtx="   const tx={id:txId,type:'purchase',product,productKey:product,store,date:receivedDate,quantity,price,total:accountingTotal,category,condition:receiptCondition(category,data.shrinkStatus),sourceLotteryId:id,memo:'抽選受取｜レシート確認'};if(retail){tx.priceBasis='希望小売価格';tx.retailPriceSource=retail.source;if(Number.isFinite(enteredTotal)&&enteredTotal>=0&&enteredTotal!==accountingTotal){tx.actualPaid=enteredTotal/quantity;tx.actualPaidTotal=enteredTotal;}}"
+          if oldtx not in s: raise SystemExit('lottery receipt tx anchor missing')
+          s=s.replace(oldtx,newtx,1);p.write_text(s)
+
+          p=Path('automation/V2Automation.gs');s=p.read_text()
+          s=s.replace("  const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});","  const retail=typeof tv2EnforceRetailPricePolicy_==='function'?tv2EnforceRetailPricePolicy_():{skipped:true,reason:'retail-policy-unavailable'};\n  const gmail=runTv2LotteryAuto({skipScheduleEnsure:true});",1)
+          s=s.replace("  return{ok:true,gmail,market};","  return{ok:true,retail,gmail,market};",1)
+          s=s.replace("if(/スタートデッキ|デッキセット|構築済みデッキ/.test(name))return'BOX';","if(/スタートデッキ|デッキセット|構築済みデッキ|カードセット/.test(name))return'BOX';",1)
+          old=" const quantity=Number(input.quantity),unitCost=Number(input.unitCost),requestId=String(input.requestId||'').trim();"
+          new=" const quantity=Number(input.quantity),enteredUnitCost=Number(input.unitCost!==undefined?input.unitCost:input.price),requestId=String(input.requestId||'').trim();\n const retailInfo=category==='カード'?null:tv2RetailPriceInfo_(product,category),unitCost=retailInfo?retailInfo.price:enteredUnitCost;"
+          if old not in s: raise SystemExit('chat purchase cost anchor missing')
+          s=s.replace(old,new,1)
+          oldv=" if(!product||!requestId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0)throw new Error('チャット購入データが不正です');"
+          newv=" if(!product||!requestId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0)throw new Error('チャット購入データが不正です');\n if(category==='カード'&&(!Number.isFinite(unitCost)||unitCost<0))throw new Error('チャット購入データが不正です');\n if(category!=='カード'&&!retailInfo)throw new Error('定価未登録の商品です。公式価格を確認して定価マスターへ追加してください');"
+          if oldv not in s: raise SystemExit('chat purchase validation anchor missing')
+          s=s.replace(oldv,newv,1)
+          oldpush="  state.inventoryLots.push({id:lotId,product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,unitCost,acquiredAt:date,store,source,requestId,memo});\n  state.transactions.push({id:txId,type:'purchase',product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,price:unitCost,total:unitCost*quantity,date,store,source,requestId,memo});"
+          newpush="  const lot={id:lotId,product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,unitCost,acquiredAt:date,store,source,requestId,memo};if(retailInfo){lot.priceBasis='希望小売価格';lot.retailPriceSource=retailInfo.source;}state.inventoryLots.push(lot);\n  const tx={id:txId,type:'purchase',product,productKey:product,category,condition,set:category==='カード'?cardSet:'',quantity,price:unitCost,total:unitCost*quantity,date,store,source,requestId,memo};if(retailInfo){tx.priceBasis='希望小売価格';tx.retailPriceSource=retailInfo.source;if(Number.isFinite(enteredUnitCost)&&enteredUnitCost>=0&&enteredUnitCost!==unitCost)tx.actualPaid=enteredUnitCost;}state.transactions.push(tx);"
+          if oldpush not in s: raise SystemExit('chat purchase push anchor missing')
+          s=s.replace(oldpush,newpush,1);p.write_text(s)
+
+          p=Path('js/app.js');s=p.read_text()
+          old="function saleCostStatusText(x){if(x?._kind!=='売却')return'';if(x.acquisitionCost==null)return'原価未確定（損益・回収率から除外）';const cost=Number(x.acquisitionCost)||0,profit=saleRevenue(x)-cost;return`原価 ${yen.format(cost)} · 損益 ${profit>=0?'+':''}${yen.format(profit)}`}"
+          new="function saleCostStatusText(x){if(x?._kind!=='売却')return'';if(x.acquisitionCost==null)return'原価未確定（損益・回収率から除外）';const cost=Number(x.acquisitionCost)||0,profit=saleRevenue(x)-cost,basis=x.acquisitionCostBasis==='希望小売価格'?'原価（定価）':'原価';return`${basis} ${yen.format(cost)} · 損益 ${profit>=0?'+':''}${yen.format(profit)}`}"
+          if old not in s: raise SystemExit('sale cost label anchor missing')
+          s=s.replace(old,new,1);p.write_text(s)
+
+          p=Path('.github/workflows/apps-script-deploy.yml');s=p.read_text()
+          s=s.replace("          cp automation/V2Automation.gs .apps-script-automation/V2Automation.js\n","          cp automation/V2Automation.gs .apps-script-automation/V2Automation.js\n          cp automation/RetailPricePolicy.gs .apps-script-automation/RetailPricePolicy.js\n",1)
+          s=s.replace("          cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js\n","          cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js\n          cmp -s automation/RetailPricePolicy.gs .apps-script-automation/RetailPricePolicy.js\n",1);p.write_text(s)
+
+          p=Path('package.json');s=p.read_text();s=s.replace("node --check v2/core.js &&","node --check v2/retail-price.js && node --check v2/core.js &&",1);p.write_text(s)
+          p=Path('sw.js');s=p.read_text().replace("const CACHE='toreca-vault-v62';","const CACHE='toreca-vault-v63';",1);p.write_text(s)
+
+          test = r'''import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {retailPriceInfo} from '../v2/retail-price.js';
+import {v2EntryPayload} from '../v2/ui-entry.js';
+
+test('official MSRP catalog resolves current sealed products',()=>{
+ assert.equal(retailPriceInfo('ストームエメラルダ','BOX').price,6000);
+ assert.equal(retailPriceInfo('インフェルノX','BOX').price,5400);
+ assert.equal(retailPriceInfo('30th CELEBRATION','BOX').price,7200);
+ assert.equal(retailPriceInfo('30th CELEBRATION カードセット（9種セット）','BOX').price,10800);
+ assert.equal(retailPriceInfo('30th CELEBRATION FUTURISTIC BOX','BOX').price,27500);
+ assert.equal(retailPriceInfo('ドラゴンボール BRIGHTNESS OF HOPE','BOX').price,5760);
+});
+
+test('manual sealed purchase accounting ignores discounted entered price',()=>{
+ const x=v2EntryPayload('purchases',{product:'ストームエメラルダ',category:'BOX',condition:'あり',inventoryAction:'在庫へ追加',quantity:1,price:5100});
+ assert.equal(x.price,6000);assert.equal(x.total,6000);assert.equal(x.actualPaid,5100);assert.equal(x.priceBasis,'希望小売価格');
+});
+
+test('single card purchase keeps actual entered price',()=>{
+ const x=v2EntryPayload('purchases',{product:'ニンフィアV',category:'カード',condition:'美品',inventoryAction:'在庫へ追加',quantity:1,price:8000});
+ assert.equal(Number(x.price),8000);assert.equal(x.priceBasis,undefined);
+});
+
+test('unknown sealed product fails closed instead of using discount price',()=>{
+ assert.throws(()=>v2EntryPayload('purchases',{product:'未登録BOX',category:'BOX',condition:'あり',inventoryAction:'在庫へ追加',quantity:1,price:1}),/定価未登録/);
+});
+
+test('Apps Script has canonical MSRP backfill and sale cost basis',()=>{
+ const source=fs.readFileSync(new URL('../automation/RetailPricePolicy.gs',import.meta.url),'utf8');
+ const auto=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
+ assert.match(source,/TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v1'/);
+ assert.match(source,/acquisitionCostBasis='希望小売価格'/);
+ assert.match(auto,/tv2EnforceRetailPricePolicy_/);
+ assert.match(auto,/定価未登録の商品です/);
+});
+'''
+          Path('test/retail-price-policy.test.js').write_text(test)
+          PY
+      - name: Test
+        run: |
+          npm test
+          npm run check
+      - name: Commit policy
+        run: |
+          git config user.name 'manato-maker'
+          git config user.email 'manato.pt@gmail.com'
+          git add v2/retail-price.js v2/ui-entry.js v2/lottery-write.js automation/RetailPricePolicy.gs automation/V2Automation.gs .github/workflows/apps-script-deploy.yml js/app.js package.json sw.js test/retail-price-policy.test.js
+          git commit -m 'Use fixed MSRP for non-single purchases and cost basis'
+          git push origin main
