@@ -10,7 +10,6 @@ on:
       - 'automation/**'
       - '.github/workflows/apps-script-deploy.yml'
 jobs:
-  # V2-only authenticated cutover
   test:
     runs-on: ubuntu-latest
     steps:
@@ -43,6 +42,7 @@ jobs:
           cp automation/appsscript.json .apps-script-automation/appsscript.json
           cp automation/Code.gs .apps-script-automation/Code.js
           cp automation/V2Automation.gs .apps-script-automation/V2Automation.js
+          cp automation/RetailPricePolicy.gs .apps-script-automation/RetailPricePolicy.js
       - name: Push canonical source
         run: npx clasp push --force
       - name: Verify remote source
@@ -53,3 +53,4 @@ jobs:
           cmp -s automation/appsscript.json .apps-script-automation/appsscript.json
           cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
+          cmp -s automation/RetailPricePolicy.gs .apps-script-automation/RetailPricePolicy.js
