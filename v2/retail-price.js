@@ -7,7 +7,6 @@ const CATALOG=[
  {test:/30th celebration.*カードセット/,fixed:1200,source:'ポケモンカード公式 30周年商品',url:'https://www.30th.pokemon-card.com/product/cardset'},
  {test:/スペシャルbox ポケモンセンター(?:トウホク|フクオカ|ヒロシマ)/,fixed:2090,source:'ポケモンカード公式 商品情報',url:'https://www.pokemon-card.com/info/005053.html'},
  {test:/スタートデッキ100.*バトルコレクション|mega スタートデッキ100/,fixed:891,source:'ポケモンカード公式 商品情報',url:'https://www.pokemon-card.com/ex/mc/index.html'},
- {test:/マクドナルド.*プロモカードパック/,fixed:0,source:'非売品プロモ（購入原価0円）',url:''},
  {test:/30th celebration/,pack:360,box:7200,source:'ポケモンカード公式 30周年商品',url:'https://www.30th.pokemon-card.com/product/m6a'},
  {test:/ストームエメラルダ/,pack:200,box:6000,source:'ポケモンカード公式',url:'https://www.pokemon-card.com/ex/m6/'},
  {test:/アビスアイ/,pack:200,box:6000,source:'ポケモンカード公式',url:'https://www.pokemon-card.com/ex/m5/'},
