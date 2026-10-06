@@ -1,6 +1,6 @@
 // Fixed MSRP accounting for all non-single purchases; actual paid amount is retained separately.
-// v3 also processes idempotent pack-opening commands before the generic Gmail command router.
-const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v3-pack-open';
+// v2 also processes idempotent pack-opening commands before the generic Gmail command router.
+const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v2';
 const TV2_RETAIL_PRICE_CATALOG=[
  {test:/30th celebration.*カードセット.*9種|カードセット.*9種/i,fixed:10800,source:'ポケモンカード公式 30周年商品（9種セット）'},
  {test:/30th celebration.*futuristic box|futuristic box/i,fixed:27500,source:'ポケモンカード公式 30周年商品'},
