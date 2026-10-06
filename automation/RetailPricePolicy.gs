@@ -1,6 +1,6 @@
 // Fixed MSRP accounting for all non-single purchases; actual paid amount is retained separately.
-// v2 expands official-price coverage for legacy sealed-product names and bundles.
-const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v2';
+// v3 also processes idempotent pack-opening commands before the generic Gmail command router.
+const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v3-pack-open';
 const TV2_RETAIL_PRICE_CATALOG=[
  {test:/30th celebration.*カードセット.*9種|カードセット.*9種/i,fixed:10800,source:'ポケモンカード公式 30周年商品（9種セット）'},
  {test:/30th celebration.*futuristic box|futuristic box/i,fixed:27500,source:'ポケモンカード公式 30周年商品'},
@@ -30,7 +30,47 @@ function tv2RetailPriceInfo_(product,category,quantity){
  }
  return Number.isFinite(price)?{price,source:hit.source,basis:'希望小売価格'}:null;
 }
+function tv2PackOpenNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　「」『』()（）\-‐‑‒–—―・]/g,'')}
+function tv2ProcessPackOpeningDrafts_(){
+ const subject='[Toreca Vault Command]',results=[];
+ const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ drafts.forEach(draft=>{
+  try{
+   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   if(String(command&&command.type||'')!=='open-packs')return;
+   const requestId=String(command.requestId||'').trim(),product=String(command.product||'').trim(),store=String(command.store||'').trim(),date=String(command.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim(),quantity=Number(command.quantity),memo=String(command.memo||'パック開封｜シングル登録なし').trim();
+   if(!requestId||!product||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0)throw new Error('パック開封コマンドが不正です');
+   const sourceIds=(Array.isArray(command.sourcePurchaseRequestIds)?command.sourcePurchaseRequestIds:[command.sourcePurchaseRequestId]).filter(Boolean).map(String);
+   const result=tv2Mutate_('chat-open-packs',state=>{
+    state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+    const openingId='chat-opening-'+requestId,existing=state.transactions.filter(t=>String(t.id||'')===openingId);
+    if(existing.length===1)return{changed:false,duplicate:true,openingId};
+    if(existing.length>1)throw new Error('同一パック開封IDが重複しています');
+    const wanted=tv2PackOpenNormalize_(product),wantedStore=tv2PackOpenNormalize_(store);
+    let lots=state.inventoryLots.filter(l=>{
+     if(String(l.category||'')!=='パック'||Number(l.quantity)<=0)return false;
+     if(String(l.acquiredAt||'')!==date)return false;
+     const name=tv2PackOpenNormalize_(l.productKey||l.product),shop=tv2PackOpenNormalize_(l.store||'');
+     if(!(name===wanted||name.includes(wanted)||wanted.includes(name)))return false;
+     return !wantedStore||shop===wantedStore;
+    });
+    if(sourceIds.length){const preferred=lots.filter(l=>sourceIds.includes(String(l.requestId||'')));if(preferred.length)lots=preferred}
+    if(lots.length!==1)throw new Error(lots.length?'開封対象パック在庫が複数あるため特定できません':'V2正本に開封対象パック在庫がありません');
+    const lot=lots[0];if(Number(lot.quantity)<quantity)throw new Error('開封数がV2正本のパック在庫を超えています');
+    const info=tv2RetailPriceInfo_(product,'パック',quantity),unit=info?info.price:Number(lot.unitCost),cost=Number.isFinite(unit)?unit*quantity:null;
+    lot.quantity=Number(lot.quantity)-quantity;state.inventoryLots=state.inventoryLots.filter(l=>Number(l.quantity)>0);
+    const tx={id:openingId,type:'opening',product,productKey:product,category:'パック',condition:'開封済み',quantity,price:0,total:0,date,store:String(lot.store||store),source:'chat',requestId,memo,acquisitionCost:cost};
+    if(info){tx.acquisitionCostBasis='希望小売価格';tx.retailPriceSource=info.source}
+    state.transactions.push(tx);
+    return{changed:true,duplicate:false,openingId,quantity,acquisitionCost:cost};
+   });
+   draft.deleteDraft();results.push({ok:true,requestId,result});
+  }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
+ });
+ return results;
+}
 function tv2EnforceRetailPricePolicy_(){
+ const packOpenings=tv2ProcessPackOpeningDrafts_();
  const result=tv2Mutate_('retail-price-policy',state=>{
   const health=tv2Health_(state),beforeVersion=String(health.retailPricePolicyVersion||''),beforeReview=JSON.stringify(health.retailPriceNeedsReview||[]),changes=[],review=new Set();
   state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
@@ -58,6 +98,7 @@ function tv2EnforceRetailPricePolicy_(){
   const changed=changes.length>0||beforeVersion!==TV2_RETAIL_PRICE_POLICY_VERSION||beforeReview!==JSON.stringify(reviews);
   return{changed,changes,review:reviews,policy:TV2_RETAIL_PRICE_POLICY_VERSION};
  });
+ if(result&&typeof result==='object')result.packOpenings=packOpenings;
  if(result&&result.changed&&!result.unchanged){
   const subject='[Toreca Vault MSRP Policy Result] '+TV2_RETAIL_PRICE_POLICY_VERSION,to=Session.getEffectiveUser().getEmail();
   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
