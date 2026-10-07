@@ -1,5 +1,5 @@
 // Fixed MSRP accounting for all non-single purchases; actual paid amount is retained separately.
-// v2 also processes idempotent pack-opening commands before the generic Gmail command router.
+// v2 also processes idempotent pack-opening and exact lottery-result commands before the generic Gmail command router.
 const TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v2';
 const TV2_RETAIL_PRICE_CATALOG=[
  {test:/30th celebration.*カードセット.*9種|カードセット.*9種/i,fixed:10800,source:'ポケモンカード公式 30周年商品（9種セット）'},
@@ -69,7 +69,49 @@ function tv2ProcessPackOpeningDrafts_(){
  });
  return results;
 }
+function tv2LotteryExactNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　「」『』()（）\[\]【】<>＜＞\-‐‑‒–—―・･:：]/g,'')}
+function tv2ProcessExactLotteryResultDrafts_(){
+ const subject='[Toreca Vault Command]',results=[];
+ const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ drafts.forEach(draft=>{
+  try{
+   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   if(String(command&&command.type||'')!=='lottery-result-exact')return;
+   const requestId=String(command.requestId||'').trim(),title=String(command.title||command.product||'').trim(),store=String(command.store||'').trim(),owner=String(command.owner||'').trim(),status=String(command.status||'').trim(),resultDate=String(command.resultDate||'').trim(),memo=String(command.memo||'').trim();
+   if(!requestId||!title||!store||!['当選','落選'].includes(status)||!/^\d{4}-\d{2}-\d{2}$/.test(resultDate))throw new Error('抽選結果exactコマンドが不正です');
+   const wantedTitle=tv2LotteryExactNormalize_(title),wantedStore=tv2LotteryExactNormalize_(store),wantedOwner=tv2LotteryExactNormalize_(owner);
+   const result=tv2Mutate_('chat-lottery-result-exact',state=>{
+    state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+    const matches=state.lotteries.filter(item=>{
+     const itemTitle=tv2LotteryExactNormalize_(item.title||''),itemStore=tv2LotteryExactNormalize_(item.store||''),itemOwner=tv2LotteryExactNormalize_(item.owner||'');
+     const titleMatch=itemTitle===wantedTitle||itemTitle.includes(wantedTitle)||wantedTitle.includes(itemTitle);
+     const storeMatch=itemStore===wantedStore||itemStore.includes(wantedStore)||wantedStore.includes(itemStore);
+     const dateMatch=String(item.resultDate||'').slice(0,10)===resultDate;
+     const ownerMatch=!wantedOwner||!itemOwner||itemOwner===wantedOwner;
+     return titleMatch&&storeMatch&&dateMatch&&ownerMatch;
+    });
+    if(matches.length!==1)throw new Error(matches.length?'抽選結果exact対象が複数一致しました':'抽選結果exact対象が見つかりません');
+    const item=matches[0];
+    if(status==='落選'&&(item.status==='購入済'||item.receiptStatus==='受取済み'))throw new Error('購入済み/受取済み抽選を落選へ変更できません');
+    const before=JSON.stringify(item),now=new Date().toISOString();
+    item.status=status;item.resultDate=resultDate;
+    if(status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
+    if(status==='当選'&&!['未受取','受取済み'].includes(String(item.receiptStatus||'')))item.receiptStatus='未受取';
+    if(memo&&!String(item.memo||'').includes(memo))item.memo=[String(item.memo||'').trim(),memo].filter(Boolean).join('｜');
+    item.updatedAt=now;
+    return{changed:JSON.stringify(item)!==before,lotteryId:String(item.id||''),status:item.status,resultDate:item.resultDate,title:item.title,store:item.store};
+   });
+   draft.deleteDraft();
+   const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());
+   if(to)GmailApp.createDraft(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
+   results.push({ok:true,requestId,result});
+  }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
+ });
+ return results;
+}
 function tv2EnforceRetailPricePolicy_(){
+ const lotteryResults=tv2ProcessExactLotteryResultDrafts_();
  const packOpenings=tv2ProcessPackOpeningDrafts_();
  const result=tv2Mutate_('retail-price-policy',state=>{
   const health=tv2Health_(state),beforeVersion=String(health.retailPricePolicyVersion||''),beforeReview=JSON.stringify(health.retailPriceNeedsReview||[]),changes=[],review=new Set();
@@ -98,7 +140,7 @@ function tv2EnforceRetailPricePolicy_(){
   const changed=changes.length>0||beforeVersion!==TV2_RETAIL_PRICE_POLICY_VERSION||beforeReview!==JSON.stringify(reviews);
   return{changed,changes,review:reviews,policy:TV2_RETAIL_PRICE_POLICY_VERSION};
  });
- if(result&&typeof result==='object')result.packOpenings=packOpenings;
+ if(result&&typeof result==='object'){result.lotteryResults=lotteryResults;result.packOpenings=packOpenings}
  if(result&&result.changed&&!result.unchanged){
   const subject='[Toreca Vault MSRP Policy Result] '+TV2_RETAIL_PRICE_POLICY_VERSION,to=Session.getEffectiveUser().getEmail();
   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
