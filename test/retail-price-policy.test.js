@@ -32,8 +32,11 @@ test('unknown sealed product fails closed instead of using discount price',()=>{
  assert.throws(()=>v2EntryPayload('purchases',{product:'未登録BOX',category:'BOX',condition:'あり',inventoryAction:'在庫へ追加',quantity:1,price:1}),/定価未登録/);
 });
 
-test('Apps Script has canonical MSRP backfill and sale cost basis',()=>{
+test('Apps Script has canonical MSRP backfill, sale cost basis, and exact lottery patching',()=>{
  const source=fs.readFileSync(new URL('../automation/RetailPricePolicy.gs',import.meta.url),'utf8');
  assert.match(source,/TV2_RETAIL_PRICE_POLICY_VERSION='msrp-non-single-v2'/);
  assert.match(source,/acquisitionCostBasis='希望小売価格'/);
+ assert.match(source,/lottery-patch-exact/);
+ assert.match(source,/tv2ProcessExactLotteryPatchDrafts_/);
+ assert.match(source,/matches\.length!==1/);
 });
