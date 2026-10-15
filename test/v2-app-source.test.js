@@ -31,7 +31,13 @@ test('receipt submit shows immediate progress and is single-flight',()=>{
   assert.match(source,/finally\{receiptSubmitting=false;/);
 });
 
-test('calendar prefers result date and falls back to application deadline only when result date is missing',()=>{
-  assert.match(source,/if\(resultDate\)add\(resultDate,x,'結果','result'\);else if\(deadline\)add\(deadline,x,'応募締切（結果日未設定）','deadline'\)/);
+test('calendar prefers result scheduling and falls back to application deadline only when result scheduling is missing',()=>{
+  if(/calendarResultDates_/.test(source)){
+    assert.match(source,/const resultDates=calendarResultDates_\(x\)/);
+    assert.match(source,/if\(resultDates\.length\).*else if\(deadline\)add\(deadline,x,'応募締切（結果日未設定）','deadline'\)/);
+    assert.match(source,/calendarReceiptVisible_\(x\)/);
+  }else{
+    assert.match(source,/if\(resultDate\)add\(resultDate,x,'結果','result'\);else if\(deadline\)add\(deadline,x,'応募締切（結果日未設定）','deadline'\)/);
+  }
   assert.doesNotMatch(source,/add\(\(x\.deadline\|\|''\)\.slice\(0,10\),x,'応募締切','deadline'\);add\(x\.resultDate,x,'結果','result'\)/);
 });
