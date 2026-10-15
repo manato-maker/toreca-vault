@@ -1,0 +1,82 @@
+from pathlib import Path
+
+p = Path('automation/RetailPricePolicy.gs')
+s = p.read_text()
+
+anchor = "function tv2LotteryExactNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\\s　「」『』()（）\\[\\]【】<>＜＞\\-‐‑‒–—―・･:：]/g,'')}\n"
+insert = anchor + """function tv2LotteryStoreNormalize_(value){
+ const n=tv2LotteryExactNormalize_(value),k=tv2LotteryExactNormalize_('橿原');
+ if(n.includes(k)&&(n.includes(tv2LotteryExactNormalize_('トレカキャピタル'))||n.includes(tv2LotteryExactNormalize_('エディオン'))))return'edion-kashihara-toreca-capital';
+ return n;
+}
+"""
+if 'function tv2LotteryStoreNormalize_' not in s:
+    if s.count(anchor) != 1:
+        raise SystemExit('store-normalize anchor mismatch')
+    s = s.replace(anchor, insert, 1)
+
+old = "const n=tv2LotteryExactNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);"
+new = "const n=tv2LotteryExactNormalize_,sn=tv2LotteryStoreNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);"
+if old in s:
+    s = s.replace(old, new, 1)
+
+old2 = "const edionMatch=item=>n(item&&item.store||'').includes(n('エディオン'));\n   const kashiharaMatch=item=>n(item&&item.store||'').includes(n('橿原'));"
+new2 = "const aliasKey=sn('トレカ・キャピタル エディオンイオンモール橿原店');\n   const edionMatch=item=>sn(item&&item.store||'')===aliasKey;\n   const kashiharaMatch=edionMatch;"
+if old2 in s:
+    s = s.replace(old2, new2, 1)
+
+s = s.replace("wantedStore=tv2LotteryExactNormalize_(store)", "wantedStore=tv2LotteryStoreNormalize_(store)")
+s = s.replace("itemStore=tv2LotteryExactNormalize_(item.store||'')", "itemStore=tv2LotteryStoreNormalize_(item.store||'')")
+
+helper = """function tv2RepairEdionKashiharaAlias20261015_(){
+ const canonicalStore='トレカ・キャピタル エディオンイオンモール橿原店',newId='lottery-edion-kashihara-20261015-9541242',resultDate='2026-10-15';
+ const n=tv2LotteryExactNormalize_,sn=tv2LotteryStoreNormalize_,aliasKey=sn(canonicalStore);
+ const isProduct=x=>{const t=n(x&&x.title||'');return t.includes(n('30th CELEBRATION'))&&(t.includes(n('カードセット'))||t.includes(n('9種')))};
+ const ownerOk=x=>{const o=n(x&&x.owner||'');return !/嫁|妻/.test(String(x&&x.owner||''))&&!/嫁分|妻分|奥さん/.test(String(x&&x.memo||''))&&(!o||o===n('本人')||o===n('本人分'))};
+ const dateOk=x=>{const d=String(x&&x.resultDate||'').slice(0,10);return !d||d===resultDate};
+ const mutation=tv2Mutate_('edion-kashihara-store-alias-20261015',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  const current=state.lotteries.filter(x=>String(x.id||'')===newId);
+  if(current.length!==1)return{changed:false,review:true,reason:'10/15エディオン当選レコードを一意に確認できません',count:current.length};
+  const created=current[0],others=state.lotteries.filter(x=>x!==created&&sn(x.store||'')===aliasKey&&isProduct(x)&&ownerOk(x)&&dateOk(x));
+  if(others.length>1)return{changed:false,review:true,reason:'同一店舗aliasの既存候補が複数あるため自動統合停止',candidateIds:others.map(x=>String(x.id||''))};
+  let keep=created,removedId='';
+  if(others.length===1){
+   keep=others[0];removedId=String(created.id||'');
+   for(const k of ['applicationDate','deadline','gmailMessageId','createdAt'])if(!keep[k]&&created[k])keep[k]=created[k];
+   const mem=[String(keep.memo||''),String(created.memo||'')].join('｜').split('｜').map(x=>x.trim()).filter(Boolean),seen=[];
+   mem.forEach(x=>{if(!seen.includes(x))seen.push(x)});keep.memo=seen.join('｜');
+   state.lotteries=state.lotteries.filter(x=>x!==created);
+  }
+  const before=JSON.stringify(keep);
+  keep.title='ポケモンカードゲーム MEGA 30th CELEBRATION カードセット（9種）';
+  keep.store=canonicalStore;keep.owner='本人';keep.resultDate=resultDate;keep.receiveDeadline='2026-10-19';
+  if(keep.status==='購入済'||keep.receiptStatus==='受取済み'){keep.status='購入済';keep.receiptStatus='受取済み'}else{keep.status='当選';keep.receiptStatus='未受取'}
+  const parts=['当選数量 2セット','照合ID 9541242'],memo=String(keep.memo||'').split('｜').map(x=>x.trim()).filter(Boolean);
+  parts.forEach(x=>{if(!memo.includes(x))memo.push(x)});keep.memo=memo.join('｜');keep.updatedAt=new Date().toISOString();
+  state.automation.edionKashiharaStoreAlias='2026-10-15-v1';
+  return{changed:Boolean(removedId)||JSON.stringify(keep)!==before,review:false,keptId:String(keep.id||''),removedId,store:keep.store,status:keep.status,resultDate:keep.resultDate,receiveDeadline:keep.receiveDeadline};
+ });
+ const check=tv2Load_(),state=check.payload||{},matches=(state.lotteries||[]).filter(x=>tv2LotteryStoreNormalize_(x.store||'')===aliasKey&&isProduct(x)&&ownerOk(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
+ const verified=!mutation.review&&matches.length===1&&['当選','購入済'].includes(String(matches[0].status||''))&&String(matches[0].receiveDeadline||'').slice(0,10)==='2026-10-19';
+ if(verified&&typeof GmailApp!=='undefined'){
+  const requestId='20261015-edion-kashihara-store-alias-repair',subject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail(),body=JSON.stringify({ok:true,requestId,revision:Number(check.revision),mutation,lottery:{id:matches[0].id,title:matches[0].title,store:matches[0].store,owner:matches[0].owner,status:matches[0].status,resultDate:matches[0].resultDate,receiveDeadline:matches[0].receiveDeadline,memo:matches[0].memo}},null,2);
+  GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+  if(to)GmailApp.createDraft(to,subject,body);
+ }
+ return{ok:verified,revision:Number(check.revision),mutation,matches:matches.map(x=>({id:x.id,store:x.store,status:x.status,resultDate:x.resultDate,receiveDeadline:x.receiveDeadline}))};
+}
+"""
+
+enforcer = "function tv2EnforceRetailPricePolicy_(){\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();"
+if 'function tv2RepairEdionKashiharaAlias20261015_' not in s:
+    if s.count(enforcer) != 1:
+        raise SystemExit('enforcer anchor mismatch')
+    s = s.replace(enforcer, helper + "\nfunction tv2EnforceRetailPricePolicy_(){\n const edionAliasRepair=tv2RepairEdionKashiharaAlias20261015_();\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();", 1)
+
+result_anchor = "if(result&&typeof result==='object'){result.edionConfirmed=edionConfirmed;"
+if result_anchor in s and 'result.edionAliasRepair=edionAliasRepair;' not in s:
+    s = s.replace(result_anchor, "if(result&&typeof result==='object'){result.edionAliasRepair=edionAliasRepair;result.edionConfirmed=edionConfirmed;", 1)
+
+p.write_text(s)
