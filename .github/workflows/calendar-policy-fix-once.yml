@@ -1,0 +1,132 @@
+name: Apply calendar policy fix once
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/calendar-policy-fix-once.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Patch calendar policy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path=Path('js/app.js')
+          s=path.read_text()
+
+          old="const receiptStatus=x=>x.receiptStatus==='要確認'?'未受取':x.receiptStatus||(x.status==='購入済'?'受取済み':x.status==='当選'?'未受取':'対象外');"
+          new=r'''const receiptStatus=x=>x.receiptStatus==='要確認'?'未受取':x.receiptStatus||(x.status==='購入済'?'受取済み':x.status==='当選'?'未受取':'対象外');
+          const calendarIsoDate_=value=>{const s=String(value||'').slice(0,10);return /^20\d{2}-\d{2}-\d{2}$/.test(s)?s:''};
+          function calendarResultDates_(item){
+           const status=String(item?.status||''),primary=calendarIsoDate_(item?.resultDate);
+           if(primary&&['当選','落選','購入済'].includes(status))return[primary];
+           const dates=[];
+           if(Array.isArray(item?.resultDates))for(const value of item.resultDates){const d=calendarIsoDate_(value);if(d)dates.push(d)}
+           if(primary)dates.push(primary);
+           if(!dates.length){
+            const memo=String(item?.memo||'').normalize('NFKC'),sections=memo.match(/(?:当選発表|結果発表|発表予定)[^。\n]{0,180}/g)||[],fallbackYear=String(item?.applicationDate||item?.deadline||today()).slice(0,4);
+            for(const section of sections)for(const m of section.matchAll(/(?:(20\d{2})[\/-])?(\d{1,2})[\/-](\d{1,2})/g)){
+             const y=m[1]||fallbackYear,mo=String(Number(m[2])).padStart(2,'0'),day=String(Number(m[3])).padStart(2,'0'),d=`${y}-${mo}-${day}`;
+             if(/^20\d{2}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(d))dates.push(d);
+            }
+           }
+           return[...new Set(dates)].sort();
+          }
+          const calendarResultFinal_=(item,date)=>{const dates=calendarResultDates_(item);return !dates.length||dates[dates.length-1]===date};
+          const calendarReceiptVisible_=item=>Boolean(item?.receiveDeadline)&&String(item?.status||'')!=='落選'&&receiptStatus(item)!=='対象外';
+          function calendarNeedsReview_(item){
+           const status=String(item?.status||'');if(['当選','落選','購入済'].includes(status))return false;
+           if(calendarResultDates_(item).length)return false;
+           const memo=String(item?.memo||'').normalize('NFKC');
+           return !item?.deadline||/(?:当選発表|結果発表|発表予定)/.test(memo);
+          }'''
+          if s.count(old)!=1: raise SystemExit('receiptStatus anchor mismatch')
+          s=s.replace(old,new)
+
+          old=" const events=new Map();const add=(date,item,label,kind)=>{if(!date||date.slice(0,7)!==calendarMonth)return;const key=date.slice(0,10);if(!events.has(key))events.set(key,[]);events.get(key).push({item,label,kind})};"
+          new=" const events=new Map();const add=(date,item,label,kind,meta={})=>{if(!date||date.slice(0,7)!==calendarMonth)return;const key=date.slice(0,10);if(!events.has(key))events.set(key,[]);events.get(key).push({item,label,kind,date:key,...meta})};"
+          if s.count(old)!=1: raise SystemExit('calendar add anchor mismatch')
+          s=s.replace(old,new)
+
+          old=" for(const x of state.lotteries){const resultDate=(x.resultDate||'').slice(0,10),deadline=(x.deadline||'').slice(0,10);if(resultDate)add(resultDate,x,'結果','result');else if(deadline)add(deadline,x,'応募締切（結果日未設定）','deadline');add(x.receiveDeadline,x,'購入期限','receipt')}"
+          new=" for(const x of state.lotteries){const resultDates=calendarResultDates_(x),deadline=(x.deadline||'').slice(0,10);if(resultDates.length)resultDates.forEach((date,index)=>add(date,x,resultDates.length>1?`結果 ${index+1}/${resultDates.length}`:'結果','result',{resultDate:date,finalResult:index===resultDates.length-1}));else if(deadline)add(deadline,x,'応募締切（結果日未設定）','deadline');if(calendarReceiptVisible_(x))add(x.receiveDeadline,x,'購入期限','receipt')}"
+          if s.count(old)!=1: raise SystemExit('calendar event loop anchor mismatch')
+          s=s.replace(old,new)
+
+          old=" const pending=state.lotteries.filter(x=>receiptStatus(x)==='未受取'),review=[];"
+          new=" const pending=state.lotteries.filter(x=>receiptStatus(x)==='未受取'),review=state.lotteries.filter(calendarNeedsReview_);"
+          if s.count(old)!=1: raise SystemExit('review anchor mismatch')
+          s=s.replace(old,new)
+
+          old=" const selected=events.get(selectedCalendarDate)||[],selectedResults=selected.filter(x=>x.kind==='result');const details=selected.length?selected.map(({item,label,kind})=>{"
+          new=" const selected=events.get(selectedCalendarDate)||[],selectedResults=selected.filter(x=>x.kind==='result'),selectedFinalResults=selectedResults.filter(x=>x.finalResult!==false);const details=selected.length?selected.map(({item,label,kind,resultDate:scheduledResultDate,finalResult})=>{"
+          if s.count(old)!=1: raise SystemExit('selected event anchor mismatch')
+          s=s.replace(old,new)
+
+          old="const controls=lotteryWriteReady()&&kind==='result'&&status!=='購入済'?`<div class=\"result-controls\"><button data-lottery-status=\"当選\" data-lottery-id=\"${esc(item.id)}\">当選</button><button data-lottery-status=\"落選\" data-lottery-id=\"${esc(item.id)}\">落選</button></div>`:'';"
+          new="const controls=lotteryWriteReady()&&kind==='result'&&status!=='購入済'?`<div class=\"result-controls\"><button data-lottery-status=\"当選\" data-lottery-id=\"${esc(item.id)}\" data-lottery-result-date=\"${esc(scheduledResultDate||'')}\">当選</button>${finalResult===false?'':`<button data-lottery-status=\"落選\" data-lottery-id=\"${esc(item.id)}\" data-lottery-result-date=\"${esc(scheduledResultDate||'')}\">落選</button>`}</div>`:'';"
+          if s.count(old)!=1: raise SystemExit('result controls anchor mismatch')
+          s=s.replace(old,new)
+
+          old="<div><dt>結果発表</dt><dd>${esc(item.resultDate||'未設定')}</dd></div><div><dt>購入期限</dt><dd>${esc(item.receiveDeadline||'未設定')}</dd></div>"
+          new="<div><dt>結果発表</dt><dd>${esc(calendarResultDates_(item).join(' / ')||item.resultDate||'未設定')}</dd></div><div><dt>購入期限</dt><dd>${esc(status==='落選'?'対象外':(item.receiveDeadline||'未設定'))}</dd></div>"
+          if s.count(old)!=1: raise SystemExit('selected details date anchor mismatch')
+          s=s.replace(old,new)
+
+          s=s.replace("<div><dt>結果発表</dt><dd>${esc(item.resultDate||'未設定')}</dd></div><div><dt>購入期限</dt><dd>${esc(item.receiveDeadline||item.purchaseDeadline||'未設定')}</dd></div>","<div><dt>結果発表</dt><dd>${esc(calendarResultDates_(item).join(' / ')||item.resultDate||'未設定')}</dd></div><div><dt>購入期限</dt><dd>${esc(item.receiveDeadline||item.purchaseDeadline||'未設定')}</dd></div>")
+
+          review_button="${item.memo?`<p>${esc(item.memo)}</p>`:''}</div><button class=\"receipt-button\" data-received-id=\"${esc(item.id)}\">📷 写真・受取登録</button></article>"
+          if s.count(review_button)<2: raise SystemExit('review receipt button anchor mismatch')
+          s=s.replace(review_button,"${item.memo?`<p>${esc(item.memo)}</p>`:''}</div></article>",1)
+
+          old="${lotteryWriteReady()&&selectedResults.length?`<button class=\"secondary-button compact\" data-lottery-bulk-loss=\"${esc(selectedCalendarDate)}\">この日の結果を全て落選</button>`:''}"
+          new="${lotteryWriteReady()&&selectedFinalResults.length?`<button class=\"secondary-button compact\" data-lottery-bulk-loss=\"${esc(selectedCalendarDate)}\">この日の最終結果を全て落選</button>`:''}"
+          if s.count(old)!=1: raise SystemExit('bulk button anchor mismatch')
+          s=s.replace(old,new)
+
+          old="await applyLotteryManualPatches([{id:item.id,status}],`${status}に変更しました`)"
+          new="const patch={id:item.id,status},scheduledResultDate=String(result.dataset.lotteryResultDate||'');if(scheduledResultDate)patch.resultDate=scheduledResultDate;await applyLotteryManualPatches([patch],`${status}に変更しました`)"
+          if s.count(old)!=1: raise SystemExit('manual result patch anchor mismatch')
+          s=s.replace(old,new)
+
+          old="targets=state.lotteries.filter(x=>String(x.resultDate||'').slice(0,10)===date&&x.status!=='購入済'&&receiptStatus(x)!=='受取済み')"
+          new="targets=state.lotteries.filter(x=>calendarResultDates_(x).includes(date)&&calendarResultFinal_(x,date)&&x.status!=='購入済'&&receiptStatus(x)!=='受取済み')"
+          if s.count(old)!=1: raise SystemExit('bulk target anchor mismatch')
+          s=s.replace(old,new)
+
+          old="targets.map(x=>({id:x.id,status:'落選'}))"
+          new="targets.map(x=>({id:x.id,status:'落選',resultDate:date}))"
+          if s.count(old)!=1: raise SystemExit('bulk patch anchor mismatch')
+          s=s.replace(old,new)
+
+          path.write_text(s)
+
+          sw=Path('sw.js')
+          w=sw.read_text()
+          if "const CACHE='toreca-vault-v63';" not in w: raise SystemExit('service worker cache anchor mismatch')
+          sw.write_text(w.replace("const CACHE='toreca-vault-v63';","const CACHE='toreca-vault-v64';",1)+"\n// 2026-10-15 calendar multi-wave/result integrity fix\n")
+
+          test=Path('test/calendar-policy-source.test.js')
+          test.write_text("""import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\n\nconst source=fs.readFileSync(new URL('../js/app.js',import.meta.url),'utf8');\n\ntest('calendar supports multiple result waves and hides invalid purchase deadlines',()=>{\n assert.match(source,/calendarResultDates_/);\n assert.match(source,/resultDates\.forEach/);\n assert.match(source,/calendarReceiptVisible_/);\n assert.match(source,/status==='落選'/);\n assert.match(source,/finalResult===false/);\n assert.match(source,/calendarNeedsReview_/);\n});\n""")
+          PY
+      - run: npm test
+      - run: npm run check
+      - name: Remove one-time workflow
+        run: rm .github/workflows/calendar-policy-fix-once.yml
+      - name: Commit fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add js/app.js sw.js test/calendar-policy-source.test.js .github/workflows/calendar-policy-fix-once.yml
+          git commit -m "Fix lottery calendar result scheduling"
+          git push origin HEAD:main
