@@ -89,7 +89,7 @@ function tv2ProcessExactLotteryPatchDrafts_(){
      const itemTitle=tv2LotteryExactNormalize_(item.title||''),itemStore=tv2LotteryExactNormalize_(item.store||''),itemOwner=tv2LotteryExactNormalize_(item.owner||'');
      const titleMatch=itemTitle===wantedTitle||itemTitle.includes(wantedTitle)||wantedTitle.includes(itemTitle);
      const storeMatch=itemStore===wantedStore||itemStore.includes(wantedStore)||wantedStore.includes(itemStore);
-     const dateMatch=String(item.resultDate||'').slice(0,10)===resultDate;
+     const existingResultDate=String(item.resultDate||'').slice(0,10),dateMatch=!existingResultDate||existingResultDate===resultDate;
      const ownerMatch=!wantedOwner||!itemOwner||itemOwner===wantedOwner;
      const applicationMatch=!applicationDate||String(item.applicationDate||'').slice(0,10)===applicationDate;
      return titleMatch&&storeMatch&&dateMatch&&ownerMatch&&applicationMatch;
@@ -97,6 +97,7 @@ function tv2ProcessExactLotteryPatchDrafts_(){
     if(matches.length!==1)throw new Error(matches.length?'抽選patch exact対象が複数一致しました':'抽選patch exact対象が見つかりません');
     const item=matches[0],before=JSON.stringify(matches[0]);
     item.title=newTitle;
+    if(!String(item.resultDate||'').slice(0,10))item.resultDate=resultDate;
     if(deadline)item.deadline=deadline;
     if(receiveDeadline)item.receiveDeadline=receiveDeadline;
     if(memo&&!String(item.memo||'').includes(memo))item.memo=[String(item.memo||'').trim(),memo].filter(Boolean).join('｜');
@@ -128,7 +129,7 @@ function tv2ProcessExactLotteryResultDrafts_(){
      const itemTitle=tv2LotteryExactNormalize_(item.title||''),itemStore=tv2LotteryExactNormalize_(item.store||''),itemOwner=tv2LotteryExactNormalize_(item.owner||'');
      const titleMatch=itemTitle===wantedTitle||itemTitle.includes(wantedTitle)||wantedTitle.includes(itemTitle);
      const storeMatch=itemStore===wantedStore||itemStore.includes(wantedStore)||wantedStore.includes(itemStore);
-     const dateMatch=String(item.resultDate||'').slice(0,10)===resultDate;
+     const existingResultDate=String(item.resultDate||'').slice(0,10),dateMatch=!existingResultDate||existingResultDate===resultDate;
      const ownerMatch=!wantedOwner||!itemOwner||itemOwner===wantedOwner;
      return titleMatch&&storeMatch&&dateMatch&&ownerMatch;
     });
