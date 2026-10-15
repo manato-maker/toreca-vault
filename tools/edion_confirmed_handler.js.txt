@@ -1,0 +1,58 @@
+function tv2ProcessConfirmedEdionDrafts_(){
+ const subject='[Toreca Vault Command]',results=[];
+ const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ drafts.forEach(draft=>{
+  try{
+   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   if(String(command&&command.type||'')!=='lottery-edion-confirmed-win')return;
+   const requestId=String(command.requestId||'').trim(),title=String(command.title||'').trim(),store=String(command.store||'').trim(),owner=String(command.owner||'本人').trim(),resultDate=String(command.resultDate||'').trim(),receiveDeadline=String(command.receiveDeadline||'').trim(),referenceId=String(command.referenceId||'').trim(),memo=String(command.memo||'').trim();
+   const quantity=Number(command.quantity||2);
+   if(!requestId||!title||!store||owner!=='本人'||!/^\d{4}-\d{2}-\d{2}$/.test(resultDate)||!/^\d{4}-\d{2}-\d{2}$/.test(receiveDeadline)||!Number.isInteger(quantity)||quantity<=0)throw new Error('エディオン当選確定コマンドが不正です');
+   const n=tv2LotteryExactNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);
+   const productMatch=item=>{const t=n(item&&item.title||'');return t.includes(n('30th CELEBRATION'))&&(t.includes(n('カードセット'))||t.includes(n('9種')))};
+   const edionMatch=item=>n(item&&item.store||'').includes(n('エディオン'));
+   const kashiharaMatch=item=>n(item&&item.store||'').includes(n('橿原'));
+   const ownerCompatible=item=>{const o=n(item&&item.owner||'');if(/嫁|妻/.test(String(item&&item.owner||''))||/嫁分|妻分|奥さん/.test(String(item&&item.memo||'')))return false;return !o||o===wantedOwner||o===n('本人分')};
+   const dateCompatible=item=>{const d=String(item&&item.resultDate||'').slice(0,10);return !d||d===resultDate};
+   const result=tv2Mutate_('chat-lottery-edion-confirmed-win',state=>{
+    state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+    const broad=state.lotteries.filter(item=>productMatch(item)&&edionMatch(item)&&ownerCompatible(item)&&dateCompatible(item));
+    const local=broad.filter(kashiharaMatch),byRef=wantedRef?broad.filter(item=>n(item.memo||'').includes(wantedRef)):[];
+    let item=null,created=false;
+    if(byRef.length===1)item=byRef[0];
+    else if(byRef.length>1)throw new Error('エディオン照合ID一致候補が複数あります');
+    else if(local.length===1)item=local[0];
+    else if(local.length>1)throw new Error('エディオン橿原の既存抽選が複数あります');
+    else if(broad.length===0){
+     const now=new Date().toISOString(),id='lottery-edion-kashihara-'+resultDate.replace(/-/g,'')+(referenceId?'-'+referenceId:'');
+     if(state.lotteries.some(x=>String(x.id||'')===id))throw new Error('エディオン当選用IDが既に存在します');
+     item={id,title,store,status:'当選',resultDate,receiveDeadline,receiptStatus:'未受取',receivedDate:'',owner,memo:'',source:'chat',requestId,createdAt:now,updatedAt:now};
+     state.lotteries.push(item);created=true;
+    }else{
+     const generic=broad.filter(x=>{const s=n(x.store||'');return s===n('エディオン')||!s});
+     if(generic.length===1)item=generic[0];
+     else throw new Error('別店舗を含むエディオン既存候補があり自動確定を停止しました');
+    }
+    const before=JSON.stringify(item),now=new Date().toISOString();
+    if(item.status==='購入済'||item.receiptStatus==='受取済み'){item.status='購入済';item.receiptStatus='受取済み'}else{item.status='当選';item.receiptStatus='未受取'}
+    item.title=title;item.store=store;item.owner=owner;item.resultDate=resultDate;item.receiveDeadline=receiveDeadline;
+    const parts=[memo,'当選数量 '+quantity+'セット',referenceId?'照合ID '+referenceId:''].filter(Boolean),existing=String(item.memo||'').split('｜').map(x=>x.trim()).filter(Boolean);
+    parts.forEach(part=>{if(!existing.includes(part))existing.push(part)});item.memo=existing.join('｜');item.updatedAt=now;item.requestId=item.requestId||requestId;
+    return{changed:created||JSON.stringify(item)!==before,created,lotteryId:String(item.id||''),status:item.status,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,title:item.title,store:item.store,owner:item.owner,quantity};
+   });
+   const check=tv2Load_(),state=check.payload||{},matches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.lotteryId||''));
+   if(matches.length!==1)throw new Error('エディオン当選の再読込で対象を一意確認できません');
+   const item=matches[0];
+   if(!['当選','購入済'].includes(String(item.status||''))||String(item.resultDate||'').slice(0,10)!==resultDate||String(item.receiveDeadline||'').slice(0,10)!==receiveDeadline||!kashiharaMatch(item)||!productMatch(item)||!ownerCompatible(item))throw new Error('エディオン当選の再読込検証に失敗しました');
+   const allSame=(state.lotteries||[]).filter(x=>productMatch(x)&&edionMatch(x)&&kashiharaMatch(x)&&ownerCompatible(x)&&dateCompatible(x));
+   if(allSame.length!==1)throw new Error('エディオン当選の重複検証に失敗しました: '+allSame.length+'件');
+   const cleanupIds=new Set([requestId,String(command.cleanupRequestId||'')].filter(Boolean));
+   GmailApp.getDrafts().forEach(d=>{try{const m=d.getMessage();if(String(m.getSubject()||'').trim()!==subject)return;const c=JSON.parse(String(m.getPlainBody()||'').trim());if(cleanupIds.has(String(c&&c.requestId||'')))d.deleteDraft()}catch(e){}});
+   const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());
+   if(to)GmailApp.createDraft(to,resultSubject,JSON.stringify({ok:true,requestId,revision:Number(check.revision),result,lottery:{id:item.id,title:item.title,store:item.store,owner:item.owner,status:item.status,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,memo:item.memo}},null,2));
+   results.push({ok:true,requestId,revision:Number(check.revision),result});
+  }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
+ });
+ return results;
+}
