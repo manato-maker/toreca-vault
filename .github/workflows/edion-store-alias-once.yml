@@ -17,21 +17,24 @@ jobs:
         with:
           node-version: 22
       - name: Add store alias normalization and current-lottery repair
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('automation/RetailPricePolicy.gs')
-          s=p.read_text()
-          anchor="function tv2LotteryExactNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\\s　「」『』()（）\\[\\]【】<>＜＞\\-‐‑‒–—―・･:：]/g,'')}\n"
-          insert=anchor+"function tv2LotteryStoreNormalize_(value){\n const n=tv2LotteryExactNormalize_(value),k=tv2LotteryExactNormalize_('橿原');\n if(n.includes(k)&&(n.includes(tv2LotteryExactNormalize_('トレカキャピタル'))||n.includes(tv2LotteryExactNormalize_('エディオン'))))return'edion-kashihara-toreca-capital';\n return n;\n}\n"
-          if 'function tv2LotteryStoreNormalize_' not in s:
-            if s.count(anchor)!=1: raise SystemExit('store-normalize anchor mismatch')
-            s=s.replace(anchor,insert,1)
-          s=s.replace("const n=tv2LotteryExactNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);", "const n=tv2LotteryExactNormalize_,sn=tv2LotteryStoreNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);",1)
-          s=s.replace("const edionMatch=item=>n(item&&item.store||'').includes(n('エディオン'));\n   const kashiharaMatch=item=>n(item&&item.store||'').includes(n('橿原'));", "const aliasKey=sn('トレカ・キャピタル エディオンイオンモール橿原店');\n   const edionMatch=item=>sn(item&&item.store||'')===aliasKey;\n   const kashiharaMatch=edionMatch;",1)
-          s=s.replace("wantedStore=tv2LotteryExactNormalize_(store)", "wantedStore=tv2LotteryStoreNormalize_(store)")
-          s=s.replace("itemStore=tv2LotteryExactNormalize_(item.store||'')", "itemStore=tv2LotteryStoreNormalize_(item.store||'')")
-          helper=r'''function tv2RepairEdionKashiharaAlias20261015_(){
+        run: python -c "import base64;exec(base64.b64decode('CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwPVBhdGgoImF1dG9tYXRpb24vUmV0YWlsUHJpY2VQb2xpY3kuZ3MiKQpzPXAucmVhZF90ZXh0KCkKCmFuY2hvcj0iZnVuY3Rpb24gdHYyTG90dGVyeUV4YWN0Tm9ybWFsaXplXyh2YWx1ZSl7cmV0dXJuIFN0cmluZyh2YWx1ZXx8JycpLm5vcm1hbGl6ZSgnTkZLQycpLnRvTG93ZXJDYXNlKCkucmVwbGFjZSgvW1xcc+OAgOOAj+OAjeOAjuOAjygp77yIXFxbXF3jgJDjgJFdPD7vvJzvvJ5cLdiQ4oCROKAmOKAyOKAzOKAk+ODu+KAjzrig7o44O7Ou+8ml0vZywnJyl9XG4iCmluc2VydD1hbmNob3IrIiIiZnVuY3Rpb24gdHYyTG90dGVyeVN0b3JlTm9ybWFsaXplXyh2YWx1ZSl7CiBjb25zdCBuPXR2MkxvdHRlcnlFeGFjdE5vcm1hbGl6ZV8odmFsdWUpLGs9dHYyTG90dGVyeUV4YWN0Tm9ybWFsaXplXygn5qm/5Y6fJyk7CiBpZihuLmluY2x1ZGVzKGspJiYobi5pbmNsdWRlcyh0djJMb3R0ZXJ5RXhhY3ROb3JtYWxpemVfKCfjg4jjg6zjgrvjgq3jg6Pjg5Tjgr/jg6snKSl8fG4uaW5jbHVkZXModHYyTG90dGVyeUV4YWN0Tm9ybWFsaXplXygn44Ko44OH44Kj44Kq44OzJykpKSlyZXR1cm4nZWRpb24ta2FzaGloYXJhLXRvcmVjYS1jYXBpdGFsJzsKIHJldHVybiBuOwp9CiIiIgppZiAiZnVuY3Rpb24gdHYyTG90dGVyeVN0b3JlTm9ybWFsaXplXyIgbm90IGluIHM6CiAgICBpZiBzLmNvdW50KGFuY2hvcik!=1:
+        raise SystemExit("store-normalize anchor mismatch")
+    s=s.replace(anchor,insert,1)
+
+old="const n=tv2LotteryExactNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);"
+new="const n=tv2LotteryExactNormalize_,sn=tv2LotteryStoreNormalize_,wantedOwner=n(owner),wantedRef=n(referenceId);"
+if old in s:
+    s=s.replace(old,new,1)
+
+old2="const edionMatch=item=>n(item&&item.store||'').includes(n('エディオン'));\n   const kashiharaMatch=item=>n(item&&item.store||'').includes(n('橿原'));"
+new2="const aliasKey=sn('トレカ・キャピタル エディオンイオンモール橿原店');\n   const edionMatch=item=>sn(item&&item.store||'')===aliasKey;\n   const kashiharaMatch=edionMatch;"
+if old2 in s:
+    s=s.replace(old2,new2,1)
+
+s=s.replace("wantedStore=tv2LotteryExactNormalize_(store)", "wantedStore=tv2LotteryStoreNormalize_(store)")
+s=s.replace("itemStore=tv2LotteryExactNormalize_(item.store||'')", "itemStore=tv2LotteryStoreNormalize_(item.store||'')")
+
+helper = """function tv2RepairEdionKashiharaAlias20261015_(){
  const canonicalStore='トレカ・キャピタル エディオンイオンモール橿原店',newId='lottery-edion-kashihara-20261015-9541242',resultDate='2026-10-15';
  const n=tv2LotteryExactNormalize_,sn=tv2LotteryStoreNormalize_,aliasKey=sn(canonicalStore);
  const isProduct=x=>{const t=n(x&&x.title||'');return t.includes(n('30th CELEBRATION'))&&(t.includes(n('カードセット'))||t.includes(n('9種')))};
@@ -54,7 +57,7 @@ jobs:
   if(keep.status==='購入済'||keep.receiptStatus==='受取済み'){keep.status='購入済';keep.receiptStatus='受取済み'}else{keep.status='当選';keep.receiptStatus='未受取'}
   const parts=['当選数量 2セット','照合ID 9541242'],memo=String(keep.memo||'').split('｜').map(x=>x.trim()).filter(Boolean);parts.forEach(x=>{if(!memo.includes(x))memo.push(x)});keep.memo=memo.join('｜');keep.updatedAt=new Date().toISOString();
   state.automation.edionKashiharaStoreAlias='2026-10-15-v1';
-  return{changed:removedId||JSON.stringify(keep)!==before,review:false,keptId:String(keep.id||''),removedId,store:keep.store,status:keep.status,resultDate:keep.resultDate,receiveDeadline:keep.receiveDeadline};
+  return{changed:Boolean(removedId)||JSON.stringify(keep)!==before,review:false,keptId:String(keep.id||''),removedId,store:keep.store,status:keep.status,resultDate:keep.resultDate,receiveDeadline:keep.receiveDeadline};
  });
  const check=tv2Load_(),state=check.payload||{},matches=(state.lotteries||[]).filter(x=>tv2LotteryStoreNormalize_(x.store||'')===aliasKey&&isProduct(x)&&ownerOk(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
  const verified=!mutation.review&&matches.length===1&&['当選','購入済'].includes(String(matches[0].status||''))&&String(matches[0].receiveDeadline||'').slice(0,10)==='2026-10-19';
@@ -64,16 +67,19 @@ jobs:
  }
  return{ok:verified,revision:Number(check.revision),mutation,matches:matches.map(x=>({id:x.id,store:x.store,status:x.status,resultDate:x.resultDate,receiveDeadline:x.receiveDeadline}))};
 }
-'''
-          enforcer="function tv2EnforceRetailPricePolicy_(){\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();"
-          if 'function tv2RepairEdionKashiharaAlias20261015_' not in s:
-            if s.count(enforcer)!=1: raise SystemExit('enforcer anchor mismatch')
-            s=s.replace(enforcer,helper+"\nfunction tv2EnforceRetailPricePolicy_(){\n const edionAliasRepair=tv2RepairEdionKashiharaAlias20261015_();\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();",1)
-          result_anchor="if(result&&typeof result==='object'){result.edionConfirmed=edionConfirmed;"
-          if result_anchor in s and 'result.edionAliasRepair=edionAliasRepair;' not in s:
-            s=s.replace(result_anchor,"if(result&&typeof result==='object'){result.edionAliasRepair=edionAliasRepair;result.edionConfirmed=edionConfirmed;",1)
-          p.write_text(s)
-          PY
+"""
+enforcer="function tv2EnforceRetailPricePolicy_(){\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();"
+if "function tv2RepairEdionKashiharaAlias20261015_" not in s:
+    if s.count(enforcer)!=1:
+        raise SystemExit("enforcer anchor mismatch")
+    s=s.replace(enforcer,helper+"\nfunction tv2EnforceRetailPricePolicy_(){\n const edionAliasRepair=tv2RepairEdionKashiharaAlias20261015_();\n const edionConfirmed=tv2ProcessConfirmedEdionDrafts_();",1)
+
+result_anchor="if(result&&typeof result==='object'){result.edionConfirmed=edionConfirmed;"
+if result_anchor in s and "result.edionAliasRepair=edionAliasRepair;" not in s:
+    s=s.replace(result_anchor,"if(result&&typeof result==='object'){result.edionAliasRepair=edionAliasRepair;result.edionConfirmed=edionConfirmed;",1)
+
+p.write_text(s)
+'))"
       - run: npm test
       - run: npm run check
       - name: Commit alias repair
