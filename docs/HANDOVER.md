@@ -161,3 +161,11 @@
 - Full tests passed; Apps Script deploy 36228092071 succeeded with remote-source verification.
 - Active legacy lottery/market functions now invoke the V2 chat-trade draft queue; deploy 36228126252 succeeded with remote-source verification.
 - Sale command remains pending until a time trigger consumes it; verify canonical state before reporting completion.
+
+
+## 2026-10-18 — V2資産照合の読取監査経路
+- 発見: Apps Scriptの汎用コマンドキューには purchase（新規取引/lot作成）はあるが、受取済み抽選・既存注文への安全な購入履歴/在庫lot紐付け、パック開封・獲得カード/残存プロモパックの照合経路がない。接続済みApps Script直接実行コネクタもない。
+- 変更: `asset-audit` を専用allowlistに追加。対象フィルターは非公開のGmailコマンドから受け取り、V2正本の抽選・取引・lot・開封・シングル・パック候補、revision、件数を専用のGmail監査結果draftへ出す。監査関数はread-onlyであり、既存・新規データを変更しない。Gmailコマンドdraftは送信しない。
+- テスト: 対象レコードの絞り込み、無関係レコードの除外、revision/read-only契約を検証する `test/v2-asset-audit.test.js` を追加。`npm test` と `npm run check` を実行する。
+- 本番状態: 未デプロイ。PR/CI/Apps Script pushとremote verify後、read-only監査commandを投入し、revisionと候補一覧を確認してから別の厳密な更新コマンドを設計する。
+- 制限: 受取・開封・在庫の実更新は監査の一意候補と申告値が一致する場合のみ行う。複数候補・候補欠落・revision drift・同一requestIdの監査結果draft既存はfail-closedとし、結果draftを削除しない。更新成功後はV2正本を再読込する。
