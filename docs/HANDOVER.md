@@ -187,3 +187,9 @@
 - 変更: 正本照合の重複検査は実行開始時点の既存取引だけを対象にし、同一command内の別lottery参照購入を誤検知しない。デプロイ成功後のGitHub Actionsから `runTv2AssetReconcileOnce` だけを呼び、他種別のcommandは未処理のまま残す。Actionsへ返す値は処理件数とrevisionだけに限定し、購入明細は非公開のGmail結果draftに保持する。
 - テスト: 同一command内の同日・同店・同商品二件、売却draftを残す専用runner、複数資産command時のfail-closed、デプロイ成功依存のworkflowを検証する。
 - 本番状態: PR・CI・Apps Script配布後に対象commandのみを実行し、正本を再読込してrevision・履歴・在庫数量を確認する。
+
+### 2026-10-18 Post-deploy execution follow-up
+- PR #70 はmainへmerge済み。CI #484 success、Apps Script deploy #272 はpushおよびremote source verify success。
+- デプロイ後の専用Apps Script実行はGoogle側から実行権限エラーで拒否された。関数は起動せず、asset-reconcile結果draftも作成されていないため、今回の資産照合commandは未処理のまま維持する。
+- 公式 `scripts.run` 要件に照らし、API executable deployment、script/callerの共通standard Cloud project、Apps Script API有効化、およびscript scopeを含むOAuth承認の構成確認が必要。認証またはGoogle Cloud権限を変更せずに停止する。
+- 次の一手: 上記Google側設定の確認・承認後に専用runnerを再実行し、正本revision・購入履歴・在庫を保存後に再読込する。Gmail command draftは送信しない。
