@@ -75,3 +75,28 @@ test('audit saves a private result draft and stops if that result already exists
  assert.throws(()=>context.runAudit(command),/既にあります/);
  assert.equal(created.length,1);
 });
+
+test('failed private commands remain queued and produce one private diagnostic draft',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
+ const end=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',start);
+ const drafts=[],created=[];
+ const commandMessage={getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type:'asset-audit',requestId:'asset-audit-test'})};
+ const commandDraft={getMessage:()=>commandMessage,deleteDraft:()=>{throw new Error('failed command must remain queued')}};
+ drafts.push(commandDraft);
+ const context={
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}},
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  runTv2AssetAudit:()=>{throw new Error('expected revision check failed')}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ const result=context.process();
+ assert.equal(result.length,1);
+ assert.equal(result[0].ok,false);
+ assert.equal(drafts.includes(commandDraft),true);
+ assert.equal(created.length,1);
+ assert.match(created[0].subject,/asset-audit-test/);
+ assert.match(created[0].body,/expected revision check failed/);
+ context.process();
+ assert.equal(created.length,1,'retries do not create duplicate diagnostic drafts');
+});
