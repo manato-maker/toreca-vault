@@ -167,5 +167,5 @@
 - 発見: Apps Scriptの汎用コマンドキューには purchase（新規取引/lot作成）はあるが、受取済み抽選・既存注文への安全な購入履歴/在庫lot紐付け、パック開封・獲得カード/残存プロモパックの照合経路がない。接続済みApps Script直接実行コネクタもない。
 - 変更: `asset-audit` を専用allowlistに追加。対象フィルターは非公開のGmailコマンドから受け取り、V2正本の抽選・取引・lot・開封・シングル・パック候補、revision、件数を専用のGmail監査結果draftへ出す。監査関数はread-onlyであり、既存・新規データを変更しない。Gmailコマンドdraftは送信しない。
 - テスト: 対象レコードの絞り込み、無関係レコードの除外、revision/read-only契約を検証する `test/v2-asset-audit.test.js` を追加。`npm test` と `npm run check` を実行する。
-- 本番状態: 未デプロイ。PR/CI/Apps Script pushとremote verify後、read-only監査commandを投入し、revisionと候補一覧を確認してから別の厳密な更新コマンドを設計する。
+- 本番状態: PR #67 をmerge commit `b7eedabfa248e76d5a8a12247d6676e5786bd59f` でmainへ反映。V2 CI #480 success（211 tests）、Apps Script deploy #269 / run `39121318741` はtest・push・remote verify success。read-only監査command `asset-audit-20261018-01` を2026-10-18 19:58 JST頃に非公開Gmail queueへ投入。queue処理結果draftと正本revisionは確認待ち。
 - 制限: 受取・開封・在庫の実更新は監査の一意候補と申告値が一致する場合のみ行う。複数候補・候補欠落・revision drift・同一requestIdの監査結果draft既存はfail-closedとし、結果draftを削除しない。更新成功後はV2正本を再読込する。
