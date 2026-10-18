@@ -29,11 +29,11 @@
 
 ### 2026-10-18 — パック開封シングル原価を0に訂正
 
-- 目的: 30th CELEBRATIONの10パック購入費は購入履歴にのみ保持し、開封で得たシングルへ原価を二重計上しない。
-- 変更: 限定ID・期待値・revisionを照合する `asset-cost-adjustment` コマンドを追加。対象開封取引の `acquisitionCost` とジラーチex SAR / ゲンガーの在庫 `unitCost` を0へ更新し、購入履歴（単価360円、計3,600円、実支払3,456円）を不変にする。修正コマンドがキューにある実行では、その1件だけを処理して既存の他コマンド下書きを残す。
-- 検証: 原価0の反映、購入行の維持、二重実行時のrevision据置、古いrevision拒否、他のキュー下書き非処理を自動テストする。`npm test` / `npm run check` / Apps Script構文検査を実行予定。
-- 本番状態: 未反映。PR/CI/Apps Script配布後、既存の定期runner経由で限定コマンドを実行し、V2正本の再読込結果を確認する。
-- 残件: Apps Script API直接実行経路は権限上利用できないため、定期runnerでの実行と結果draftによる実データ検証が必要。
+- 目的: パック購入費は購入履歴に保持し、開封で得たシングルへ原価を二重計上しない。
+- 変更: 限定対象ID・期待値・revisionを照合する `asset-cost-adjustment` コマンドを追加。開封取引の取得原価と派生シングルlotの原価を0にし、購入履歴を変更しない。修正コマンドがキューにある実行では、その1件だけを処理し、他のcommand draftを残す。
+- 検証: 原価0の反映、購入行の維持、二重実行時のrevision据置、古いrevision拒否、他のキューdraft非処理を自動テスト。`npm test` 218件、`npm run check`、Apps Script構文検査、`git diff --check` 成功。
+- 本番状態: PR #73 をマージし、Apps Script配布 #273 のpushとremote source verifyが成功。15分runnerがcommandを処理し、結果draftとV2再読込で正本revision 1844、購入記録維持、開封取引とシングルlotの原価0を確認。command draftは処理後に削除され、非送信の結果draftが残る。
+- 残件: `clasp run` による直接実行はApps Script API権限エラーで使用不可。今回の実データ変更は既存の定期runner経由で完了。
 
 ### 2026-09-25 — PR #55 Gmailとカード相場のV2定期処理
 
