@@ -193,3 +193,8 @@
 - デプロイ後の専用Apps Script実行はGoogle側から実行権限エラーで拒否された。関数は起動せず、asset-reconcile結果draftも作成されていないため、今回の資産照合commandは未処理のまま維持する。
 - 公式 `scripts.run` 要件に照らし、API executable deployment、script/callerの共通standard Cloud project、Apps Script API有効化、およびscript scopeを含むOAuth承認の構成確認が必要。認証またはGoogle Cloud権限を変更せずに停止する。
 - 次の一手: 上記Google側設定の確認・承認後に専用runnerを再実行し、正本revision・購入履歴・在庫を保存後に再読込する。Gmail command draftは送信しない。
+
+### 2026-10-18 Runner failure reporting
+- 発見: `clasp run` はGoogle側の「Unable to run script function」応答があってもexit code 0を返し、GitHub Actionsが誤ってsuccess表示になった。公開ログにAPI応答をそのまま出す設計も避ける必要がある。
+- 変更: 専用runner workflowはAPI拒否、例外、または `ok:false` を検出して失敗終了し、詳細レスポンスをGitHubログへ出さない。`workflow_dispatch` も追加し、権限設定後にデプロイを再実行せず手動再試行できるようにする。
+- 本番状態: PR・CI後に更新runnerを確認する。Google側API executable / 共通Cloud project / OAuth承認の確認が済むまでは資産commandを再試行しない。
