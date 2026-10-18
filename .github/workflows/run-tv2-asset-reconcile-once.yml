@@ -1,12 +1,16 @@
 name: Run V2 asset reconciliation once
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/run-tv2-asset-reconcile-once.yml']
+  workflow_dispatch:
   workflow_run:
     workflows: [Apps Script Automation Deploy]
     types: [completed]
     branches: [main]
 jobs:
   run:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: v2-apps-script
     steps:
@@ -25,4 +29,18 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
       - name: Run only the queued asset reconciliation
-        run: npx clasp run runTv2AssetReconcileOnce
+        shell: bash
+        run: |
+          set +e
+          output="$(npx clasp run runTv2AssetReconcileOnce 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Apps Script invocation failed; response suppressed to protect private data."
+            exit "$status"
+          fi
+          if printf '%s' "$output" | grep -Eiq 'unable to run script function|permission_denied|authorization is required|error|failed|exception|denied|"ok"[[:space:]]*:[[:space:]]*false'; then
+            echo "Apps Script invocation or scoped runner reported failure; details remain in private Gmail drafts."
+            exit 1
+          fi
+          echo "Scoped Apps Script runner returned successfully; response details suppressed."

@@ -175,5 +175,8 @@ test('scoped runner workflow waits for a successful Apps Script deploy',async()=
  assert.match(workflow,/Apps Script Automation Deploy/);
  assert.match(workflow,/conclusion == 'success'/);
  assert.match(workflow,/clasp run runTv2AssetReconcileOnce/);
+ assert.match(workflow,/unable to run script function/);
+ assert.match(workflow,/response suppressed to protect private data/);
+ assert.match(workflow,/workflow_dispatch/);
  assert.doesNotMatch(workflow,/runTv2Automation/);
 });
