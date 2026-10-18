@@ -39,9 +39,11 @@ test('2026-10-18 asset audit is read-only and returns only reconciliation-releva
 test('audit queue command is separately allowlisted and does not call a mutation API',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetAudit(command)');
- const end=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',start);
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ const queueStart=text.indexOf('function tv2ProcessChatTradeDrafts_()',end);
+ const queueEnd=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',queueStart);
  const audit=text.slice(start,end);
- const queue=text.slice(end,text.indexOf('\n}',end)+2);
+ const queue=text.slice(queueStart,queueEnd);
  assert.match(audit,/tv2Load_\(\)/);
  assert.match(audit,/tv2AssetAuditView_/);
  assert.doesNotMatch(audit,/tv2Mutate_/);
@@ -99,4 +101,35 @@ test('failed private commands remain queued and produce one private diagnostic d
  assert.match(created[0].body,/expected revision check failed/);
  context.process();
  assert.equal(created.length,1,'retries do not create duplicate diagnostic drafts');
+});
+
+test('asset reconciliation adds purchases, consumes opened packs, allocates cost once, and is idempotent',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2AssetReconcile(command)');
+ const end=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',start);
+ let state={revision:5,transactions:[],inventoryLots:[],lotteries:[{id:'win-1',status:'当選',receiptStatus:'未受取',owner:'本人',resultDate:'2026-10-15'}],auditLog:[]};
+ const created=[],drafts=[];
+ const context={
+  normalize_:(s)=>normalize(s),
+  tv2RetailPriceInfo_:(product,category)=>category==='パック'?{price:360,basis:'希望小売価格',source:'official'}:null,
+  tv2Mutate_:(kind,fn)=>{const next=structuredClone(state),result=fn(next)||{};if(result.changed!==false){next.revision++;state=next;}return{revision:state.revision,...result};},
+  tv2Load_:()=>({payload:structuredClone(state),revision:state.revision}),
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
+ const command={requestId:'asset-reconcile-test',expectedRevision:5,purchases:[{id:'buy-pack-1',product:'30th CELEBRATION pack',store:'Store A',date:'2026-10-18',category:'パック',condition:'',quantity:10,price:360,actualPaidTotal:3456}],openings:[{id:'open-pack-1',product:'30th CELEBRATION pack',sourceLotId:'lot-buy-pack-1',quantity:10,date:'2026-10-18',store:'Store A',derivedLots:[{id:'card-1',product:'Jirachi ex SAR',category:'カード',set:'M6a 132/103',quantity:1,unitCost:1800},{id:'card-2',product:'Gengar 30th gold',category:'カード',set:'M6a 150/103',quantity:1,unitCost:1800}]}],lotteryUpdates:[{id:'win-1',expected:{status:'当選',receiptStatus:'未受取',owner:'本人',resultDate:'2026-10-15'},updates:{status:'購入済',receiptStatus:'受取済み',receivedDate:'2026-10-18',receiptAmount:3600,receiptPaidAmount:3456,receiptQuantity:10}}]};
+ const result=context.reconcile(command);
+ assert.equal(result.ok,true);
+ assert.equal(state.revision,6);
+ assert.equal(state.transactions.find(x=>x.id==='buy-pack-1').actualPaidTotal,3456);
+ assert.equal(state.transactions.find(x=>x.id==='open-pack-1').acquisitionCost,3600);
+ assert.equal(state.inventoryLots.some(x=>x.id==='lot-buy-pack-1'),false);
+ assert.equal(state.inventoryLots.filter(x=>x.category==='カード').reduce((n,x)=>n+x.quantity*x.unitCost,0),3600);
+ assert.equal(state.lotteries[0].receiptStatus,'受取済み');
+ const repeated=context.reconcile(command);
+ assert.equal(repeated.mutation.duplicate,true);
+ assert.equal(state.revision,6,'idempotent retry does not increment the canonical revision');
+ assert.equal(created.length,1,'idempotent retry reuses the single result draft');
+ assert.throws(()=>context.reconcile({...command,expectedRevision:7}),/revisionより正本revisionが古い/);
 });
