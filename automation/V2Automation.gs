@@ -1221,9 +1221,42 @@ function runTv2AssetReconcileOnce(){
  }
 }
 
+function runTv2AssetCostAdjustment(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
+ if(!/^asset-cost-adjustment-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('原価修正requestId/revisionが不正です');
+ const purchaseId='purchase-joshin-yamatotakada-30th-pack10-20261018',openingId='open-joshin-yamatotakada-30th-pack10-20261018';
+ const lotIds=['lot-open-joshin-yamatotakada-jirachi-m6a-132-103-20261018','lot-open-joshin-yamatotakada-gengar-m6a-150-103-20261018'];
+ const subject='[Toreca Vault Asset Adjustment Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ if(!to)throw new Error('原価修正結果の保存先メールアドレスを確認できません');
+ const verify=(state)=>{
+  const purchases=(state.transactions||[]).filter(x=>String(x.id||'')===purchaseId),openings=(state.transactions||[]).filter(x=>String(x.id||'')===openingId);
+  if(purchases.length!==1||purchases[0].type!=='purchase'||Number(purchases[0].quantity)!==10||Number(purchases[0].price)!==360||Number(purchases[0].total)!==3600||Number(purchases[0].actualPaidTotal)!==3456)throw new Error('パック購入履歴が期待値と異なるため停止しました');
+  if(openings.length!==1||openings[0].type!=='opening'||Number(openings[0].quantity)!==10||String(openings[0].product||'')!=='ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION')throw new Error('開封履歴が期待値と異なるため停止しました');
+  const lots=lotIds.map(id=>{const found=(state.inventoryLots||[]).filter(x=>String(x.id||'')===id);if(found.length!==1||Number(found[0].quantity)!==1||String(found[0].source||'')!=='opening'||String(found[0].sourceTransactionId||'')!==openingId)throw new Error('開封シングル在庫が期待値と異なるため停止しました: '+id);return found[0];});
+  const original=Number(openings[0].acquisitionCost)===3600&&lots.every(x=>Number(x.unitCost)===1800),adjusted=Number(openings[0].acquisitionCost)===0&&String(openings[0].acquisitionCostBasis||'')==='購入履歴のみ保持'&&lots.every(x=>Number(x.unitCost)===0);
+  if(!original&&!adjusted)throw new Error('開封原価が既知の原価状態ではないため停止しました');
+  return original;
+ };
+ const result=tv2Mutate_('asset-cost-adjustment',state=>{
+  if(Number(state.revision||0)<expectedRevision)throw new Error('監査revisionより正本revisionが古いため停止しました');
+  verify(state);
+  const opening=state.transactions.find(x=>String(x.id||'')===openingId);let changed=false;
+  if(Number(opening.acquisitionCost)!==0||String(opening.acquisitionCostBasis||'')!=='購入履歴のみ保持'){opening.acquisitionCost=0;opening.acquisitionCostBasis='購入履歴のみ保持';changed=true;}
+  lotIds.forEach(id=>{const lot=state.inventoryLots.find(x=>String(x.id||'')===id);if(Number(lot.unitCost)!==0){lot.unitCost=0;changed=true;}});
+  return changed?{changed:true,expectedRevision}:{changed:false,duplicate:true,expectedRevision};
+ });
+ const check=tv2Load_(),state=check.payload||{};verify(state);
+ const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,purchase:{id:purchaseId,quantity:10,price:360,total:3600,actualPaidTotal:3456},opening:{id:openingId,quantity:10,acquisitionCost:0,acquisitionCostBasis:'購入履歴のみ保持'},singles:lotIds.map(id=>{const lot=state.inventoryLots.find(x=>String(x.id||'')===id);return{id,product:String(lot.product||''),set:String(lot.set||''),quantity:Number(lot.quantity),unitCost:Number(lot.unitCost)}})};
+ if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(verified,null,2));
+ return verified;
+}
+
 function tv2ProcessChatTradeDrafts_(){
  const subject='[Toreca Vault Command]';
- const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const allDrafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const adjustmentDrafts=allDrafts.filter(d=>{try{return String(JSON.parse(String(d.getMessage().getPlainBody()||'').trim()).type||'')==='asset-cost-adjustment';}catch(e){return false;}});
+ if(adjustmentDrafts.length>1)return[{ok:false,type:'asset-cost-adjustment',error:'原価修正コマンドが複数あるため安全停止しました'}];
+ const drafts=adjustmentDrafts.length?adjustmentDrafts:allDrafts;
  const results=[];
  drafts.forEach(draft=>{
   let command={},type='',requestId='';
@@ -1231,8 +1264,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    type=String(command&&command.type||'');requestId=String(command&&command.requestId||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004','asset-audit','asset-reconcile'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):type==='asset-audit'?runTv2AssetAudit(command):type==='asset-reconcile'?runTv2AssetReconcile(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004','asset-audit','asset-reconcile','asset-cost-adjustment'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):type==='asset-audit'?runTv2AssetAudit(command):type==='asset-reconcile'?runTv2AssetReconcile(command):type==='asset-cost-adjustment'?runTv2AssetCostAdjustment(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){

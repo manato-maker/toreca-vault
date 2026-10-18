@@ -168,6 +168,54 @@ test('scoped runner fails closed when multiple reconciliation drafts are queued'
  assert.throws(()=>context.runOnce(),/複数あるため安全停止/);
 });
 
+test('pack opening singles are zero cost while the pack purchase history remains unchanged',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2AssetCostAdjustment(command)');
+ const end=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',start);
+ const purchase={id:'purchase-joshin-yamatotakada-30th-pack10-20261018',type:'purchase',quantity:10,price:360,total:3600,actualPaidTotal:3456};
+ const opening={id:'open-joshin-yamatotakada-30th-pack10-20261018',type:'opening',product:'ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION',quantity:10,acquisitionCost:3600};
+ const ids=['lot-open-joshin-yamatotakada-jirachi-m6a-132-103-20261018','lot-open-joshin-yamatotakada-gengar-m6a-150-103-20261018'];
+ let state={revision:1840,transactions:[purchase,opening],inventoryLots:ids.map((id,i)=>({id,product:i?'ゲンガー（金色・30th仕様）':'ジラーチex SAR',set:i?'M6a 150/103':'M6a 132/103',category:'カード',quantity:1,unitCost:1800,source:'opening',sourceTransactionId:opening.id})),auditLog:[]};
+ const created=[],drafts=[];
+ const context={
+  tv2Mutate_:(kind,fn)=>{assert.equal(kind,'asset-cost-adjustment');const next=structuredClone(state),result=fn(next)||{};if(result.changed!==false){next.revision++;state=next;}return{revision:state.revision,...result};},
+  tv2Load_:()=>({payload:structuredClone(state),revision:state.revision}),
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.adjust=runTv2AssetCostAdjustment;',context);
+ const command={type:'asset-cost-adjustment',requestId:'asset-cost-adjustment-20261018-pack-opening-zero',expectedRevision:1840};
+ const result=context.adjust(command);
+ assert.equal(state.revision,1841);
+ assert.equal(state.transactions.find(x=>x.id===purchase.id).actualPaidTotal,3456);
+ assert.equal(state.transactions.find(x=>x.id===purchase.id).total,3600);
+ assert.equal(state.transactions.find(x=>x.id===opening.id).acquisitionCost,0);
+ assert.equal(state.transactions.find(x=>x.id===opening.id).acquisitionCostBasis,'購入履歴のみ保持');
+ assert.deepEqual(state.inventoryLots.map(x=>x.unitCost),[0,0]);
+ assert.equal(result.singles.length,2);
+ assert.equal(created.length,1);
+ const repeated=context.adjust(command);
+ assert.equal(repeated.mutation.duplicate,true);
+ assert.equal(state.revision,1841,'idempotent retry does not increment revision');
+ assert.equal(created.length,1);
+ assert.throws(()=>context.adjust({...command,expectedRevision:1842}),/revisionより正本revisionが古い/);
+});
+
+test('adjustment commands run alone and leave unrelated queued drafts untouched',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
+ const end=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',start);
+ const deleted=[],drafts=[];
+ const make=(type,id)=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type,requestId:id})}),deleteDraft:()=>deleted.push(id)});
+ const unrelated=make('sale','old-sale'),adjustment=make('asset-cost-adjustment','zero-cost');drafts.push(unrelated,adjustment);
+ const context={GmailApp:{getDrafts:()=>drafts,createDraft:()=>{}},Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},runTv2AssetCostAdjustment:()=>({ok:true,revision:1841})};
+ vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ const result=context.process();
+ assert.equal(result.length,1);
+ assert.deepEqual(deleted,['zero-cost']);
+ assert.ok(drafts.includes(unrelated));
+});
+
 test('scoped runner workflow waits for a successful Apps Script deploy',async()=>{
  const {readFile}=await import('node:fs/promises');
  const workflow=await readFile(new URL('../.github/workflows/run-tv2-asset-reconcile-once.yml',import.meta.url),'utf8');
