@@ -47,3 +47,31 @@ test('audit queue command is separately allowlisted and does not call a mutation
  assert.doesNotMatch(audit,/tv2Mutate_/);
  assert.match(queue,/asset-audit/);
 });
+
+test('audit saves a private result draft and stops if that result already exists',async()=>{
+ const text=await source();
+ const helperStart=text.indexOf('function tv2AssetAuditView_(state,requestId,filters)');
+ const helperEnd=text.indexOf('\nfunction runTv2AssetAudit',helperStart);
+ const runnerStart=helperEnd+1;
+ const runnerEnd=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',runnerStart);
+ const created=[];
+ let drafts=[];
+ const context={
+  normalize_:(s)=>normalize(s),
+  tv2Load_:()=>({payload:{},revision:77}),
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(...args)=>created.push(args)}
+ };
+ vm.runInNewContext(text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.runAudit=runTv2AssetAudit;',context);
+ const command={requestId:'asset-audit-test',filters:{storeIncludes:['Store Alpha'],productIncludes:['Product Alpha']}};
+ const result=context.runAudit(command);
+ assert.equal(result.ok,true);
+ assert.equal(result.readOnly,true);
+ assert.equal(result.revision,77);
+ assert.equal(created.length,1);
+ assert.equal(created[0][0],'private@example.test');
+ assert.match(created[0][1],/asset-audit-test/);
+ drafts=[{getMessage:()=>({getSubject:()=>created[0][1]})}];
+ assert.throws(()=>context.runAudit(command),/既にあります/);
+ assert.equal(created.length,1);
+});

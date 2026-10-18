@@ -168,4 +168,4 @@
 - 変更: `asset-audit` を専用allowlistに追加。対象フィルターは非公開のGmailコマンドから受け取り、V2正本の抽選・取引・lot・開封・シングル・パック候補、revision、件数を専用のGmail監査結果draftへ出す。監査関数はread-onlyであり、既存・新規データを変更しない。Gmailコマンドdraftは送信しない。
 - テスト: 対象レコードの絞り込み、無関係レコードの除外、revision/read-only契約を検証する `test/v2-asset-audit.test.js` を追加。`npm test` と `npm run check` を実行する。
 - 本番状態: 未デプロイ。PR/CI/Apps Script pushとremote verify後、read-only監査commandを投入し、revisionと候補一覧を確認してから別の厳密な更新コマンドを設計する。
-- 制限: 受取・開封・在庫の実更新は監査の一意候補と申告値が一致する場合のみ行う。複数候補・候補欠落・revision driftはfail-closedとし、成功後はV2正本を再読込する。
+- 制限: 受取・開封・在庫の実更新は監査の一意候補と申告値が一致する場合のみ行う。複数候補・候補欠落・revision drift・同一requestIdの監査結果draft既存はfail-closedとし、結果draftを削除しない。更新成功後はV2正本を再読込する。

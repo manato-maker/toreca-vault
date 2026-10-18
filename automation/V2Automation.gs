@@ -1119,7 +1119,7 @@ function tv2AssetAuditView_(state,requestId,filters){
  const projectTransaction=t=>({id:String(t.id||''),type:String(t.type||''),product:String(t.productKey||t.product||''),category:String(t.category||''),store:String(t.store||''),date:String(t.date||''),quantity:Number(t.quantity||0),price:t.price==null?null:Number(t.price),total:t.total==null?null:Number(t.total),actualPaidTotal:t.actualPaidTotal==null?null:Number(t.actualPaidTotal),sourceLotteryId:String(t.sourceLotteryId||''),requestId:String(t.requestId||''),set:String(t.set||''),acquisitionCost:t.acquisitionCost==null?null:Number(t.acquisitionCost)});
  const projectLot=l=>({id:String(l.id||''),product:String(l.productKey||l.product||''),category:String(l.category||''),condition:String(l.condition||''),quantity:Number(l.quantity||0),unitCost:l.unitCost==null?null:Number(l.unitCost),acquiredAt:String(l.acquiredAt||''),store:String(l.store||''),source:String(l.source||''),sourceTransactionId:String(l.sourceTransactionId||''),sourceLotteryId:String(l.sourceLotteryId||''),requestId:String(l.requestId||''),set:String(l.set||''),memo:String(l.memo||'').slice(0,100)});
  const projectLottery=x=>({id:String(x.id||''),title:String(x.receiptProduct||x.title||''),store:String(x.receiptStore||x.store||''),owner:String(x.owner||''),status:String(x.status||''),receiptStatus:String(x.receiptStatus||''),resultDate:String(x.resultDate||''),receivedDate:String(x.receivedDate||''),receiptQuantity:x.receiptQuantity==null?null:Number(x.receiptQuantity),receiptAmount:x.receiptAmount==null?null:Number(x.receiptAmount),receiptOrderId:String(x.orderNumber||x.receiptOrderId||x.orderId||'')});
- const transactions=(state.transactions||[]).filter(t=>isTargetStore(t.store)&&isTargetProduct(t.productKey||t.product)).map(projectTransaction);
+ const transactions=(state.transactions||[]).filter(t=>(isTargetStore(t.store)||!t.store)&&isTargetProduct(t.productKey||t.product)).map(projectTransaction);
  const lots=(state.inventoryLots||[]).filter(l=>(isTargetStore(l.store)||!l.store)&&isTargetProduct(l.productKey||l.product)).map(projectLot);
  const lotteries=(state.lotteries||[]).filter(x=>isTargetStore(x.store||x.receiptStore)&&isTargetProduct(x.receiptProduct||x.title)).map(projectLottery);
  const cards=(state.inventoryLots||[]).filter(l=>l.category==='カード'&&isTargetProduct(l.productKey||l.product)||l.category==='カード'&&isTargetProduct(l.set)).map(projectLot);
@@ -1134,7 +1134,7 @@ function runTv2AssetAudit(command){
  const loaded=tv2Load_(),summary=tv2AssetAuditView_(loaded.payload||{},requestId,input.filters);summary.revision=Number(loaded.revision);
  const subject='[Toreca Vault Asset Audit] '+requestId,to=Session.getEffectiveUser().getEmail();
  if(!to)throw new Error('監査結果の保存先メールアドレスを確認できません');
- GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
+ if(GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))throw new Error('同じrequestIdの監査結果draftが既にあります');
  GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
  return{ok:true,readOnly:true,requestId,revision:Number(loaded.revision),resultDraft:subject,counts:summary.counts};
 }
