@@ -1144,16 +1144,21 @@ function tv2ProcessChatTradeDrafts_(){
  const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
  const results=[];
  drafts.forEach(draft=>{
+  let command={},type='',requestId='';
   try{
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
-   let command;try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
-   const type=String(command&&command.type||'');
+   try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
+   type=String(command&&command.type||'');requestId=String(command&&command.requestId||'');
    if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004','asset-audit'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
    const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):type==='asset-audit'?runTv2AssetAudit(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){
-   results.push({ok:false,error:String(err&&err.message||err)});
+   const failure={ok:false,type,requestId,error:String(err&&err.message||err)};results.push(failure);
+   const failureSubject='[Toreca Vault Command Error] '+(requestId||'unidentified-command');
+   if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===failureSubject)){
+    const to=Session.getEffectiveUser().getEmail();if(to)GmailApp.createDraft(to,failureSubject,JSON.stringify(failure,null,2));
+   }
   }
  });
  return results;

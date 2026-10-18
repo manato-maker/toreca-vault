@@ -169,3 +169,9 @@
 - テスト: 対象レコードの絞り込み、無関係レコードの除外、revision/read-only契約を検証する `test/v2-asset-audit.test.js` を追加。`npm test` と `npm run check` を実行する。
 - 本番状態: PR #67 をmerge commit `b7eedabfa248e76d5a8a12247d6676e5786bd59f` でmainへ反映。V2 CI #480 success（211 tests）、Apps Script deploy #269 / run `39121318741` はtest・push・remote verify success。read-only監査command `asset-audit-20261018-01` を2026-10-18 19:58 JST頃に非公開Gmail queueへ投入。queue処理結果draftと正本revisionは確認待ち。
 - 制限: 受取・開封・在庫の実更新は監査の一意候補と申告値が一致する場合のみ行う。複数候補・候補欠落・revision drift・同一requestIdの監査結果draft既存はfail-closedとし、結果draftを削除しない。更新成功後はV2正本を再読込する。
+
+### 2026-10-18 Command queue diagnostics
+- 発見: read-only asset-audit command draftが定期処理後も残ったが、キュー処理は例外を戻り値だけに保持して結果を出さないため、停止理由が確認できない。
+- 変更: command失敗時、元command draftを保持したまま、非公開GmailへrequestId単位で重複しない `[Toreca Vault Command Error]` draftを作る。成功時のみcommand draftを削除する。正本データは変更しない。
+- テスト: `test/v2-asset-audit.test.js` に失敗時のqueue保持とdiagnostic draftの一意性を追加。`npm test`（212 tests）、`npm run check`、Apps Script syntax check、`git diff --check` success。
+- 本番状態: PRとデプロイ待ち。asset-audit requestは処理失敗理由を確認後に再試行し、V2正本の再読込を行う。
