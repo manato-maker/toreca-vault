@@ -1139,6 +1139,70 @@ function runTv2AssetAudit(command){
  return{ok:true,readOnly:true,requestId,revision:Number(loaded.revision),resultDraft:subject,counts:summary.counts};
 }
 
+function runTv2AssetReconcile(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
+ if(!/^asset-reconcile-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('資産反映requestId/revisionが不正です');
+ const purchases=Array.isArray(input.purchases)?input.purchases:[],openings=Array.isArray(input.openings)?input.openings:[],lotteryUpdates=Array.isArray(input.lotteryUpdates)?input.lotteryUpdates:[];
+ if(!purchases.length||!openings.length||!lotteryUpdates.length)throw new Error('購入・開封・抽選更新の全指定が必要です');
+ const subject='[Toreca Vault Asset Reconcile Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ if(!to)throw new Error('資産反映結果の保存先メールアドレスを確認できません');
+ const txFields=['id','type','product','productKey','category','condition','quantity','price','total','date','store','sourceLotteryId','requestId','source','actualPaidTotal','orderNumber','orderDate','set'];
+ const lotFields=['id','product','productKey','category','condition','quantity','unitCost','acquiredAt','store','source','sourceTransactionId','sourceLotteryId','requestId','set','memo'];
+ const sameFields=(a,b,fields)=>fields.every(k=>String((a&&a[k])??'')===String((b&&b[k])??''));
+ const finalLotIds=[];
+ const result=tv2Mutate_('asset-reconcile',state=>{
+  if(Number(state.revision||0)<expectedRevision)throw new Error('監査revisionより正本revisionが古いため停止しました');
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  let changed=false;
+  purchases.forEach(spec=>{
+   const id=String(spec.id||'').trim(),product=String(spec.product||'').trim(),store=String(spec.store||'').trim(),date=String(spec.date||'').trim(),category=String(spec.category||'').trim(),quantity=Number(spec.quantity),paid=spec.actualPaidTotal==null?null:Number(spec.actualPaidTotal),price=Number(spec.price);
+   if(!id||!product||!store||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!['BOX','パック','カード'].includes(category))throw new Error('購入明細が不正です');
+   const retail=category==='カード'?null:tv2RetailPriceInfo_(product,category,quantity);
+   if(retail&&price!==retail.price)throw new Error('定価マスターと購入明細の単価が一致しません');
+   if(!Number.isFinite(price)||price<0||paid!==null&&(!Number.isFinite(paid)||paid<0))throw new Error('購入金額が不正です');
+   const tx={id,type:'purchase',product,productKey:product,category,condition:String(spec.condition||''),quantity,price,total:price*quantity,date,store,source:String(spec.source||'chat-reconcile'),requestId:String(spec.requestId||requestId),memo:String(spec.memo||'')};
+   if(spec.sourceLotteryId)tx.sourceLotteryId=String(spec.sourceLotteryId);if(spec.orderNumber)tx.orderNumber=String(spec.orderNumber);if(spec.orderDate)tx.orderDate=String(spec.orderDate);if(paid!==null){tx.actualPaid=paid/quantity;tx.actualPaidTotal=paid;}
+   if(spec.set)tx.set=String(spec.set);if(retail){tx.priceBasis=retail.basis;tx.retailPriceSource=retail.source;}
+   const lot={id:'lot-'+id,product,productKey:product,category,condition:tx.condition,quantity,unitCost:price,acquiredAt:date,store,source:'chat-reconcile',sourceTransactionId:id,sourceLotteryId:tx.sourceLotteryId||'',requestId:tx.requestId,memo:tx.memo};if(spec.set)lot.set=String(spec.set);if(retail){lot.priceBasis=retail.basis;lot.retailPriceSource=retail.source;}
+   const oldTx=state.transactions.filter(x=>String(x.id||'')===id),oldLot=state.inventoryLots.filter(x=>String(x.id||'')===lot.id);
+   if(oldTx.length||oldLot.length){const consumed=oldTx.length===1&&oldLot.length===0&&openings.some(x=>String(x.sourceLotId||'')===lot.id&&Number(x.quantity)===quantity&&state.transactions.some(t=>String(t.id||'')===String(x.id||'')&&t.type==='opening'));if(!consumed&&(oldTx.length!==1||oldLot.length!==1||!sameFields(oldTx[0],tx,txFields)||!sameFields(oldLot[0],lot,lotFields)))throw new Error('購入履歴/lotが部分重複または内容不一致です');if(consumed&&!sameFields(oldTx[0],tx,txFields))throw new Error('開封済み購入履歴の内容が一致しません');}
+   else{
+    const sameReceipt=state.transactions.filter(x=>x.type==='purchase'&&String(x.date||'')===date&&String(x.store||'')===store&&String(x.category||'')===category&&normalize_(x.productKey||x.product)===normalize_(product));
+    if(sameReceipt.length)throw new Error('同日・同店・同商品の既存購入候補があるため停止しました');
+    state.transactions.push(tx);state.inventoryLots.push(lot);changed=true;
+   }
+   finalLotIds.push(lot.id);
+  });
+  openings.forEach(spec=>{
+   const id=String(spec.id||'').trim(),product=String(spec.product||'').trim(),sourceLotId=String(spec.sourceLotId||'').trim(),quantity=Number(spec.quantity),date=String(spec.date||'').trim(),derived=Array.isArray(spec.derivedLots)?spec.derivedLots:[];
+   if(!id||!product||!sourceLotId||!Number.isInteger(quantity)||quantity<=0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!derived.length)throw new Error('開封明細が不正です');
+   const existing=state.transactions.filter(x=>String(x.id||'')===id);
+   if(existing.length){if(existing.length!==1||existing[0].type!=='opening'||String(existing[0].product||'')!==product||String(existing[0].date||'')!==date||Number(existing[0].quantity)!==quantity)throw new Error('開封履歴/獲得在庫が部分重複または内容不一致です');derived.forEach(x=>{const found=state.inventoryLots.filter(l=>String(l.id||'')===String(x.id||''));if(found.length!==1||String(found[0].product||'')!==String(x.product||'')||String(found[0].set||'')!==String(x.set||'')||Number(found[0].quantity)!==Number(x.quantity)||Number(found[0].unitCost)!==Number(x.unitCost)||String(found[0].sourceTransactionId||'')!==id)throw new Error('開封獲得在庫の内容が一致しません');finalLotIds.push(String(x.id));});return;}
+   const sourceLots=state.inventoryLots.filter(x=>String(x.id||'')===sourceLotId);if(sourceLots.length!==1)throw new Error('開封元在庫lotが一意ではありません');
+   const source=sourceLots[0],unit=Number(source.unitCost);if(Number(source.quantity)<quantity||!Number.isFinite(unit)||unit<0)throw new Error('開封元在庫数量/原価が不正です');
+   const acquisitionCost=unit*quantity,derivedCost=derived.reduce((sum,x)=>sum+Number(x.quantity||0)*Number(x.unitCost),0);if(!Number.isFinite(derivedCost)||Math.abs(derivedCost-acquisitionCost)>0.001)throw new Error('開封獲得在庫への原価配分が一致しません');
+   const category=String(source.category||'');source.quantity=Number(source.quantity)-quantity;state.inventoryLots=state.inventoryLots.filter(x=>Number(x.quantity)>0);
+   state.transactions.push({id,type:'opening',product,productKey:product,category,condition:String(source.condition||''),quantity,price:0,total:0,date,store:String(spec.store||source.store||''),source:'chat-reconcile',requestId:String(spec.requestId||requestId),memo:String(spec.memo||'開封'),acquisitionCost,acquisitionCostBasis:'希望小売価格',retailPriceSource:String(source.retailPriceSource||'')});
+   derived.forEach(item=>{const lot={id:String(item.id||''),product:String(item.product||'').trim(),productKey:String(item.product||'').trim(),category:String(item.category||'').trim(),condition:String(item.condition||''),set:String(item.set||''),quantity:Number(item.quantity),unitCost:Number(item.unitCost),acquiredAt:date,store:String(spec.store||source.store||''),source:'opening',sourceTransactionId:id,sourceLotteryId:'',requestId:String(spec.requestId||requestId),memo:String(item.memo||'')};if(!lot.id||!lot.product||!Number.isInteger(lot.quantity)||lot.quantity<=0||!Number.isFinite(lot.unitCost)||lot.unitCost<0||state.inventoryLots.some(x=>String(x.id||'')===lot.id))throw new Error('開封獲得lotが不正または重複しています');state.inventoryLots.push(lot);finalLotIds.push(lot.id);});
+   changed=true;
+  });
+  lotteryUpdates.forEach(spec=>{
+   const id=String(spec.id||'').trim(),expected=spec.expected||{},updates=spec.updates||{},matches=state.lotteries.filter(x=>String(x.id||'')===id);if(!id||matches.length!==1)throw new Error('受取対象抽選IDが存在しないか一意ではありません');
+   const item=matches[0],already=Object.entries(updates).every(([k,v])=>String(item[k]??'')===String(v??''));if(!already&&!Object.entries(expected).every(([k,v])=>String(item[k]??'')===String(v??'')))throw new Error('受取対象抽選の事前状態が変化したため停止しました');
+   if(!already){Object.assign(item,updates,{updatedAt:new Date().toISOString()});changed=true;}
+  });
+  return changed?{changed:true,expectedRevision}:{changed:false,duplicate:true,expectedRevision};
+ });
+ const check=tv2Load_(),state=check.payload||{};
+ purchases.forEach(spec=>{const id=String(spec.id),tx=state.transactions.filter(x=>String(x.id||'')===id),lot=state.inventoryLots.filter(x=>String(x.id||'')==='lot-'+id),consumed=openings.filter(x=>String(x.sourceLotId||'')==='lot-'+id).reduce((n,x)=>n+Number(x.quantity||0),0),remaining=Number(spec.quantity)-consumed;if(tx.length!==1||Number(tx[0].quantity)!==Number(spec.quantity)||remaining<0||remaining===0&&lot.length!==0||remaining>0&&(lot.length!==1||Number(lot[0].quantity)!==remaining))throw new Error('購入履歴/在庫lotの再読込検証に失敗しました: '+id);});
+ openings.forEach(spec=>{const tx=(state.transactions||[]).filter(x=>String(x.id||'')===String(spec.id));if(tx.length!==1||tx[0].type!=='opening'||Number(tx[0].quantity)!==Number(spec.quantity))throw new Error('開封履歴の再読込検証に失敗しました: '+spec.id);});
+ lotteryUpdates.forEach(spec=>{const item=(state.lotteries||[]).find(x=>String(x.id)===String(spec.id));if(!item||!Object.entries(spec.updates||{}).every(([k,v])=>String(item[k]??'')===String(v??'')))throw new Error('受取抽選の再読込検証に失敗しました: '+spec.id);});
+ const finalLots=(state.inventoryLots||[]).filter(x=>finalLotIds.includes(String(x.id||''))).map(x=>({id:x.id,product:x.product,category:x.category,quantity:Number(x.quantity),unitCost:Number(x.unitCost),sourceTransactionId:String(x.sourceTransactionId||''),set:String(x.set||'')}));
+ const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,purchases:purchases.map(x=>({id:x.id,quantity:Number(x.quantity),store:x.store,product:x.product,price:Number(x.price),total:Number(x.price)*Number(x.quantity),actualPaidTotal:x.actualPaidTotal==null?null:Number(x.actualPaidTotal),sourceLotteryId:String(x.sourceLotteryId||''),orderNumber:String(x.orderNumber||''),orderDate:String(x.orderDate||'')})),openings:openings.map(x=>({id:x.id,quantity:Number(x.quantity),product:x.product})),lotteryUpdates:lotteryUpdates.map(x=>x.id),inventory:finalLots};
+ if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(verified,null,2));
+ return verified;
+}
+
 function tv2ProcessChatTradeDrafts_(){
  const subject='[Toreca Vault Command]';
  const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
@@ -1149,8 +1213,8 @@ function tv2ProcessChatTradeDrafts_(){
    const raw=String(draft.getMessage().getPlainBody()||'').trim();
    try{command=JSON.parse(raw)}catch(e){throw new Error('Toreca Vaultコマンド下書きがJSONではありません')}
    type=String(command&&command.type||'');requestId=String(command&&command.requestId||'');
-   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004','asset-audit'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
-   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):type==='asset-audit'?runTv2AssetAudit(command):runTv2RepairReceiptSale(command);
+   if(!['sale','purchase','lottery','lottery-bulk','repair-receipt-sale','pokemoncenter-spouse-result','card-market-lookup','market-refresh-cards','reconcile-results-20260930','dedupe-beehonpo-20260930','repair-current-20261004','asset-audit','asset-reconcile'].includes(type))throw new Error('Toreca Vaultコマンド種別が不正です');
+   const result=type==='sale'?runTv2ChatSale(command):type==='purchase'?runTv2ChatPurchase(command):type==='lottery'?runTv2ChatLottery(command):type==='lottery-bulk'?runTv2ChatLotteryBulk(command):type==='pokemoncenter-spouse-result'?runTv2PokemonCenterSpouseResult(command):type==='card-market-lookup'?runTv2ChatCardMarketLookup(command):type==='market-refresh-cards'?runTv2ChatMarketRefresh(command):type==='reconcile-results-20260930'?runTv2ReconcileResults20260930(command):type==='dedupe-beehonpo-20260930'?runTv2DedupeBeeHonpo20260930(command):type==='repair-current-20261004'?runTv2RepairCurrent20261004({fromQueue:true}):type==='asset-audit'?runTv2AssetAudit(command):type==='asset-reconcile'?runTv2AssetReconcile(command):runTv2RepairReceiptSale(command);
    draft.deleteDraft();
    results.push({ok:true,type,result});
   }catch(err){

@@ -175,3 +175,9 @@
 - 変更: command失敗時、元command draftを保持したまま、非公開GmailへrequestId単位で重複しない `[Toreca Vault Command Error]` draftを作る。成功時のみcommand draftを削除する。正本データは変更しない。
 - テスト: `test/v2-asset-audit.test.js` に失敗時のqueue保持とdiagnostic draftの一意性を追加。`npm test`（212 tests）、`npm run check`、Apps Script syntax check、`git diff --check` success。
 - 本番状態: PRとデプロイ待ち。asset-audit requestは処理失敗理由を確認後に再試行し、V2正本の再読込を行う。
+
+### 2026-10-18 Atomic asset reconciliation
+- 変更: `asset-reconcile` は監査revision以上の正本のみ対象にし、同日/同店/同商品購入候補、購入ID、lot ID、開封元ID、抽選IDと期待状態を検査する。購入・既存抽選の受取更新・開封・派生lot作成を一度に保存し、開封原価と派生lot原価合計の一致を強制する。成功後はrevision、取引、抽選、在庫を再読込検証する。
+- 仕訳方針: シュリンク袋代等の付帯費用は商品単価に含めない。定価を購入単価/在庫原価、割引後決済額を `actualPaidTotal` に記録する。開封packは数量0で消去し、シングル/付属パックへ同じ原価を配分して二重計上を防ぐ。
+- テスト: 購入・開封・原価配分、再実行時の冪等性、古いrevision停止、command失敗診断を検証。
+- 本番状態: 妻分9種セットは本人確認により2026-09-05当選分を特定。反映commandと保存後revision/在庫の確認待ち。
