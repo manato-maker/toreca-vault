@@ -1153,6 +1153,7 @@ function runTv2AssetReconcile(command){
  const result=tv2Mutate_('asset-reconcile',state=>{
   if(Number(state.revision||0)<expectedRevision)throw new Error('監査revisionより正本revisionが古いため停止しました');
   state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  const existingTransactions=state.transactions.slice();
   let changed=false;
   purchases.forEach(spec=>{
    const id=String(spec.id||'').trim(),product=String(spec.product||'').trim(),store=String(spec.store||'').trim(),date=String(spec.date||'').trim(),category=String(spec.category||'').trim(),quantity=Number(spec.quantity),paid=spec.actualPaidTotal==null?null:Number(spec.actualPaidTotal),price=Number(spec.price);
@@ -1167,7 +1168,7 @@ function runTv2AssetReconcile(command){
    const oldTx=state.transactions.filter(x=>String(x.id||'')===id),oldLot=state.inventoryLots.filter(x=>String(x.id||'')===lot.id);
    if(oldTx.length||oldLot.length){const consumed=oldTx.length===1&&oldLot.length===0&&openings.some(x=>String(x.sourceLotId||'')===lot.id&&Number(x.quantity)===quantity&&state.transactions.some(t=>String(t.id||'')===String(x.id||'')&&t.type==='opening'));if(!consumed&&(oldTx.length!==1||oldLot.length!==1||!sameFields(oldTx[0],tx,txFields)||!sameFields(oldLot[0],lot,lotFields)))throw new Error('購入履歴/lotが部分重複または内容不一致です');if(consumed&&!sameFields(oldTx[0],tx,txFields))throw new Error('開封済み購入履歴の内容が一致しません');}
    else{
-    const sameReceipt=state.transactions.filter(x=>x.type==='purchase'&&String(x.date||'')===date&&String(x.store||'')===store&&String(x.category||'')===category&&normalize_(x.productKey||x.product)===normalize_(product));
+    const sameReceipt=existingTransactions.filter(x=>x.type==='purchase'&&String(x.date||'')===date&&String(x.store||'')===store&&String(x.category||'')===category&&normalize_(x.productKey||x.product)===normalize_(product));
     if(sameReceipt.length)throw new Error('同日・同店・同商品の既存購入候補があるため停止しました');
     state.transactions.push(tx);state.inventoryLots.push(lot);changed=true;
    }
@@ -1201,6 +1202,23 @@ function runTv2AssetReconcile(command){
  const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,purchases:purchases.map(x=>({id:x.id,quantity:Number(x.quantity),store:x.store,product:x.product,price:Number(x.price),total:Number(x.price)*Number(x.quantity),actualPaidTotal:x.actualPaidTotal==null?null:Number(x.actualPaidTotal),sourceLotteryId:String(x.sourceLotteryId||''),orderNumber:String(x.orderNumber||''),orderDate:String(x.orderDate||'')})),openings:openings.map(x=>({id:x.id,quantity:Number(x.quantity),product:x.product})),lotteryUpdates:lotteryUpdates.map(x=>x.id),inventory:finalLots};
  if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(verified,null,2));
  return verified;
+}
+
+function runTv2AssetReconcileOnce(){
+ const subject='[Toreca Vault Command]',candidates=[];
+ GmailApp.getDrafts().forEach(draft=>{
+  if(String(draft.getMessage().getSubject()||'').trim()!==subject)return;
+  try{const command=JSON.parse(String(draft.getMessage().getPlainBody()||'').trim());if(String(command&&command.type||'')==='asset-reconcile')candidates.push({draft,command});}catch(e){}
+ });
+ if(!candidates.length)return{ok:true,skipped:true};
+ if(candidates.length!==1)throw new Error('資産反映コマンドが複数あるため安全停止しました');
+ const {draft,command}=candidates[0],requestId=String(command.requestId||'');
+ try{const result=runTv2AssetReconcile(command);draft.deleteDraft();return{ok:true,processed:1,revision:Number(result.revision)};}
+ catch(err){
+  const failure={ok:false,type:'asset-reconcile',requestId,error:String(err&&err.message||err)},failureSubject='[Toreca Vault Command Error] '+(requestId||'unidentified-asset-reconcile');
+  if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===failureSubject)){const to=Session.getEffectiveUser().getEmail();if(to)GmailApp.createDraft(to,failureSubject,JSON.stringify(failure,null,2));}
+  return{ok:false,processed:0,errorDraftCreated:true};
+ }
 }
 
 function tv2ProcessChatTradeDrafts_(){

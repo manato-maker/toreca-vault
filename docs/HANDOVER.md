@@ -181,3 +181,9 @@
 - 仕訳方針: シュリンク袋代等の付帯費用は商品単価に含めない。定価を購入単価/在庫原価、割引後決済額を `actualPaidTotal` に記録する。開封packは数量0で消去し、シングル/付属パックへ同じ原価を配分して二重計上を防ぐ。
 - テスト: 購入・開封・原価配分、再実行時の冪等性、古いrevision停止、command失敗診断を検証。
 - 本番状態: 妻分9種セットは本人確認により2026-09-05当選分を特定。反映commandと保存後revision/在庫の確認待ち。
+
+### 2026-10-18 Scoped asset reconciliation runner
+- 発見: 汎用runnerを即時実行すると、今回対象外の古い売却commandも処理される可能性がある。また、同じ受取日に同一店舗・同一商品となる別当選分を同一commandへまとめるケースがある。
+- 変更: 正本照合の重複検査は実行開始時点の既存取引だけを対象にし、同一command内の別lottery参照購入を誤検知しない。デプロイ成功後のGitHub Actionsから `runTv2AssetReconcileOnce` だけを呼び、他種別のcommandは未処理のまま残す。Actionsへ返す値は処理件数とrevisionだけに限定し、購入明細は非公開のGmail結果draftに保持する。
+- テスト: 同一command内の同日・同店・同商品二件、売却draftを残す専用runner、複数資産command時のfail-closed、デプロイ成功依存のworkflowを検証する。
+- 本番状態: PR・CI・Apps Script配布後に対象commandのみを実行し、正本を再読込してrevision・履歴・在庫数量を確認する。
