@@ -301,6 +301,14 @@ function tv2CardSetText_(lot,model){
 function tv2CardMarketName_(lot,model){
  const fixed=String(lot&&lot.marketLookupName||'').trim();
  if(fixed)return fixed;
+ // The inventory display names for the 30th CELEBRATION cards include rarity
+ // or opening notes that are not part of the buyback catalog's card name.
+ // Keep this normalization tied to the exact set and collector number so it
+ // cannot redirect another print to the same market identity.
+ const identity=normalize_(tv2CardSetText_(lot,model));
+ const product=normalize_([lot&&lot.product,lot&&lot.productKey].filter(Boolean).join(' '));
+ if(identity===normalize_('M6a 132/103')&&product.includes(normalize_('ジラーチex')))return'ジラーチex';
+ if(identity===normalize_('M6a 150/103')&&product.includes(normalize_('ゲンガー')))return'ゲンガー';
  let name=String(lot.product||lot.productKey||'').trim();
  if(model)name=name.replace(String(model),' ').replace(/\s+/g,' ').trim();
  const setCode=tv2CardSetText_(lot,model).split(/\s+/)[0]||'',parts=name.split(/\s+/);
