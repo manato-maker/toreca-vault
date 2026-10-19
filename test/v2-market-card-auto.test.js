@@ -204,3 +204,26 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
   assert.equal(embeddedState.marketQuotes[0].price,7300);
   assert.equal(embeddedState.marketQuotes[0].source,'カードラッシュ');
 }
+
+{
+  const celebrationState={inventoryLots:[
+    {id:'j1',category:'カード',product:'ジラーチex SAR',set:'M6a 132/103',condition:'良品',quantity:1,unitCost:0},
+    {id:'g1',category:'カード',product:'ゲンガー（金色・30th仕様）',set:'M6a 150/103',condition:'良品',quantity:1,unitCost:0}
+  ],marketQuotes:[]};
+  const lookups=[];
+  const ctx=vm.createContext({
+    tv2Mutate_:(_kind,fn)=>fn(celebrationState),TZ:'Asia/Tokyo',
+    Utilities:{formatDate:(_d,_tz,fmt)=>fmt==='H'?'14':'2026-10-19'},
+    normalize_:x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[\s　\-＿_・:：()（）【】\[\]「」『』]/g,''),
+    extractModel_:x=>(String(x).match(/\d{3}\/\d{3}/)||[])[0]||'',
+    fetchCardrushRows_:()=>[['ジラーチex','132/103','2200'],['ゲンガー','150/103','2600']],
+    findCardrushBuyback_:(_rows,name,model)=>{lookups.push({name,model});const price=model==='132/103'?2200:model==='150/103'?2600:0;return price?{price,source:'カードラッシュ'}:null},
+    fetchCardrushMediaBuyback_:()=>null
+  });
+  vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),ctx);
+  const hit=vm.runInContext('runTv2MarketAuto()',ctx);
+  assert.deepEqual(lookups,[{name:'ジラーチex',model:'132/103'},{name:'ゲンガー',model:'150/103'}]);
+  assert.equal(hit.report.cardUpdated,2,'the zero acquisition cost does not exclude the cards from market matching');
+  assert.deepEqual(celebrationState.marketQuotes.map(q=>q.price),[2200,2600]);
+  assert.deepEqual(celebrationState.marketQuotes.map(q=>q.lotId),['j1','g1']);
+}
