@@ -359,7 +359,8 @@ function tv2TryMarketSource_(label,fn,reviews){
 function runTv2MarketAuto(options){
  if(!(options&&options.skipQueue)&&typeof tv2ProcessChatTradeDrafts_==='function')tv2ProcessChatTradeDrafts_();
  const outcome=tv2Mutate_('market-auto',state=>{const now=new Date(),health=tv2Health_(state),reviews=[];const date=Utilities.formatDate(now,TZ,'yyyy-MM-dd'),hour=Number(Utilities.formatDate(now,TZ,'H')),policy='cardrush-toretoku-v6',report={updated:0,unchanged:0,review:0,cardUpdated:0,cardUnchanged:0,cardReview:0,cardTotal:0,at:now.toISOString()};
-  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード');report.cardTotal=cards.length;
+  const requestedLotIds=Array.isArray(options&&options.lotIds)?new Set(options.lotIds.map(x=>String(x||'').trim()).filter(Boolean)):null;
+  const cards=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&l.category==='カード'&&(!requestedLotIds||requestedLotIds.has(String(l.id||''))));report.cardTotal=cards.length;
   // Single-card prices prefer Cardrush and fall back to Toretoku only.
   // If today's quote came from Toretoku, retry Cardrush once after 20:00 so
   // a later Cardrush update can replace the fallback without waiting a day.
@@ -991,9 +992,22 @@ function runTv2ChatCardMarketLookup(command){
 function runTv2ChatMarketRefresh(command){
  const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
  if(!requestId)throw new Error('カード相場再取得コマンドが不正です');
- const result=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true});
+ const targetSpecs=Array.isArray(input.targets)?input.targets:null;
+ let targetIds=null;
+ if(targetSpecs){
+  if(!targetSpecs.length||targetSpecs.length>20)throw new Error('カード相場再取得の対象指定が不正です');
+  const ids=targetSpecs.map(x=>String(x&&x.lotId||'').trim());
+  if(ids.some(x=>!x)||new Set(ids).size!==ids.length)throw new Error('カード相場再取得lotIdが不正または重複しています');
+  const before=tv2Load_(),state=before&&before.payload||{};
+  targetSpecs.forEach(spec=>{
+   const matches=(state.inventoryLots||[]).filter(l=>String(l.id||'')===String(spec.lotId||'')&&Number(l.quantity)>0&&l.category==='カード');
+   if(matches.length!==1||normalize_(matches[0].product||matches[0].productKey)!==normalize_(spec.product||'')||normalize_(matches[0].set||'')!==normalize_(spec.set||''))throw new Error('カード相場再取得対象が正本と一致しません: '+String(spec.lotId||''));
+  });
+  targetIds=ids;
+ }
+ const result=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true,lotIds:targetIds||undefined});
  const loaded=tv2Load_(),state=loaded.payload||{},quotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[],lots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
- const cards=lots.filter(l=>Number(l.quantity)>0&&l.category==='カード').map(l=>{
+ const cards=lots.filter(l=>Number(l.quantity)>0&&l.category==='カード'&&(!targetIds||targetIds.includes(String(l.id||'')))).map(l=>{
    const q=quotes.find(x=>String(x.lotId||'')===String(l.id||''))||null;
    return{id:l.id,product:l.product,set:l.set||'',quantity:Number(l.quantity)||0,price:q&&Number.isFinite(Number(q.price))?Number(q.price):null,source:q?String(q.source||''):'',checkedAt:q?String(q.checkedAt||''):'',fresh:q?q.fresh!==false:false};
  });
@@ -1262,9 +1276,12 @@ function runTv2AssetCostAdjustment(command){
 function tv2ProcessChatTradeDrafts_(){
  const subject='[Toreca Vault Command]';
  const allDrafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
- const adjustmentDrafts=allDrafts.filter(d=>{try{return String(JSON.parse(String(d.getMessage().getPlainBody()||'').trim()).type||'')==='asset-cost-adjustment';}catch(e){return false;}});
+ const commandType=d=>{try{return String(JSON.parse(String(d.getMessage().getPlainBody()||'').trim()).type||'')}catch(e){return''}};
+ const adjustmentDrafts=allDrafts.filter(d=>commandType(d)==='asset-cost-adjustment');
+ const marketRefreshDrafts=allDrafts.filter(d=>commandType(d)==='market-refresh-cards');
  if(adjustmentDrafts.length>1)return[{ok:false,type:'asset-cost-adjustment',error:'原価修正コマンドが複数あるため安全停止しました'}];
- const drafts=adjustmentDrafts.length?adjustmentDrafts:allDrafts;
+ if(marketRefreshDrafts.length>1)return[{ok:false,type:'market-refresh-cards',error:'カード相場再取得コマンドが複数あるため安全停止しました'}];
+ const drafts=adjustmentDrafts.length?adjustmentDrafts:(marketRefreshDrafts.length?marketRefreshDrafts:allDrafts);
  const results=[];
  drafts.forEach(draft=>{
   let command={},type='',requestId='';
