@@ -216,6 +216,29 @@ test('adjustment commands run alone and leave unrelated queued drafts untouched'
  assert.ok(drafts.includes(unrelated));
 });
 
+test('a scoped market refresh runs alone and leaves other command drafts untouched',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
+ const end=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',start);
+ const deleted=[],drafts=[],calls=[];
+ const make=(type,id,extra={})=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type,requestId:id,...extra})}),deleteDraft:()=>deleted.push(id)});
+ const unrelated=make('sale','old-sale'),refresh=make('market-refresh-cards','jirachi-gengar',{targets:[{lotId:'j1',product:'ジラーチex SAR',set:'M6a 132/103'},{lotId:'g1',product:'ゲンガー（金色・30th仕様）',set:'M6a 150/103'}]});
+ drafts.push(unrelated,refresh);
+ const context={
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>drafts.push({getMessage:()=>({getSubject:()=>subject,getPlainBody:()=>body})})},
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  runTv2ChatMarketRefresh:command=>{calls.push(command);return{ok:true,requestId:command.requestId,revision:1900}}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ const result=context.process();
+ assert.equal(result.length,1);
+ assert.equal(result[0].ok,true);
+ assert.deepEqual(deleted,['jirachi-gengar']);
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].targets.length,2);
+ assert.ok(drafts.includes(unrelated),'unrelated queued commands must remain untouched');
+});
+
 test('scoped runner workflow waits for a successful Apps Script deploy',async()=>{
  const {readFile}=await import('node:fs/promises');
  const workflow=await readFile(new URL('../.github/workflows/run-tv2-asset-reconcile-once.yml',import.meta.url),'utf8');
