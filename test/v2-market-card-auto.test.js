@@ -208,7 +208,8 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
 {
   const celebrationState={inventoryLots:[
     {id:'j1',category:'カード',product:'ジラーチex SAR',set:'M6a 132/103',condition:'良品',quantity:1,unitCost:0},
-    {id:'g1',category:'カード',product:'ゲンガー（金色・30th仕様）',set:'M6a 150/103',condition:'良品',quantity:1,unitCost:0}
+    {id:'g1',category:'カード',product:'ゲンガー（金色・30th仕様）',set:'M6a 150/103',condition:'良品',quantity:1,unitCost:0},
+    {id:'unrelated',category:'カード',product:'別カード',set:'M6a 001/103',condition:'良品',quantity:1,unitCost:100}
   ],marketQuotes:[]};
   const lookups=[];
   const ctx=vm.createContext({
@@ -221,9 +222,10 @@ assert.equal(vm.runInContext('findCardrushBuyback_',prices)(rows,'ピカチュ�
     fetchCardrushMediaBuyback_:()=>null
   });
   vm.runInContext(source.slice(0,source.indexOf('function tv2Mutate_(')),ctx);
-  const hit=vm.runInContext('runTv2MarketAuto()',ctx);
+  const hit=vm.runInContext("runTv2MarketAuto({lotIds:['j1','g1']})",ctx);
   assert.deepEqual(lookups,[{name:'ジラーチex',model:'132/103'},{name:'ゲンガー',model:'150/103'}]);
   assert.equal(hit.report.cardUpdated,2,'the zero acquisition cost does not exclude the cards from market matching');
   assert.deepEqual(celebrationState.marketQuotes.map(q=>q.price),[2200,2600]);
   assert.deepEqual(celebrationState.marketQuotes.map(q=>q.lotId),['j1','g1']);
+  assert.equal(hit.report.cardTotal,2,'a scoped refresh does not process unrelated card lots');
 }
