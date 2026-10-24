@@ -243,3 +243,13 @@
 - 発見: `clasp run` はGoogle側の「Unable to run script function」応答があってもexit code 0を返し、GitHub Actionsが誤ってsuccess表示になった。公開ログにAPI応答をそのまま出す設計も避ける必要がある。
 - 変更: 専用runner workflowはAPI拒否、例外、または `ok:false` を検出して失敗終了し、詳細レスポンスをGitHubログへ出さない。`workflow_dispatch` も追加し、権限設定後にデプロイを再実行せず手動再試行できるようにする。
 - 本番状態: PR・CI後に更新runnerを確認する。Google側API executable / 共通Cloud project / OAuth承認の確認が済むまでは資産commandを再試行しない。
+
+### 2026-10-25 — 0円譲受をV2資産照合へ追加
+- 目的: 「MEGA スタートデッキ100 バトルコレクションを親から1個譲受、原価0円」という申告を既存購入と混ぜず、重複なくV2へ記録する。
+- 発見: 購入照合の読み取り監査 (revision 2183) はAMTAFの4個分の売却取引を検出したが、当該フィルターではlotが0件。別途全商品一致で在庫・取引を再監査中。通常購入経路はBOX商品の価格を定価へ補正するため、giftは別処理が必要。
+- 変更: asset-reconcile にgift-onlyと0円gift lotを追加。購入費0円/source=giftの取得履歴と、BOX×1/unitCost=0円の在庫を保存し、同商品在庫や同日履歴があればfail-closed。保存後の正本再読込検証、同一requestId再実行、再処理時の二重計上防止を実装。
+- 検証: npm test 229件成功、npm run checkとgit diff --check成功。Apps Script配布・V2反映は未確認。
+- 価格表示: 2026-10-25提示画面のスタートデッキ100には「相場取得日 2026-10-21」が表示されていた一方、別の相場あり商品で日付表示が欠ける状態を確認。V2 quoteの `checkedAt` が空でも履歴に日付が残る場合は最新日を表示し、日付情報自体が無い場合はBOX/パック欄で「相場取得日 不明」と明示する。
+- 重複防止: スタートデッキ100は画面上の商品名ゆれを考慮し、同商品名を含む既存在庫があれば譲受処理を停止する。
+- 実行経路: Apps Script配布成功後の専用workflowは、まず単独のread-only監査コマンドを処理し、その後、譲受を含むasset-reconcileだけを処理する。Gmail下書きの送信は不要。
+- 残件: PR/CI/Apps Script配布後、監査結果と譲受結果draftを確認し、V2 revision・0円取得履歴・在庫数量1を正本再読込で検証する。

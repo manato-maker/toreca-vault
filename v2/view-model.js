@@ -21,6 +21,13 @@ const cardMarketPrice=q=>{
  const price=Number(q?.price),source=String(q?.source||'');
  return /^(?:カードラッシュ|トレトク)/.test(source)&&Number.isFinite(price)&&price>0?price:null;
 };
+function quoteCheckedAt(q){
+ const current=String(q?.checkedAt||'').trim();
+ if(current)return current;
+ const dates=(Array.isArray(q?.history)?q.history:[]).map(h=>String(h?.checkedAt||h?.date||'').trim()).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));
+ dates.sort();
+ return dates.length?dates[dates.length-1]:'';
+}
 export function v2ViewModel(state){
  const quotes=quoteMap(state);
  const purchases=[],sales=[],openings=[];
@@ -32,7 +39,7 @@ export function v2ViewModel(state){
  const boxes=[],packs=[],cards=[];
  for(const l of state.inventoryLots||[]){
    const q=quoteFor(quotes,l);
-   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||embeddedCardSet(l)||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:q?.checkedAt||'',marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
+   const base={id:l.id,product:l.product,productKey:l.productKey,category:l.category,set:l.set||embeddedCardSet(l)||'',variant:l.variant||'',identityNeedsReview:l.identityNeedsReview===true,condition:l.condition,shrinkStatus:l.condition,quantity:qty(l),cost:l.unitCost,marketPrice:q?.price??null,marketCheckedAt:quoteCheckedAt(q),marketSource:q?.source||'',marketHistory:q?.history||[],marketTrend:q?.trend||'',marketPreviousPrice:q?.previousPrice??null,marketFresh:q?.fresh!==false,date:l.acquiredAt||'',memo:l.memo||''};
    if(l.category==='BOX')boxes.push(base);else if(l.category==='パック')packs.push(base);else if(l.category==='カード'){
      const price=cardMarketPrice(q),source=price!=null?String(q?.source||''):'買取価格未取得（要確認）';
      cards.push({...base,marketPrice:price,buybackPrice:price,marketSource:source});

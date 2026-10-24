@@ -1263,8 +1263,8 @@ function runTv2CardboxOsakaKaminoshihaiApplication20261024(){
 function runTv2AssetReconcile(command){
  const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
  if(!/^asset-reconcile-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('資産反映requestId/revisionが不正です');
- const purchases=Array.isArray(input.purchases)?input.purchases:[],openings=Array.isArray(input.openings)?input.openings:[],lotteryUpdates=Array.isArray(input.lotteryUpdates)?input.lotteryUpdates:[];
- if(!purchases.length||!openings.length||!lotteryUpdates.length)throw new Error('購入・開封・抽選更新の全指定が必要です');
+ const gifts=Array.isArray(input.gifts)?input.gifts:[],purchases=Array.isArray(input.purchases)?input.purchases:[],openings=Array.isArray(input.openings)?input.openings:[],lotteryUpdates=Array.isArray(input.lotteryUpdates)?input.lotteryUpdates:[];
+ if(!gifts.length&&!purchases.length&&!openings.length&&!lotteryUpdates.length)throw new Error('資産反映項目がありません');
  const subject='[Toreca Vault Asset Reconcile Result] '+requestId,to=Session.getEffectiveUser().getEmail();
  if(!to)throw new Error('資産反映結果の保存先メールアドレスを確認できません');
  const txFields=['id','type','product','productKey','category','condition','quantity','price','total','date','store','sourceLotteryId','requestId','source','actualPaidTotal','orderNumber','orderDate','set'];
@@ -1276,6 +1276,22 @@ function runTv2AssetReconcile(command){
   state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
   const existingTransactions=state.transactions.slice();
   let changed=false;
+  gifts.forEach(spec=>{
+   const id=String(spec.id||'').trim(),product=String(spec.product||'').trim(),date=String(spec.date||'').trim(),category=String(spec.category||'BOX').trim(),quantity=Number(spec.quantity),giver=String(spec.giver||'').trim();
+   if(!id||!product||!giver||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!['BOX','パック','カード'].includes(category))throw new Error('譲受明細が不正です');
+   const tx={id,type:'purchase',product,productKey:product,category,condition:String(spec.condition||''),quantity,price:0,total:0,date,store:giver,source:'gift',requestId:String(spec.requestId||requestId),memo:String(spec.memo||'譲受｜取得原価0円')};
+   const lot={id:'lot-'+id,product,productKey:product,category,condition:tx.condition,quantity,unitCost:0,acquiredAt:date,store:giver,source:'gift',sourceTransactionId:id,sourceLotteryId:'',requestId:tx.requestId,memo:tx.memo};
+   const oldTx=state.transactions.filter(x=>String(x.id||'')===id),oldLot=state.inventoryLots.filter(x=>String(x.id||'')===lot.id);
+   if(oldTx.length||oldLot.length){if(oldTx.length!==1||oldLot.length!==1||!sameFields(oldTx[0],tx,txFields)||!sameFields(oldLot[0],lot,lotFields))throw new Error('譲受履歴/lotが重複または内容不一致です');}
+   else{
+    const normalizedProduct=normalize_(product),sameProductLots=state.inventoryLots.filter(x=>{const candidate=normalize_(x.productKey||x.product),sameName=candidate===normalizedProduct||normalizedProduct.indexOf('スタートデッキ100')>=0&&candidate.indexOf('スタートデッキ100')>=0;return sameName&&String(x.category||'')===category&&Number(x.quantity)>0;});
+    if(sameProductLots.length)throw new Error('同一商品の既存在庫があるため譲受を一意に照合できず停止しました');
+    const sameDayProduct=existingTransactions.filter(x=>{const candidate=normalize_(x.productKey||x.product),sameName=candidate===normalizedProduct||normalizedProduct.indexOf('スタートデッキ100')>=0&&candidate.indexOf('スタートデッキ100')>=0;return String(x.date||'')===date&&String(x.category||'')===category&&sameName;});
+    if(sameDayProduct.length)throw new Error('同日・同一商品の既存履歴があるため譲受の重複有無を確認できず停止しました');
+    state.transactions.push(tx);state.inventoryLots.push(lot);changed=true;
+   }
+   finalLotIds.push(lot.id);
+  });
   purchases.forEach(spec=>{
    const id=String(spec.id||'').trim(),product=String(spec.product||'').trim(),store=String(spec.store||'').trim(),date=String(spec.date||'').trim(),category=String(spec.category||'').trim(),quantity=Number(spec.quantity),paid=spec.actualPaidTotal==null?null:Number(spec.actualPaidTotal),price=Number(spec.price);
    if(!id||!product||!store||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0||!['BOX','パック','カード'].includes(category))throw new Error('購入明細が不正です');
@@ -1316,11 +1332,12 @@ function runTv2AssetReconcile(command){
   return changed?{changed:true,expectedRevision}:{changed:false,duplicate:true,expectedRevision};
  });
  const check=tv2Load_(),state=check.payload||{};
+ gifts.forEach(spec=>{const id=String(spec.id),tx=state.transactions.filter(x=>String(x.id||'')===id),lot=state.inventoryLots.filter(x=>String(x.id||'')==='lot-'+id);if(tx.length!==1||tx[0].type!=='purchase'||tx[0].source!=='gift'||Number(tx[0].price)!==0||Number(tx[0].quantity)!==Number(spec.quantity)||lot.length!==1||lot[0].source!=='gift'||Number(lot[0].unitCost)!==0||Number(lot[0].quantity)!==Number(spec.quantity))throw new Error('譲受履歴/在庫lotの再読込検証に失敗しました: '+id);});
  purchases.forEach(spec=>{const id=String(spec.id),tx=state.transactions.filter(x=>String(x.id||'')===id),lot=state.inventoryLots.filter(x=>String(x.id||'')==='lot-'+id),consumed=openings.filter(x=>String(x.sourceLotId||'')==='lot-'+id).reduce((n,x)=>n+Number(x.quantity||0),0),remaining=Number(spec.quantity)-consumed;if(tx.length!==1||Number(tx[0].quantity)!==Number(spec.quantity)||remaining<0||remaining===0&&lot.length!==0||remaining>0&&(lot.length!==1||Number(lot[0].quantity)!==remaining))throw new Error('購入履歴/在庫lotの再読込検証に失敗しました: '+id);});
  openings.forEach(spec=>{const tx=(state.transactions||[]).filter(x=>String(x.id||'')===String(spec.id));if(tx.length!==1||tx[0].type!=='opening'||Number(tx[0].quantity)!==Number(spec.quantity))throw new Error('開封履歴の再読込検証に失敗しました: '+spec.id);});
  lotteryUpdates.forEach(spec=>{const item=(state.lotteries||[]).find(x=>String(x.id)===String(spec.id));if(!item||!Object.entries(spec.updates||{}).every(([k,v])=>String(item[k]??'')===String(v??'')))throw new Error('受取抽選の再読込検証に失敗しました: '+spec.id);});
- const finalLots=(state.inventoryLots||[]).filter(x=>finalLotIds.includes(String(x.id||''))).map(x=>({id:x.id,product:x.product,category:x.category,quantity:Number(x.quantity),unitCost:Number(x.unitCost),sourceTransactionId:String(x.sourceTransactionId||''),set:String(x.set||'')}));
- const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,purchases:purchases.map(x=>({id:x.id,quantity:Number(x.quantity),store:x.store,product:x.product,price:Number(x.price),total:Number(x.price)*Number(x.quantity),actualPaidTotal:x.actualPaidTotal==null?null:Number(x.actualPaidTotal),sourceLotteryId:String(x.sourceLotteryId||''),orderNumber:String(x.orderNumber||''),orderDate:String(x.orderDate||'')})),openings:openings.map(x=>({id:x.id,quantity:Number(x.quantity),product:x.product})),lotteryUpdates:lotteryUpdates.map(x=>x.id),inventory:finalLots};
+ const finalLots=(state.inventoryLots||[]).filter(x=>finalLotIds.includes(String(x.id||''))).map(x=>({id:x.id,product:x.product,category:x.category,quantity:Number(x.quantity),unitCost:Number(x.unitCost),source:String(x.source||''),sourceTransactionId:String(x.sourceTransactionId||''),set:String(x.set||'')}));
+ const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,gifts:gifts.map(x=>({id:x.id,quantity:Number(x.quantity),giver:x.giver,product:x.product,unitCost:0})),purchases:purchases.map(x=>({id:x.id,quantity:Number(x.quantity),store:x.store,product:x.product,price:Number(x.price),total:Number(x.price)*Number(x.quantity),actualPaidTotal:x.actualPaidTotal==null?null:Number(x.actualPaidTotal),sourceLotteryId:String(x.sourceLotteryId||''),orderNumber:String(x.orderNumber||''),orderDate:String(x.orderDate||'')})),openings:openings.map(x=>({id:x.id,quantity:Number(x.quantity),product:x.product})),lotteryUpdates:lotteryUpdates.map(x=>x.id),inventory:finalLots};
  if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(verified,null,2));
  return verified;
 }

@@ -215,7 +215,7 @@ test('failed private commands remain queued and produce one private diagnostic d
  assert.equal(created.length,1,'retries do not create duplicate diagnostic drafts');
 });
 
-test('asset reconciliation adds purchases, consumes opened packs, allocates cost once, and is idempotent',async()=>{
+test('asset reconciliation records zero-cost gifts, adds purchases, consumes opened packs, allocates cost once, and is idempotent',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetReconcile(command)');
  const end=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',start);
@@ -230,13 +230,17 @@ test('asset reconciliation adds purchases, consumes opened packs, allocates cost
   GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
  };
  vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
- const command={requestId:'asset-reconcile-test',expectedRevision:5,purchases:[{id:'buy-pack-1',product:'30th CELEBRATION pack',store:'Store A',date:'2026-10-18',category:'パック',condition:'',quantity:10,price:360,actualPaidTotal:3456},{id:'buy-set-self',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-self'},{id:'buy-set-wife',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-wife'}],openings:[{id:'open-pack-1',product:'30th CELEBRATION pack',sourceLotId:'lot-buy-pack-1',quantity:10,date:'2026-10-18',store:'Store A',derivedLots:[{id:'card-1',product:'Jirachi ex SAR',category:'カード',set:'M6a 132/103',quantity:1,unitCost:1800},{id:'card-2',product:'Gengar 30th gold',category:'カード',set:'M6a 150/103',quantity:1,unitCost:1800}]}],lotteryUpdates:[{id:'win-1',expected:{status:'当選',receiptStatus:'未受取',owner:'本人',resultDate:'2026-10-15'},updates:{status:'購入済',receiptStatus:'受取済み',receivedDate:'2026-10-18',receiptAmount:3600,receiptPaidAmount:3456,receiptQuantity:10}}]};
+ const command={requestId:'asset-reconcile-test',expectedRevision:5,gifts:[{id:'gift-start-deck',product:'MEGA スタートデッキ100 バトルコレクション',giver:'親から譲受',date:'2026-10-25',category:'BOX',condition:'未開封',quantity:1}],purchases:[{id:'buy-pack-1',product:'30th CELEBRATION pack',store:'Store A',date:'2026-10-18',category:'パック',condition:'',quantity:10,price:360,actualPaidTotal:3456},{id:'buy-set-self',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-self'},{id:'buy-set-wife',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-wife'}],openings:[{id:'open-pack-1',product:'30th CELEBRATION pack',sourceLotId:'lot-buy-pack-1',quantity:10,date:'2026-10-18',store:'Store A',derivedLots:[{id:'card-1',product:'Jirachi ex SAR',category:'カード',set:'M6a 132/103',quantity:1,unitCost:1800},{id:'card-2',product:'Gengar 30th gold',category:'カード',set:'M6a 150/103',quantity:1,unitCost:1800}]}],lotteryUpdates:[{id:'win-1',expected:{status:'当選',receiptStatus:'未受取',owner:'本人',resultDate:'2026-10-15'},updates:{status:'購入済',receiptStatus:'受取済み',receivedDate:'2026-10-18',receiptAmount:3600,receiptPaidAmount:3456,receiptQuantity:10}}]};
  const result=context.reconcile(command);
  assert.equal(result.ok,true);
  assert.equal(state.revision,6);
  assert.equal(state.transactions.find(x=>x.id==='buy-pack-1').actualPaidTotal,3456);
  assert.equal(state.transactions.filter(x=>x.store==='Same Store').length,2,'two separately lottery-linked set receipts in one command are not mistaken for prior duplicates');
  assert.equal(state.transactions.find(x=>x.id==='open-pack-1').acquisitionCost,3600);
+ assert.equal(state.transactions.find(x=>x.id==='gift-start-deck').price,0);
+ assert.equal(state.transactions.find(x=>x.id==='gift-start-deck').source,'gift');
+ assert.equal(state.inventoryLots.find(x=>x.id==='lot-gift-start-deck').unitCost,0);
+ assert.equal(state.inventoryLots.find(x=>x.id==='lot-gift-start-deck').quantity,1);
  assert.equal(state.inventoryLots.some(x=>x.id==='lot-buy-pack-1'),false);
  assert.equal(state.inventoryLots.filter(x=>x.category==='カード').reduce((n,x)=>n+x.quantity*x.unitCost,0),3600);
  assert.equal(state.lotteries[0].receiptStatus,'受取済み');
@@ -245,6 +249,25 @@ test('asset reconciliation adds purchases, consumes opened packs, allocates cost
  assert.equal(state.revision,6,'idempotent retry does not increment the canonical revision');
  assert.equal(created.length,1,'idempotent retry reuses the single result draft');
  assert.throws(()=>context.reconcile({...command,expectedRevision:7}),/revisionより正本revisionが古い/);
+});
+
+test('a gift-only reconciliation works, while an existing same-product lot blocks a second gift',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2AssetReconcile(command)');
+ const end=text.indexOf('\nfunction runTv2AssetReconcileOnce()',start);
+ let state={revision:2,transactions:[],inventoryLots:[],lotteries:[],auditLog:[]};
+ const context={normalize_:(s)=>normalize(s),tv2RetailPriceInfo_:()=>({price:800}),tv2Mutate_:(kind,fn)=>{const next=structuredClone(state),result=fn(next)||{};if(result.changed!==false){next.revision++;state=next;}return{revision:state.revision,...result};},tv2Load_:()=>({payload:structuredClone(state),revision:state.revision}),Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{}}};
+ vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
+ const gift={id:'gift-one',product:'MEGA スタートデッキ100 バトルコレクション',giver:'親から譲受',date:'2026-10-25',category:'BOX',condition:'未開封',quantity:1};
+ const command={requestId:'asset-reconcile-gift-only',expectedRevision:2,gifts:[gift]};
+ const saved=context.reconcile(command);
+ assert.equal(saved.ok,true);
+ assert.equal(state.revision,3);
+ assert.equal(saved.inventory[0].unitCost,0);
+ assert.equal(saved.inventory[0].source,'gift');
+ state.revision=4;
+ state.inventoryLots.push({id:'another-lot',product:'MEGA スタートデッキ100',productKey:'MEGA スタートデッキ100',category:'BOX',quantity:1,unitCost:100,source:'purchase'});
+ assert.throws(()=>context.reconcile({...command,requestId:'asset-reconcile-gift-duplicate',expectedRevision:4,gifts:[{...gift,id:'gift-two'}]}),/既存在庫があるため譲受を一意に照合できず停止/);
 });
 
 test('scoped one-shot runner processes only asset-reconcile drafts and returns no purchase details',async()=>{
@@ -316,7 +339,7 @@ test('pack opening singles are zero cost while the pack purchase history remains
 test('Cardbox Osaka OP-18 screenshot uses the guarded handler through the existing Gmail queue',async()=>{
  const text=await source();
  const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
- const end=text.indexOf('\\nfunction tv2HandleMarketRefreshWeb_',start);
+ const end=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',start);
  const deleted=[],drafts=[],calls=[];
  const command={type:'cardbox-osaka-kaminoshihai-application',requestId:'cardbox-osaka-kaminoshihai-20261024'};
  const draft={getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify(command)}),deleteDraft:()=>deleted.push(command.requestId)};
@@ -337,7 +360,7 @@ test('Cardbox Osaka OP-18 screenshot uses the guarded handler through the existi
 test('Cardbox Osaka OP-18 queued command rejects a mismatched request id without deleting it',async()=>{
  const text=await source();
  const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
- const end=text.indexOf('\\nfunction tv2HandleMarketRefreshWeb_',start);
+ const end=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',start);
  const deleted=[],drafts=[],created=[];
  const command={type:'cardbox-osaka-kaminoshihai-application',requestId:'wrong-id'};
  const draft={getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify(command)}),deleteDraft:()=>deleted.push(command.requestId)};
@@ -395,7 +418,7 @@ test('scoped runner workflow waits for a successful Apps Script deploy',async()=
  assert.match(workflow,/workflow_run:/);
  assert.match(workflow,/Apps Script Automation Deploy/);
  assert.match(workflow,/conclusion == 'success'/);
- assert.match(workflow,/clasp run runTv2AssetReconcileOnce/);
+ assert.match(workflow,/for function in runTv2AssetAuditOnce runTv2AssetReconcileOnce/);
  assert.match(workflow,/unable to run script function/);
  assert.match(workflow,/response suppressed to protect private data/);
  assert.match(workflow,/workflow_dispatch/);

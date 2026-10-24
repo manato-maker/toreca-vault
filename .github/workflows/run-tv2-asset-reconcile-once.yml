@@ -1,8 +1,5 @@
 name: Run V2 asset reconciliation once
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/run-tv2-asset-reconcile-once.yml']
   workflow_dispatch:
   workflow_run:
     workflows: [Apps Script Automation Deploy]
@@ -28,19 +25,21 @@ jobs:
           test -n "$TV2_SCRIPT_ID"
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
-      - name: Run only the queued asset reconciliation
+      - name: Run a scoped read-only audit, then reconciliation
         shell: bash
         run: |
-          set +e
-          output="$(npx clasp run runTv2AssetReconcileOnce 2>&1)"
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Apps Script invocation failed; response suppressed to protect private data."
-            exit "$status"
-          fi
-          if printf '%s' "$output" | grep -Eiq 'unable to run script function|permission_denied|authorization is required|error|failed|exception|denied|"ok"[[:space:]]*:[[:space:]]*false'; then
-            echo "Apps Script invocation or scoped runner reported failure; details remain in private Gmail drafts."
-            exit 1
-          fi
-          echo "Scoped Apps Script runner returned successfully; response details suppressed."
+          for function in runTv2AssetAuditOnce runTv2AssetReconcileOnce; do
+            set +e
+            output="$(npx clasp run "$function" 2>&1)"
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "Apps Script invocation failed; response suppressed to protect private data."
+              exit "$status"
+            fi
+            if printf '%s' "$output" | grep -Eiq 'unable to run script function|permission_denied|authorization is required|error|failed|exception|denied|"ok"[[:space:]]*:[[:space:]]*false'; then
+              echo "Scoped Apps Script runner reported failure; details remain in private Gmail drafts."
+              exit 1
+            fi
+          done
+          echo "Scoped Apps Script audit/reconciliation runners returned successfully; response details suppressed."
