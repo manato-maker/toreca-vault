@@ -1198,9 +1198,6 @@ function runTv2CardboxLotteryApplications20261024(){
    if(byId.length===1||sameProduct.length===1)return{spec,item:byId[0]||sameProduct[0],existing:true};
    return{spec,item:null,existing:false};
   });
-Warning: truncated output (original token count: 10659)
-Total output lines: 372
-
   if(matches.some(x=>x.existing)&&matches.some(x=>!x.existing))throw new Error('3件の一部だけ既存登録済みのため停止しました');
   if(matches.every(x=>x.existing)){
    if(!state.automation.cardboxLotteryApplicationIds.includes(requestId))state.automation.cardboxLotteryApplicationIds.push(requestId);
@@ -1340,7 +1337,33 @@ function runTv2AssetReconcile(command){
  openings.forEach(spec=>{const tx=(state.transactions||[]).filter(x=>String(x.id||'')===String(spec.id));if(tx.length!==1||tx[0].type!=='opening'||Number(tx[0].quantity)!==Number(spec.quantity))throw new Error('開封履歴の再読込検証に失敗しました: '+spec.id);});
  lotteryUpdates.forEach(spec=>{const item=(state.lotteries||[]).find(x=>String(x.id)===String(spec.id));if(!item||!Object.entries(spec.updates||{}).every(([k,v])=>String(item[k]??'')===String(v??'')))throw new Error('受取抽選の再読込検証に失敗しました: '+spec.id);});
  const finalLots=(state.inventoryLots||[]).filter(x=>finalLotIds.includes(String(x.id||''))).map(x=>({id:x.id,product:x.product,category:x.category,quantity:Number(x.quantity),unitCost:Number(x.unitCost),source:String(x.source||''),sourceTransactionId:String(x.sourceTransactionId||''),set:String(x.set||'')}));
- const verified={ok:true,request…659 tokens truncated…in-yamatotakada-jirachi-m6a-132-103-20261018','lot-open-joshin-yamatotakada-gengar-m6a-150-103-20261018'];
+ const verified={ok:true,requestId,revision:Number(check.revision),mutation:result,gifts:gifts.map(x=>({id:x.id,quantity:Number(x.quantity),giver:x.giver,product:x.product,unitCost:0})),purchases:purchases.map(x=>({id:x.id,quantity:Number(x.quantity),store:x.store,product:x.product,price:Number(x.price),total:Number(x.price)*Number(x.quantity),actualPaidTotal:x.actualPaidTotal==null?null:Number(x.actualPaidTotal),sourceLotteryId:String(x.sourceLotteryId||''),orderNumber:String(x.orderNumber||''),orderDate:String(x.orderDate||'')})),openings:openings.map(x=>({id:x.id,quantity:Number(x.quantity),product:x.product})),lotteryUpdates:lotteryUpdates.map(x=>x.id),inventory:finalLots};
+ if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(verified,null,2));
+ return verified;
+}
+
+function runTv2AssetReconcileOnce(){
+ const subject='[Toreca Vault Command]',candidates=[];
+ GmailApp.getDrafts().forEach(draft=>{
+  if(String(draft.getMessage().getSubject()||'').trim()!==subject)return;
+  try{const command=JSON.parse(String(draft.getMessage().getPlainBody()||'').trim());if(String(command&&command.type||'')==='asset-reconcile')candidates.push({draft,command});}catch(e){}
+ });
+ if(!candidates.length)return{ok:true,skipped:true};
+ if(candidates.length!==1)throw new Error('資産反映コマンドが複数あるため安全停止しました');
+ const {draft,command}=candidates[0],requestId=String(command.requestId||'');
+ try{const result=runTv2AssetReconcile(command);draft.deleteDraft();return{ok:true,processed:1,revision:Number(result.revision)};}
+ catch(err){
+  const failure={ok:false,type:'asset-reconcile',requestId,error:String(err&&err.message||err)},failureSubject='[Toreca Vault Command Error] '+(requestId||'unidentified-asset-reconcile');
+  if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===failureSubject)){const to=Session.getEffectiveUser().getEmail();if(to)GmailApp.createDraft(to,failureSubject,JSON.stringify(failure,null,2));}
+  return{ok:false,processed:0,errorDraftCreated:true};
+ }
+}
+
+function runTv2AssetCostAdjustment(command){
+ const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
+ if(!/^asset-cost-adjustment-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('原価修正requestId/revisionが不正です');
+ const purchaseId='purchase-joshin-yamatotakada-30th-pack10-20261018',openingId='open-joshin-yamatotakada-30th-pack10-20261018';
+ const lotIds=['lot-open-joshin-yamatotakada-jirachi-m6a-132-103-20261018','lot-open-joshin-yamatotakada-gengar-m6a-150-103-20261018'];
  const subject='[Toreca Vault Asset Adjustment Result] '+requestId,to=Session.getEffectiveUser().getEmail();
  if(!to)throw new Error('原価修正結果の保存先メールアドレスを確認できません');
  const verify=(state)=>{
