@@ -78,6 +78,31 @@ test('audit saves a private result draft and stops if that result already exists
  assert.equal(created.length,1);
 });
 
+test('scoped audit runner processes only one queued audit and preserves other commands',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2AssetAuditOnce(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ const deleted=[],drafts=[];
+ const make=(type,id)=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type,requestId:id})}),deleteDraft:()=>deleted.push(id)});
+ const unrelated=make('sale','old-sale'),audit=make('asset-audit','asset-audit-cardbox');drafts.push(unrelated,audit);
+ const context={GmailApp:{getDrafts:()=>drafts},runTv2AssetAudit:command=>({ok:true,requestId:command.requestId,revision:2201})};
+ vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
+ const result=context.runOnce();
+ assert.deepEqual(JSON.parse(JSON.stringify(result)),{ok:true,processed:1,requestId:'asset-audit-cardbox',revision:2201});
+ assert.deepEqual(deleted,['asset-audit-cardbox']);
+ assert.ok(drafts.includes(unrelated));
+});
+
+test('scoped audit runner fails closed when multiple audits are queued',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2AssetAuditOnce(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ const make=id=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type:'asset-audit',requestId:id})}),deleteDraft:()=>{throw new Error('must not delete')}});
+ const context={GmailApp:{getDrafts:()=>[make('audit-one'),make('audit-two')]}};
+ vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
+ assert.throws(()=>context.runOnce(),/複数あるため安全停止/);
+});
+
 test('failed private commands remain queued and produce one private diagnostic draft',async()=>{
  const text=await source();
  const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');

@@ -1,6 +1,6 @@
 # Toreca Vault 引き継ぎ
 
-更新日: 2026-09-25 (JST)
+更新日: 2026-10-24 (JST)
 
 ## 最初に確認すること
 
@@ -26,6 +26,13 @@
 - ホームページの集計価格を商品周辺の文字だけで推定しない。画像からの商品同定が必要で公式情報と照合できないものは要確認。
 
 ## 変更記録
+
+### 2026-10-24 — Apps Script Gmail quota failure and scoped Cardbox audit recovery
+
+- 発見: Apps Script の `runTv2Automation` が 15分ごとに失敗し、`Exception: Service invoked too many times for one day: gmail`。実行ログでは、完了済みのエディオン橿原alias repairが毎回Gmail下書きを削除・再作成していた。
+- 変更: canonical V2にrepair markerと期待状態が既にある場合は、1回のreadで確認してrepairをskipし、毎回のGmail呼び出しを避ける。未処理の `[Toreca Vault Command]` のうち資産監査だけを1件処理する、他コマンドに触れない `runTv2AssetAuditOnce()` を追加。
+- 検証: repair済みの再実行で mutation/Gmail draft access が発生しないテスト、監査の単独処理・複数件時停止テストを追加。`npm test` 221件、`npm run check`、Apps Script構文検査、`git diff --check` 成功。
+- 本番状態: PR・デプロイ・監査command実行・V2再読込は未確認。ユーザーからのCardbox応募スクリーンショットを申込の根拠として扱い、Gmail応募メールを前提にしない。Gmail command draftは送信せず、成功後も結果draftとして保持する。
 
 ### 2026-10-19 — 30th CELEBRATION開封シングルの相場照合を修正
 

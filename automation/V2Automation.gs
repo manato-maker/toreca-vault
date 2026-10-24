@@ -1161,6 +1161,22 @@ function runTv2AssetAudit(command){
  return{ok:true,readOnly:true,requestId,revision:Number(loaded.revision),resultDraft:subject,counts:summary.counts};
 }
 
+// Scoped, no-argument entry point for manually running one queued asset audit
+// without invoking the broad automation runner or touching other command drafts.
+function runTv2AssetAuditOnce(){
+ const subject='[Toreca Vault Command]',candidates=[];
+ GmailApp.getDrafts().forEach(draft=>{
+  if(String(draft.getMessage().getSubject()||'').trim()!==subject)return;
+  try{const command=JSON.parse(String(draft.getMessage().getPlainBody()||'').trim());if(String(command&&command.type||'')==='asset-audit')candidates.push({draft,command});}catch(e){}
+ });
+ if(!candidates.length)return{ok:true,skipped:true};
+ if(candidates.length!==1)throw new Error('資産監査コマンドが複数あるため安全停止しました');
+ const {draft,command}=candidates[0],requestId=String(command.requestId||'');
+ const result=runTv2AssetAudit(command);
+ draft.deleteDraft();
+ return{ok:true,processed:1,requestId,revision:Number(result.revision)};
+}
+
 function runTv2AssetReconcile(command){
  const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
  if(!/^asset-reconcile-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('資産反映requestId/revisionが不正です');
