@@ -1219,6 +1219,47 @@ function runTv2CardboxLotteryApplications20261024(){
  return summary;
 }
 
+// One-time registration for the additional Osaka OP-18 application shown in
+// the user's 2026-10-24 screenshot. Keep this separate from the already-run
+// three-entry batch so reruns cannot recreate or mutate those entries.
+function runTv2CardboxOsakaKaminoshihaiApplication20261024(){
+ const requestId='cardbox-osaka-kaminoshihai-20261024';
+ const spec={id:'cardbox-osaka-kaminoshihai-20261024',title:'ONE PIECEカードゲーム ブースターパック「神の支配」OP-18 1BOX',store:'カードボックス オーサカ店',applicationDate:'2026-10-24',deadline:'2026-11-03',resultDate:'2026-11-04',receiveDeadline:'2026-11-13',memo:'2026-10-24応募｜結果発表 11/4予定｜当選後の店頭予約期間 11/4 11:00〜11/13 22:00'};
+ const mutation=tv2Mutate_(requestId,state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.cardboxLotteryApplicationIds=Array.isArray(state.automation.cardboxLotteryApplicationIds)?state.automation.cardboxLotteryApplicationIds:[];
+  const byId=state.lotteries.filter(x=>String(x.id||'')==='chat-lottery-'+spec.id);
+  const targetEvent=state.lotteries.filter(x=>{
+   const sameStore=normalize_(x.store||x.receiptStore)===normalize_(spec.store);
+   const title=normalize_(x.receiptProduct||x.title);
+   const sameProduct=title.includes(normalize_('神の支配'))||title.includes(normalize_('OP-18'));
+   const sameEvent=String(x.applicationDate||'')===spec.applicationDate||String(x.deadline||'')===spec.deadline&&String(x.resultDate||'')===spec.resultDate;
+   return sameStore&&sameProduct&&sameEvent;
+  });
+  if(byId.length>1||targetEvent.length>1)throw new Error('カードボックス オーサカ店の神の支配抽選に重複候補があるため停止しました');
+  const existing=byId[0]||targetEvent[0];
+  if(existing){
+   if(String(existing.status||'')!=='応募済'||String(existing.applicationDate||'')!==spec.applicationDate||String(existing.deadline||'')!==spec.deadline||String(existing.resultDate||'')!==spec.resultDate)throw new Error('既存候補が今回の応募内容と一致しないため停止しました');
+   return{duplicate:true,changed:false,id:String(existing.id||'')};
+  }
+  const now=new Date().toISOString();
+  const item={id:'chat-lottery-'+spec.id,title:spec.title,store:spec.store,status:'応募済',deadline:spec.deadline,resultDate:spec.resultDate,receiveDeadline:spec.receiveDeadline,receiptStatus:'対象外',receivedDate:'',shrinkStatus:'未選択',memo:spec.memo,owner:'本人分',applicationDate:spec.applicationDate,source:'chat',requestId,createdAt:now,updatedAt:now};
+  state.lotteries.push(item);
+  state.automation.cardboxLotteryApplicationIds.push(requestId);
+  state.automation.cardboxLotteryApplicationIds=state.automation.cardboxLotteryApplicationIds.slice(-100);
+  return{duplicate:false,changed:true,id:item.id};
+ });
+ const check=tv2Load_(),all=(check.payload||{}).lotteries||[];
+ const verified=all.filter(x=>String(x.id||'')===String(mutation.id||'')||String(x.id||'')==='chat-lottery-'+spec.id);
+ if(verified.length!==1||verified[0].status!=='応募済'||String(verified[0].applicationDate||'')!==spec.applicationDate||String(verified[0].deadline||'')!==spec.deadline||String(verified[0].resultDate||'')!==spec.resultDate||String(verified[0].receiveDeadline||'')!==spec.receiveDeadline)throw new Error('カードボックス オーサカ店の抽選を再読込検証できませんでした');
+ const item=verified[0],summary={ok:true,requestId,revision:Number(check.revision),mutation,lottery:{id:item.id,title:item.title,store:item.store,status:item.status,applicationDate:item.applicationDate,deadline:item.deadline,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,memo:item.memo}};
+ const subject='[Toreca Vault Cardbox Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ if(!to)throw new Error('登録結果の保存先メールアドレスを確認できません');
+ if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
+ return summary;
+}
+
 function runTv2AssetReconcile(command){
  const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
  if(!/^asset-reconcile-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('資産反映requestId/revisionが不正です');

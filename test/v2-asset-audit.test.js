@@ -145,6 +145,51 @@ test('Cardbox application registration fails closed on a partial semantic duplic
  assert.equal(resultDrafts,0);
 });
 
+test('additional Cardbox Osaka OP-18 screenshot registration writes one application and private result draft',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2CardboxOsakaKaminoshihaiApplication20261024(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ assert.ok(start>=0&&end>start);
+ const state={revision:2179,lotteries:[],automation:{}},created=[];
+ const context={
+  tv2Mutate_:(kind,fn)=>{assert.equal(kind,'cardbox-osaka-kaminoshihai-20261024');const result=fn(state);if(result.changed)state.revision++;return{revision:state.revision,...result}},
+  tv2Load_:()=>({revision:state.revision,payload:state}),
+  normalize_:value=>normalize(value),
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
+  GmailApp:{getDrafts:()=>[],createDraft:(to,subject,body)=>created.push({to,subject,body})}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
+ const result=context.run();
+ assert.equal(result.ok,true);
+ assert.equal(result.revision,2180);
+ assert.equal(state.lotteries.length,1);
+ assert.equal(state.lotteries[0].title,'ONE PIECEカードゲーム ブースターパック「神の支配」OP-18 1BOX');
+ assert.equal(state.lotteries[0].store,'カードボックス オーサカ店');
+ assert.equal(state.lotteries[0].status,'応募済');
+ assert.equal(state.lotteries[0].applicationDate,'2026-10-24');
+ assert.equal(state.lotteries[0].deadline,'2026-11-03');
+ assert.equal(state.lotteries[0].resultDate,'2026-11-04');
+ assert.equal(state.lotteries[0].receiveDeadline,'2026-11-13');
+ assert.match(state.lotteries[0].memo,/11\/4 11:00〜11\/13 22:00/);
+ assert.equal(created.length,1);
+ assert.match(created[0].subject,/cardbox-osaka-kaminoshihai-20261024/);
+});
+
+test('additional Cardbox Osaka OP-18 registration recognizes an existing exact-date semantic record',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2CardboxOsakaKaminoshihaiApplication20261024(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ const item={id:'gmail-imported-cardbox-op18',title:'【オーサカ店】ONE PIECEカードブースターパック【神の支配】1BOX',store:'カードボックス オーサカ店',status:'応募済',applicationDate:'2026-10-24',deadline:'2026-11-03',resultDate:'2026-11-04',receiveDeadline:'2026-11-13'};
+ const state={revision:2179,lotteries:[item],automation:{}};let drafts=0;
+ const context={tv2Mutate_:(kind,fn)=>{const result=fn(state);if(result.changed)state.revision++;return{revision:state.revision,...result}},tv2Load_:()=>({revision:state.revision,payload:state}),normalize_:value=>normalize(value),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{drafts++}}};
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
+ const result=context.run();
+ assert.equal(result.mutation.duplicate,true);
+ assert.equal(result.revision,2179);
+ assert.equal(state.lotteries.length,1);
+ assert.equal(drafts,1);
+});
+
 test('failed private commands remain queued and produce one private diagnostic draft',async()=>{
  const text=await source();
  const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
