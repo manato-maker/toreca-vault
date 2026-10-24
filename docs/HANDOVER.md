@@ -259,3 +259,10 @@
 - 専用runnerは全店舗監査の範囲指定が必須であることを検出し、read-only監査で停止。V2正本への書込み前に停止したため、revisionは2183のまま。譲受コマンドは未送信キューに残存。
 - 変更: asset auditへ明示的な `allStores:true` を追加し、商品指定で全店舗から照合できるようにする。前回失敗した監査draftを更新し、再配布後に監査→譲受を再試行する。
 - 検証/残件: 監査全店舗テストを追加し、再配布・再実行後に正本revision、0円取得履歴、在庫1点を再読込確認する。
+
+### 2026-10-25 — 実行結果
+- PR #85をmergeし、main `e54ff3ed`。GitHub PagesとApps Script Automation Deployがsuccess。PR #85 CIはsuccess。
+- Apps Script専用workflow run `40142588205` はrunner実行でfailure。監査結果draftが生成されず、両コマンドdraftは未送信・未処理のまま。V2へ今回の書込みが無かったことを確認。
+- 最後に確認できた正本revisionはread-only auditの `2183` (2026-10-24)。デプロイとrunner失敗以降に正本を直接再読込できる経路は未確立。
+- 既知の制約: 過去の記録どおり `clasp run` / Apps Script `scripts.run` がGoogle側権限で拒否される場合がある。API executable / caller共通Cloud project / Apps Script API / OAuth scopesの認証・権限確認が必要。今回はそれらを変更していない。
+- UIの日付fallback修正はPagesへ配布済み。`checkedAt`が空なら相場履歴の最新日を表示し、日付自体が無ければ「相場取得日 不明」とする。元データのquoteに日付があるかどうかは正本読込が再開するまで未確認。
