@@ -266,7 +266,7 @@ test('a gift-only reconciliation works, while an existing same-product lot block
  assert.equal(saved.inventory[0].unitCost,0);
  assert.equal(saved.inventory[0].source,'gift');
  state.revision=4;
- state.inventoryLots.push({id:'another-lot',product:gift.product,productKey:gift.product,category:'BOX',quantity:1,unitCost:100,source:'purchase'});
+ state.inventoryLots.push({id:'another-lot',product:'MEGA スタートデッキ100',productKey:'MEGA スタートデッキ100',category:'BOX',quantity:1,unitCost:100,source:'purchase'});
  assert.throws(()=>context.reconcile({...command,requestId:'asset-reconcile-gift-duplicate',expectedRevision:4,gifts:[{...gift,id:'gift-two'}]}),/既存在庫があるため譲受を一意に照合できず停止/);
 });
 
@@ -418,7 +418,7 @@ test('scoped runner workflow waits for a successful Apps Script deploy',async()=
  assert.match(workflow,/workflow_run:/);
  assert.match(workflow,/Apps Script Automation Deploy/);
  assert.match(workflow,/conclusion == 'success'/);
- assert.match(workflow,/clasp run runTv2AssetReconcileOnce/);
+ assert.match(workflow,/for function in runTv2AssetAuditOnce runTv2AssetReconcileOnce/);
  assert.match(workflow,/unable to run script function/);
  assert.match(workflow,/response suppressed to protect private data/);
  assert.match(workflow,/workflow_dispatch/);
