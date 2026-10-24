@@ -1,0 +1,40 @@
+name: Run Cardbox Osaka Kaminoshihai application once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/run-cardbox-osaka-kaminoshihai-once.yml']
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save @google/clasp
+      - name: Configure clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Register and verify the exact application
+        shell: bash
+        run: |
+          set +e
+          output="$(npx clasp run runTv2CardboxOsakaKaminoshihaiApplication20261024 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Apps Script invocation failed; response suppressed to protect private data."
+            exit "$status"
+          fi
+          if ! printf '%s' "$output" | grep -Fq '"ok": true' || printf '%s' "$output" | grep -Eiq '"ok"[[:space:]]*:[[:space:]]*false|error|failed|exception|denied'; then
+            echo "Apps Script did not confirm the exact V2 mutation; response suppressed."
+            exit 1
+          fi
+          echo "The exact Cardbox application was registered or confirmed as an existing duplicate after V2 reload verification."
