@@ -223,6 +223,13 @@ function tv2RepairEdionKashiharaAlias20261015_(){
  const isProduct=x=>{const t=n(x&&x.title||'');return t.includes(n('30th CELEBRATION'))&&(t.includes(n('カードセット'))||t.includes(n('9種')))};
  const ownerOk=x=>{const o=n(x&&x.owner||'');return !/嫁|妻/.test(String(x&&x.owner||''))&&!/嫁分|妻分|奥さん/.test(String(x&&x.memo||''))&&(!o||o===n('本人')||o===n('本人分'))};
  const dateOk=x=>{const d=String(x&&x.resultDate||'').slice(0,10);return !d||d===resultDate};
+ // This is a one-time repair called from the 15-minute runner. Once its marker
+ // and canonical record are verified, skip the mutation and Gmail result-draft
+ // rewrite on every later run (which otherwise exhausts the daily Gmail quota).
+ const existing=tv2Load_(),existingState=existing.payload||{},existingAutomation=existingState.automation||{};
+ const existingMatches=(existingState.lotteries||[]).filter(x=>sn(x.store||'')===aliasKey&&isProduct(x)&&ownerOk(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
+ const alreadyRepaired=String(existingAutomation.edionKashiharaStoreAlias||'')==='2026-10-15-v1'&&existingMatches.length===1&&String(existingMatches[0].id||'')===newId&&['当選','購入済'].includes(String(existingMatches[0].status||''))&&String(existingMatches[0].receiveDeadline||'').slice(0,10)==='2026-10-19';
+ if(alreadyRepaired)return{ok:true,skipped:true,reason:'already-repaired',revision:Number(existing.revision),matches:existingMatches.map(x=>({id:x.id,store:x.store,status:x.status,resultDate:x.resultDate,receiveDeadline:x.receiveDeadline}))};
  const mutation=tv2Mutate_('edion-kashihara-store-alias-20261015',state=>{
   state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
   state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};

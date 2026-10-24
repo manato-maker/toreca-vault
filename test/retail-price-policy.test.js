@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import {retailPriceInfo} from '../v2/retail-price.js';
 import {v2EntryPayload} from '../v2/ui-entry.js';
 
@@ -39,4 +40,31 @@ test('Apps Script has canonical MSRP backfill, sale cost basis, and exact lotter
  assert.match(source,/lottery-patch-exact/);
  assert.match(source,/tv2ProcessExactLotteryPatchDrafts_/);
  assert.match(source,/matches\.length!==1/);
+});
+
+test('completed Edion alias repair skips recurring Gmail draft access',()=>{
+ const source=fs.readFileSync(new URL('../automation/RetailPricePolicy.gs',import.meta.url),'utf8');
+ const start=source.indexOf('function tv2RepairEdionKashiharaAlias20261015_(){');
+ const end=source.indexOf('\nfunction tv2EnforceRetailPricePolicy_()',start);
+ assert.ok(start>=0&&end>start);
+ const state={revision:42,automation:{edionKashiharaStoreAlias:'2026-10-15-v1'},lotteries:[{
+  id:'lottery-edion-kashihara-20261015-9541242',title:'ポケモンカードゲーム MEGA 30th CELEBRATION カードセット（9種）',
+  store:'トレカ・キャピタル エディオンイオンモール橿原店',owner:'本人',status:'当選',resultDate:'2026-10-15',receiveDeadline:'2026-10-19'
+ }]};
+ let mutateCalls=0,gmailCalls=0;
+ const normalize=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　・]/g,'');
+ const context={
+  tv2LotteryExactNormalize_:normalize,
+  tv2LotteryStoreNormalize_:normalize,
+  tv2Load_:()=>({revision:state.revision,payload:state}),
+  tv2Mutate_:()=>{mutateCalls++;throw new Error('should not mutate an already repaired record')},
+  GmailApp:{getDrafts:()=>{gmailCalls++;return[]}}
+ };
+ vm.runInNewContext(source.slice(start,end)+';this.repair=tv2RepairEdionKashiharaAlias20261015_;',context);
+ const result=context.repair();
+ assert.equal(result.ok,true);
+ assert.equal(result.skipped,true);
+ assert.equal(result.revision,42);
+ assert.equal(mutateCalls,0);
+ assert.equal(gmailCalls,0);
 });
