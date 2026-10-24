@@ -105,7 +105,7 @@ test('scoped audit runner fails closed when multiple audits are queued',async()=
 
 test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lotteries and a private result draft',async()=>{
  const text=await source();
- const start=text.indexOf('function runTv2CardboxLotteryApplications20261024_(){');
+ const start=text.indexOf('function runTv2CardboxLotteryApplications20261024(){');
  const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
  assert.ok(start>=0&&end>start);
  const state={revision:2178,lotteries:[],automation:{}},drafts=[],created=[];
@@ -116,7 +116,7 @@ test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lot
   Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
   GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024_;',context);
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
  const result=context.run();
  assert.equal(result.ok,true);
  assert.equal(result.revision,2179);
@@ -134,12 +134,12 @@ test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lot
 
 test('Cardbox application registration fails closed on a partial semantic duplicate',async()=>{
  const text=await source();
- const start=text.indexOf('function runTv2CardboxLotteryApplications20261024_(){');
+ const start=text.indexOf('function runTv2CardboxLotteryApplications20261024(){');
  const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
  const state={revision:2178,lotteries:[{id:'preexisting',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス オーサカ店'}],automation:{}};
  let resultDrafts=0;
  const context={tv2Mutate_:(kind,fn)=>fn(state),tv2Load_:()=>({revision:state.revision,payload:state}),normalize_:v=>normalize(v),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{resultDrafts++}}};
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024_;',context);
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
  assert.throws(()=>context.run(),/一部だけ既存登録済み/);
  assert.equal(state.lotteries.length,1);
  assert.equal(resultDrafts,0);
