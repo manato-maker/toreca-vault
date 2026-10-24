@@ -1180,7 +1180,7 @@ function runTv2AssetAuditOnce(){
 // One-time, narrowly scoped registration for the three Cardbox applications
 // evidenced by the user's screenshots on 2026-10-24. This bypasses the general
 // Gmail command queue so unrelated drafts cannot be processed.
-function runTv2CardboxLotteryApplications20261024_(){
+function runTv2CardboxLotteryApplications20261024(){
  const requestId='cardbox-lottery-applications-20261024';
  const specs=[
   {id:'cardbox-osaka-hadoushiker-20261024',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス オーサカ店',deadline:'2026-11-03',resultDate:'2026-11-04',receiveDeadline:'2026-11-13',memo:'2026-10-24応募｜結果確認 11/4予定｜当選時の店頭予約期限 11/4〜11/13'},
