@@ -313,6 +313,44 @@ test('pack opening singles are zero cost while the pack purchase history remains
  assert.throws(()=>context.adjust({...command,expectedRevision:1842}),/revisionより正本revisionが古い/);
 });
 
+test('Cardbox Osaka OP-18 screenshot uses the guarded handler through the existing Gmail queue',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
+ const end=text.indexOf('\\nfunction tv2HandleMarketRefreshWeb_',start);
+ const deleted=[],drafts=[],calls=[];
+ const command={type:'cardbox-osaka-kaminoshihai-application',requestId:'cardbox-osaka-kaminoshihai-20261024'};
+ const draft={getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify(command)}),deleteDraft:()=>deleted.push(command.requestId)};
+ drafts.push(draft);
+ const context={
+  GmailApp:{getDrafts:()=>drafts,createDraft:()=>{}},
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
+  runTv2CardboxOsakaKaminoshihaiApplication20261024:()=>{calls.push(true);return{ok:true,revision:2180}}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ const result=context.process();
+ assert.equal(result.length,1);
+ assert.equal(result[0].ok,true);
+ assert.deepEqual(deleted,[command.requestId]);
+ assert.equal(calls.length,1);
+});
+
+test('Cardbox Osaka OP-18 queued command rejects a mismatched request id without deleting it',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
+ const end=text.indexOf('\\nfunction tv2HandleMarketRefreshWeb_',start);
+ const deleted=[],drafts=[],created=[];
+ const command={type:'cardbox-osaka-kaminoshihai-application',requestId:'wrong-id'};
+ const draft={getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify(command)}),deleteDraft:()=>deleted.push(command.requestId)};
+ drafts.push(draft);
+ const context={GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>created.push({subject,body})},Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})}};
+ vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ const result=context.process();
+ assert.equal(result[0].ok,false);
+ assert.match(result[0].error,/requestIdが一致しません/);
+ assert.deepEqual(deleted,[]);
+ assert.equal(created.length,1);
+});
+
 test('adjustment commands run alone and leave unrelated queued drafts untouched',async()=>{
  const text=await source();
  const start=text.indexOf('function tv2ProcessChatTradeDrafts_(){');
