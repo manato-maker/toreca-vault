@@ -39,8 +39,8 @@ test('2026-10-18 asset audit is read-only and returns only reconciliation-releva
 test('audit queue command is separately allowlisted and does not call a mutation API',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetAudit(command)');
- const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
- const queueStart=text.indexOf('function tv2ProcessChatTradeDrafts_()',end);
+ const end=text.indexOf('\n// Scoped, no-argument entry point',start);
+ const queueStart=text.indexOf('function tv2ProcessChatTradeDrafts_()',text.indexOf('\nfunction runTv2AssetReconcile',end));
  const queueEnd=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',queueStart);
  const audit=text.slice(start,end);
  const queue=text.slice(queueStart,queueEnd);
@@ -101,6 +101,48 @@ test('scoped audit runner fails closed when multiple audits are queued',async()=
  const context={GmailApp:{getDrafts:()=>[make('audit-one'),make('audit-two')]}};
  vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
  assert.throws(()=>context.runOnce(),/複数あるため安全停止/);
+});
+
+test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lotteries and a private result draft',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2CardboxLotteryApplications20261024_(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ assert.ok(start>=0&&end>start);
+ const state={revision:2178,lotteries:[],automation:{}},drafts=[],created=[];
+ const context={
+  tv2Mutate_:(kind,fn)=>{assert.equal(kind,'cardbox-lottery-applications-20261024');const result=fn(state);if(result.changed)state.revision++;return{revision:state.revision,...result}},
+  tv2Load_:()=>({revision:state.revision,payload:state}),
+  normalize_:value=>normalize(value),
+  Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
+ };
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024_;',context);
+ const result=context.run();
+ assert.equal(result.ok,true);
+ assert.equal(result.revision,2179);
+ assert.equal(state.lotteries.length,3);
+ assert.deepEqual(state.lotteries.map(x=>x.status),['応募済','応募済','応募済']);
+ assert.deepEqual(state.lotteries.map(x=>x.applicationDate),['2026-10-24','2026-10-24','2026-10-24']);
+ assert.equal(state.lotteries[0].resultDate,'2026-11-04');
+ assert.equal(state.lotteries[1].deadline,'2026-11-02');
+ assert.match(state.lotteries[1].memo,/6,000円を現金前払い/);
+ assert.match(state.lotteries[2].memo,/5,760円を現金前払い/);
+ assert.equal(created.length,1);
+ assert.match(created[0].subject,/cardbox-lottery-applications-20261024/);
+ assert.doesNotMatch(created[0].subject,/Command/);
+});
+
+test('Cardbox application registration fails closed on a partial semantic duplicate',async()=>{
+ const text=await source();
+ const start=text.indexOf('function runTv2CardboxLotteryApplications20261024_(){');
+ const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
+ const state={revision:2178,lotteries:[{id:'preexisting',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス オーサカ店'}],automation:{}};
+ let resultDrafts=0;
+ const context={tv2Mutate_:(kind,fn)=>fn(state),tv2Load_:()=>({revision:state.revision,payload:state}),normalize_:v=>normalize(v),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{resultDrafts++}}};
+ vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024_;',context);
+ assert.throws(()=>context.run(),/一部だけ既存登録済み/);
+ assert.equal(state.lotteries.length,1);
+ assert.equal(resultDrafts,0);
 });
 
 test('failed private commands remain queued and produce one private diagnostic draft',async()=>{

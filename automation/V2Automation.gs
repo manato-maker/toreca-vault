@@ -1177,6 +1177,48 @@ function runTv2AssetAuditOnce(){
  return{ok:true,processed:1,requestId,revision:Number(result.revision)};
 }
 
+// One-time, narrowly scoped registration for the three Cardbox applications
+// evidenced by the user's screenshots on 2026-10-24. This bypasses the general
+// Gmail command queue so unrelated drafts cannot be processed.
+function runTv2CardboxLotteryApplications20261024_(){
+ const requestId='cardbox-lottery-applications-20261024';
+ const specs=[
+  {id:'cardbox-osaka-hadoushiker-20261024',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス オーサカ店',deadline:'2026-11-03',resultDate:'2026-11-04',receiveDeadline:'2026-11-13',memo:'2026-10-24応募｜結果確認 11/4予定｜当選時の店頭予約期限 11/4〜11/13'},
+  {id:'cardbox-nihonbashi-hadoushiker-20261024',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス日本橋店（大阪）',deadline:'2026-11-02',resultDate:'2026-11-03',receiveDeadline:'2026-11-13',memo:'2026-10-24応募｜結果発表 11/3 21:00予定｜当選時の予約期限 11/4〜11/13｜受取期間 11/27〜12/5｜予約時 6,000円を現金前払い'},
+  {id:'cardbox-nihonbashi-kaminoshihai-20261024',title:'ONE PIECEカードゲーム ブースターパック「神の支配」OP-18 1BOX',store:'カードボックス日本橋店（大阪）',deadline:'2026-11-02',resultDate:'2026-11-03',receiveDeadline:'2026-11-13',memo:'2026-10-24応募｜結果発表 11/3 21:00予定｜当選時の予約期限 11/4〜11/13｜受取期間 11/21〜11/29｜予約時 5,760円を現金前払い'}
+ ];
+ const mutation=tv2Mutate_('cardbox-lottery-applications-20261024',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.cardboxLotteryApplicationIds=Array.isArray(state.automation.cardboxLotteryApplicationIds)?state.automation.cardboxLotteryApplicationIds:[];
+  const matches=specs.map(spec=>{
+   const byId=state.lotteries.filter(x=>String(x.id||'')==='chat-lottery-'+spec.id);
+   const sameProduct=state.lotteries.filter(x=>normalize_(x.store)===normalize_(spec.store)&&normalize_(x.title)===normalize_(spec.title));
+   if(byId.length>1||sameProduct.length>1)throw new Error('カードボックス抽選の既存重複を検出したため停止しました: '+spec.id);
+   if(byId.length===1||sameProduct.length===1)return{spec,item:byId[0]||sameProduct[0],existing:true};
+   return{spec,item:null,existing:false};
+  });
+  if(matches.some(x=>x.existing)&&matches.some(x=>!x.existing))throw new Error('3件の一部だけ既存登録済みのため停止しました');
+  if(matches.every(x=>x.existing)){
+   if(!state.automation.cardboxLotteryApplicationIds.includes(requestId))state.automation.cardboxLotteryApplicationIds.push(requestId);
+   return{duplicate:true,changed:false,ids:matches.map(x=>String(x.item.id||''))};
+  }
+  const now=new Date().toISOString();
+  matches.forEach(({spec})=>state.lotteries.push({id:'chat-lottery-'+spec.id,title:spec.title,store:spec.store,status:'応募済',deadline:spec.deadline,resultDate:spec.resultDate,receiveDeadline:spec.receiveDeadline,receiptStatus:'対象外',receivedDate:'',shrinkStatus:'未選択',memo:spec.memo,owner:'本人分',applicationDate:'2026-10-24',source:'chat',requestId,createdAt:now,updatedAt:now}));
+  state.automation.cardboxLotteryApplicationIds.push(requestId);
+  state.automation.cardboxLotteryApplicationIds=state.automation.cardboxLotteryApplicationIds.slice(-100);
+  return{duplicate:false,changed:true,ids:matches.map(x=>'chat-lottery-'+x.spec.id)};
+ });
+ const check=tv2Load_(),state=check.payload||{},all=state.lotteries||[];
+ const verified=specs.map(spec=>all.filter(x=>String(x.id||'')==='chat-lottery-'+spec.id));
+ if(verified.some((items,i)=>items.length!==1||items[0].status!=='応募済'||items[0].title!==specs[i].title||items[0].store!==specs[i].store||String(items[0].applicationDate||'')!=='2026-10-24'||String(items[0].deadline||'')!==specs[i].deadline||String(items[0].resultDate||'')!==specs[i].resultDate))throw new Error('カードボックス抽選の再読込検証に失敗しました');
+ const summary={ok:true,requestId,revision:Number(check.revision),mutation,lotteries:verified.map(items=>({id:items[0].id,title:items[0].title,store:items[0].store,status:items[0].status,applicationDate:items[0].applicationDate,deadline:items[0].deadline,resultDate:items[0].resultDate,receiveDeadline:items[0].receiveDeadline,memo:items[0].memo}))};
+ const subject='[Toreca Vault Cardbox Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
+ if(!to)throw new Error('登録結果の保存先メールアドレスを確認できません');
+ if(!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
+ return summary;
+}
+
 function runTv2AssetReconcile(command){
  const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim(),expectedRevision=Number(input.expectedRevision);
  if(!/^asset-reconcile-[a-z0-9-]+$/.test(requestId)||!Number.isInteger(expectedRevision)||expectedRevision<0)throw new Error('資産反映requestId/revisionが不正です');
