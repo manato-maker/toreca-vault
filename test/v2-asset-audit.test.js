@@ -36,6 +36,18 @@ test('2026-10-18 asset audit is read-only and returns only reconciliation-releva
  assert.equal(view.counts.transactions,2);
 });
 
+test('asset audit can explicitly scan a product across all stores',async()=>{
+ const text=await source();
+ const start=text.indexOf('function tv2AssetAuditView_(state,requestId,filters)');
+ const end=text.indexOf('\nfunction runTv2AssetAudit',start);
+ const context={normalize_:(s)=>normalize(s)};
+ vm.runInNewContext(text.slice(start,end)+';this.audit=tv2AssetAuditView_;',context);
+ const view=context.audit({transactions:[{id:'shop-a',type:'purchase',product:'MEGA スタートデッキ100',store:'AMTAF'},{id:'shop-b',type:'purchase',product:'MEGA スタートデッキ100 バトルコレクション',store:'カードラボ'},{id:'unrelated',type:'purchase',product:'別商品',store:'AMTAF'}],inventoryLots:[{id:'gift',product:'スタートデッキ100',category:'BOX',quantity:1,store:'親から譲受'}]},'asset-audit-global',{allStores:true,productIncludes:['スタートデッキ100']});
+ assert.deepEqual(JSON.parse(JSON.stringify(view.transactions.map(x=>x.id))),['shop-a','shop-b']);
+ assert.deepEqual(JSON.parse(JSON.stringify(view.lots.map(x=>x.id))),['gift']);
+ assert.throws(()=>context.audit({},'asset-audit-missing-scope',{productIncludes:['スタートデッキ100']}),/店舗範囲指定/);
+});
+
 test('audit queue command is separately allowlisted and does not call a mutation API',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetAudit(command)');

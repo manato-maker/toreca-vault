@@ -253,3 +253,9 @@
 - 重複防止: スタートデッキ100は画面上の商品名ゆれを考慮し、同商品名を含む既存在庫があれば譲受処理を停止する。
 - 実行経路: Apps Script配布成功後の専用workflowは、まず単独のread-only監査コマンドを処理し、その後、譲受を含むasset-reconcileだけを処理する。Gmail下書きの送信は不要。
 - 残件: PR/CI/Apps Script配布後、監査結果と譲受結果draftを確認し、V2 revision・0円取得履歴・在庫数量1を正本再読込で検証する。
+
+### 2026-10-25 — 初回配布後の監査範囲修正
+- PR #84をsquash mergeし、main `d17f22cf`。Apps Script Automation DeployとGitHub Pagesの両方がsuccess。
+- 専用runnerは全店舗監査の範囲指定が必須であることを検出し、read-only監査で停止。V2正本への書込み前に停止したため、revisionは2183のまま。譲受コマンドは未送信キューに残存。
+- 変更: asset auditへ明示的な `allStores:true` を追加し、商品指定で全店舗から照合できるようにする。前回失敗した監査draftを更新し、再配布後に監査→譲受を再試行する。
+- 検証/残件: 監査全店舗テストを追加し、再配布・再実行後に正本revision、0円取得履歴、在庫1点を再読込確認する。
