@@ -1134,9 +1134,10 @@ function tv2AssetAuditView_(state,requestId,filters){
  const normalized=value=>normalize_(String(value||''));
  const stores=(filters&&Array.isArray(filters.storeIncludes)?filters.storeIncludes:[]).map(normalized).filter(Boolean);
  const products=(filters&&Array.isArray(filters.productIncludes)?filters.productIncludes:[]).map(normalized).filter(Boolean);
- if(!stores.length||!products.length)throw new Error('監査対象の店舗・商品フィルターが必要です');
+ const allStores=!!(filters&&filters.allStores===true);
+ if((!stores.length&&!allStores)||!products.length)throw new Error('監査対象の商品フィルターと店舗範囲指定が必要です');
  const includesAny=(value,terms)=>{const text=normalized(value);return terms.some(term=>text.includes(term))};
- const isTargetStore=value=>includesAny(value,stores);
+ const isTargetStore=value=>allStores||includesAny(value,stores);
  const isTargetProduct=value=>includesAny(value,products);
  const projectTransaction=t=>({id:String(t.id||''),type:String(t.type||''),product:String(t.productKey||t.product||''),category:String(t.category||''),store:String(t.store||''),date:String(t.date||''),quantity:Number(t.quantity||0),price:t.price==null?null:Number(t.price),total:t.total==null?null:Number(t.total),actualPaidTotal:t.actualPaidTotal==null?null:Number(t.actualPaidTotal),sourceLotteryId:String(t.sourceLotteryId||''),requestId:String(t.requestId||''),set:String(t.set||''),acquisitionCost:t.acquisitionCost==null?null:Number(t.acquisitionCost)});
  const projectLot=l=>({id:String(l.id||''),product:String(l.productKey||l.product||''),category:String(l.category||''),condition:String(l.condition||''),quantity:Number(l.quantity||0),unitCost:l.unitCost==null?null:Number(l.unitCost),acquiredAt:String(l.acquiredAt||''),store:String(l.store||''),source:String(l.source||''),sourceTransactionId:String(l.sourceTransactionId||''),sourceLotteryId:String(l.sourceLotteryId||''),requestId:String(l.requestId||''),set:String(l.set||''),memo:String(l.memo||'').slice(0,100)});
