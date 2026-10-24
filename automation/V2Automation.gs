@@ -1284,9 +1284,9 @@ function runTv2AssetReconcile(command){
    const oldTx=state.transactions.filter(x=>String(x.id||'')===id),oldLot=state.inventoryLots.filter(x=>String(x.id||'')===lot.id);
    if(oldTx.length||oldLot.length){if(oldTx.length!==1||oldLot.length!==1||!sameFields(oldTx[0],tx,txFields)||!sameFields(oldLot[0],lot,lotFields))throw new Error('譲受履歴/lotが重複または内容不一致です');}
    else{
-    const sameProductLots=state.inventoryLots.filter(x=>normalize_(x.productKey||x.product)===normalize_(product)&&String(x.category||'')===category&&Number(x.quantity)>0);
+    const normalizedProduct=normalize_(product),sameProductLots=state.inventoryLots.filter(x=>{const candidate=normalize_(x.productKey||x.product),sameName=candidate===normalizedProduct||normalizedProduct.indexOf('スタートデッキ100')>=0&&candidate.indexOf('スタートデッキ100')>=0;return sameName&&String(x.category||'')===category&&Number(x.quantity)>0;});
     if(sameProductLots.length)throw new Error('同一商品の既存在庫があるため譲受を一意に照合できず停止しました');
-    const sameDayProduct=existingTransactions.filter(x=>String(x.date||'')===date&&String(x.category||'')===category&&normalize_(x.productKey||x.product)===normalize_(product));
+    const sameDayProduct=existingTransactions.filter(x=>{const candidate=normalize_(x.productKey||x.product),sameName=candidate===normalizedProduct||normalizedProduct.indexOf('スタートデッキ100')>=0&&candidate.indexOf('スタートデッキ100')>=0;return String(x.date||'')===date&&String(x.category||'')===category&&sameName;});
     if(sameDayProduct.length)throw new Error('同日・同一商品の既存履歴があるため譲受の重複有無を確認できず停止しました');
     state.transactions.push(tx);state.inventoryLots.push(lot);changed=true;
    }
