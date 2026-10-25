@@ -266,3 +266,9 @@
 - 最後に確認できた正本revisionはread-only auditの `2183` (2026-10-24)。デプロイとrunner失敗以降に正本を直接再読込できる経路は未確立。
 - 既知の制約: 過去の記録どおり `clasp run` / Apps Script `scripts.run` がGoogle側権限で拒否される場合がある。API executable / caller共通Cloud project / Apps Script API / OAuth scopesの認証・権限確認が必要。今回はそれらを変更していない。
 - UIの日付fallback修正はPagesへ配布済み。`checkedAt`が空なら相場履歴の最新日を表示し、日付自体が無ければ「相場取得日 不明」とする。元データのquoteに日付があるかどうかは正本読込が再開するまで未確認。
+
+### 2026-10-25 — 既存購入在庫と譲受giftの分離
+- 最新read-only audit draftでV2 revision 2186を確認。既存のスタートデッキ100購入lotはGEO香芝店の1点（取得原価891円）。今回の親からの譲受とは別物で、購入履歴/lotとも重複していない。
+- 修正: 同一商品の有料在庫があるだけではgiftを拒否しない。商品名ゆれは照合しつつ、同日・同一譲受元の既存giftのみを重複候補として止める。既存requestIdの再実行検証は継続。
+- LivePocket申込番号 `1061274659` のGmail確認メールは2026-10-25 10:49 JST。スクショの商品・イベント・店舗（イエローサブマリンの「30th CELEBRATION」購入権、希望店舗なんば本店）と一致。正本の同一申込監査は別のread-only commandで照合中。
+- 注意: `clasp run`専用runnerはGoogle側権限で失敗したまま。通常のApps Script定期triggerで監査draftが作られたため、結果draftとV2 revisionを使い、各操作の成功を個別に検証する。
