@@ -263,11 +263,11 @@ test('asset reconciliation records zero-cost gifts, adds purchases, consumes ope
  assert.throws(()=>context.reconcile({...command,expectedRevision:7}),/revisionより正本revisionが古い/);
 });
 
-test('a gift-only reconciliation works, while an existing same-product lot blocks a second gift',async()=>{
+test('a gift adds a distinct zero-cost lot beside paid stock but blocks the same gift twice',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetReconcile(command)');
  const end=text.indexOf('\nfunction runTv2AssetReconcileOnce()',start);
- let state={revision:2,transactions:[],inventoryLots:[],lotteries:[],auditLog:[]};
+ let state={revision:2,transactions:[],inventoryLots:[{id:'paid-startdeck',product:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',productKey:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',category:'BOX',quantity:1,unitCost:891,source:'purchase',acquiredAt:'2026-09-26',store:'GEO香芝店'}],lotteries:[],auditLog:[]};
  const context={normalize_:(s)=>normalize(s),tv2RetailPriceInfo_:()=>({price:800}),tv2Mutate_:(kind,fn)=>{const next=structuredClone(state),result=fn(next)||{};if(result.changed!==false){next.revision++;state=next;}return{revision:state.revision,...result};},tv2Load_:()=>({payload:structuredClone(state),revision:state.revision}),Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{}}};
  vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
  const gift={id:'gift-one',product:'MEGA スタートデッキ100 バトルコレクション',giver:'親から譲受',date:'2026-10-25',category:'BOX',condition:'未開封',quantity:1};
@@ -275,11 +275,12 @@ test('a gift-only reconciliation works, while an existing same-product lot block
  const saved=context.reconcile(command);
  assert.equal(saved.ok,true);
  assert.equal(state.revision,3);
+ assert.equal(state.inventoryLots.length,2,'a separate paid lot must not block the explicitly reported parent gift');
  assert.equal(saved.inventory[0].unitCost,0);
  assert.equal(saved.inventory[0].source,'gift');
  state.revision=4;
- state.inventoryLots.push({id:'another-lot',product:'MEGA スタートデッキ100',productKey:'MEGA スタートデッキ100',category:'BOX',quantity:1,unitCost:100,source:'purchase'});
- assert.throws(()=>context.reconcile({...command,requestId:'asset-reconcile-gift-duplicate',expectedRevision:4,gifts:[{...gift,id:'gift-two'}]}),/既存在庫があるため譲受を一意に照合できず停止/);
+ state.inventoryLots.push({id:'another-gift-lot',product:'MEGA スタートデッキ100',productKey:'MEGA スタートデッキ100',category:'BOX',quantity:1,unitCost:0,source:'gift',acquiredAt:gift.date,store:gift.giver});
+ assert.throws(()=>context.reconcile({...command,requestId:'asset-reconcile-gift-duplicate',expectedRevision:4,gifts:[{...gift,id:'gift-two'}]}),/同日・同一譲受元の既存gift在庫があるため重複確認/);
 });
 
 test('scoped one-shot runner processes only asset-reconcile drafts and returns no purchase details',async()=>{
