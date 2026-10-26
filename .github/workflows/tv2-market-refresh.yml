@@ -50,7 +50,15 @@ jobs:
             exit "$status"
           fi
           if ! printf '%s' "$output" | grep -Eiq '\"ok\"[[:space:]]*:[[:space:]]*true'; then
-            echo "V2 market refresh did not return a successful canonical read-back."
+            category=unknown
+            if printf '%s' "$output" | grep -Eiq 'authorization|required.*permission|permission_denied|caller does not have permission'; then
+              category=authorization
+            elif printf '%s' "$output" | grep -Eiq 'unable to run script function|function.*not found|script function.*not found'; then
+              category=function_not_found
+            elif printf '%s' "$output" | grep -Eiq 'not an API executable|Apps Script API.*disabled|script.*not enabled'; then
+              category=project_api_setup
+            fi
+            echo "V2 market refresh did not return a successful canonical read-back (category=$category)."
             exit 1
           fi
           printf '%s\n' "$output"
