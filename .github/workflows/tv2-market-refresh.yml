@@ -1,0 +1,54 @@
+name: V2 market quote refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules are UTC: 04:30 UTC is 13:30 JST.
+    - cron: '30 4 * * *'
+  workflow_run:
+    workflows: [Apps Script Automation Deploy]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  refresh:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save @google/clasp
+      - name: Configure clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Run only the V2 market refresh
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            function=runTv2MarketRefreshNowOnce
+          else
+            function=runTv2MarketScheduledOnce
+          fi
+          set +e
+          output="$(npx clasp run "$function" 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Apps Script market refresh failed; response suppressed to protect private data."
+            exit "$status"
+          fi
+          if printf '%s' "$output" | grep -Eiq 'unable to run script function|permission_denied|authorization is required|error|failed|exception|denied|\"ok\"[[:space:]]*:[[:space:]]*false'; then
+            echo "V2 market refresh or read-back reported failure; details remain in the Apps Script result."
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          echo "V2 market refresh completed; canonical read-back summary is shown above."
