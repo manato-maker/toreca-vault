@@ -272,3 +272,11 @@
 - 修正: 同一商品の有料在庫があるだけではgiftを拒否しない。商品名ゆれは照合しつつ、同日・同一譲受元の既存giftのみを重複候補として止める。既存requestIdの再実行検証は継続。
 - LivePocket申込番号 `1061274659` のGmail確認メールは2026-10-25 10:49 JST。スクショの商品・イベント・店舗（イエローサブマリンの「30th CELEBRATION」購入権、希望店舗なんば本店）と一致。正本の同一申込監査は別のread-only commandで照合中。
 - 注意: `clasp run`専用runnerはGoogle側権限で失敗したまま。通常のApps Script定期triggerで監査draftが作られたため、結果draftとV2 revisionを使い、各操作の成功を個別に検証する。
+
+### 2026-10-26 — BOX/パック相場の読取監査
+- 依頼: 日付表示が見えず、BOX相場が毎日更新されているか確認したい。
+- 既存対応: `d17f22c` でPagesへ日付fallbackは配布済み。quoteの`checkedAt`が空なら相場historyの最新日、履歴にも日付がなければ「相場取得日 不明」を表示する。ただしcanonicalの実際のBOX quote日付・日次更新healthは正本を再読込できておらず未確認。
+- 変更: read-only `market-audit` commandを追加。正本revision、最終/日次market run health、active BOX・パックの価格/取得日/取得元/freshness/history末尾を非公開の結果draftに出し、既存Gmail command queueから処理可能にする。Gmail command draftは送信しない。
+- テスト: active lotのみの抽出、lot/商品一致quote、日次health、履歴、private result draftを検証する。
+- 本番状態: 未deploy。PR・CI・Pages/Apps Script配布後に監査commandをキュー処理し、結果draftとV2の実測revisionを確認する。
+- 制限: auditはread-onlyで、取得日・価格・freshnessを補完・推定しない。
