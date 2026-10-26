@@ -575,6 +575,29 @@ function tv2FetchPickupPosts_(lots,health){if(typeof PropertiesService==='undefi
 }
 function tv2EnsureMarketSchedule_(){tv2EnsureSimpleAutomationSchedule_(false)}
 function runTv2PickupAuto(){return runTv2MarketAuto({skipQueue:true})}
+
+// Scoped GitHub Actions entry points. These never process the general Gmail
+// command queue; only the immediate refresh may emit an already queued,
+// read-only market audit after the V2 market write has completed.
+function tv2MarketRefreshSummary_(outcome){
+ const loaded=tv2Load_(),state=loaded&&loaded.payload||{},health=tv2Health_(state),date=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+ const sealed=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category));
+ const quotes=state.marketQuotes||[];
+ const current=sealed.filter(l=>{
+  const q=quotes.find(x=>String(x.lotId||'')===String(l.id||''))||quotes.find(x=>!x.lotId&&normalize_(x.productKey||x.product)===normalize_(l.productKey||l.product)&&String(x.condition||'')===String(l.condition||''));
+  return q&&String(q.checkedAt||'')===date&&Number(q.price)>0&&q.fresh!==false;
+ }).length;
+ return{ok:true,revision:Number(loaded.revision||state.revision||0),lastMutationId:String(state.lastMutationId||''),lastMarketRunAt:String(health.lastMarketRunAt||''),lastScheduledMarketDate:String(health.lastScheduledMarketDate||''),marketStatus:String(health.marketStatus||''),marketReview:Number(health.marketReview||0),report:outcome&&outcome.report||null,sealedLots:sealed.length,sealedQuotesCurrent:current};
+}
+function runTv2MarketRefreshNowOnce(){
+ const outcome=runTv2MarketAuto({skipQueue:true,scheduled:false,skipScheduleEnsure:true});
+ if(typeof GmailApp!=='undefined'&&GmailApp.getDrafts().some(d=>{const m=d.getMessage();if(String(m.getSubject()||'').trim()!=='[Toreca Vault Command]')return false;try{return String(JSON.parse(String(m.getPlainBody()||'').trim()).type||'')==='market-audit'}catch(e){return false}}))tv2ProcessChatTradeDrafts_();
+ return tv2MarketRefreshSummary_(outcome);
+}
+function runTv2MarketScheduledOnce(){
+ const outcome=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
+ return tv2MarketRefreshSummary_(outcome);
+}
 function tv2EnsurePickupSchedule_(){
   if(typeof ScriptApp==='undefined')return;
   ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2PickupAuto').forEach(t=>ScriptApp.deleteTrigger(t));
