@@ -1,6 +1,9 @@
 name: V2 market quote refresh
 
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tv2-market-refresh.yml']
   workflow_dispatch:
   schedule:
     # GitHub schedules are UTC: 04:30 UTC is 13:30 JST.
@@ -33,7 +36,7 @@ jobs:
       - name: Run only the V2 market refresh
         shell: bash
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] || [ "$GITHUB_EVENT_NAME" = "push" ]; then
             function=runTv2MarketRefreshNowOnce
           else
             function=runTv2MarketScheduledOnce
@@ -46,8 +49,8 @@ jobs:
             echo "Apps Script market refresh failed; response suppressed to protect private data."
             exit "$status"
           fi
-          if printf '%s' "$output" | grep -Eiq 'unable to run script function|permission_denied|authorization is required|error|failed|exception|denied|\"ok\"[[:space:]]*:[[:space:]]*false'; then
-            echo "V2 market refresh or read-back reported failure; details remain in the Apps Script result."
+          if ! printf '%s' "$output" | grep -Eiq '\"ok\"[[:space:]]*:[[:space:]]*true'; then
+            echo "V2 market refresh did not return a successful canonical read-back."
             exit 1
           fi
           printf '%s\n' "$output"

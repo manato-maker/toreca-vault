@@ -6,8 +6,10 @@ const source = fs.readFileSync(new URL('../automation/V2Automation.gs', import.m
 const workflow = fs.readFileSync(new URL('../.github/workflows/tv2-market-refresh.yml', import.meta.url), 'utf8');
 assert.match(workflow, /cron:\s*'30 4 \* \* \*'/, 'daily fallback runs at 13:30 Japan time');
 assert.match(workflow, /workflow_run:[\s\S]*workflows:\s*\[Apps Script Automation Deploy\]/, 'initial refresh waits for successful Apps Script deployment');
+assert.match(workflow, /paths:\s*\['\.github\/workflows\/tv2-market-refresh\.yml'\]/, 'workflow edits can trigger a one-time verification run');
 assert.match(workflow, /runTv2MarketRefreshNowOnce/);
 assert.match(workflow, /runTv2MarketScheduledOnce/);
+assert.match(workflow, /grep -Eiq.*true/, 'workflow accepts only a successful V2 read-back');
 const start = source.indexOf('// Scoped GitHub Actions entry points.');
 const end = source.indexOf('function tv2EnsurePickupSchedule_()', start);
 assert.ok(start >= 0 && end > start, 'scoped market runner entry points are present');
