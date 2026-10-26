@@ -10,6 +10,7 @@ assert.match(workflow, /paths:\s*\['\.github\/workflows\/tv2-market-refresh\.yml
 assert.match(workflow, /runTv2MarketRefreshNowOnce/);
 assert.match(workflow, /runTv2MarketScheduledOnce/);
 assert.match(workflow, /grep -Eiq.*true/, 'workflow accepts only a successful V2 read-back');
+assert.match(workflow, /category=authorization[\s\S]*category=function_not_found[\s\S]*category=project_api_setup/, 'workflow logs only a safe failure category');
 const start = source.indexOf('// Scoped GitHub Actions entry points.');
 const end = source.indexOf('function tv2EnsurePickupSchedule_()', start);
 assert.ok(start >= 0 && end > start, 'scoped market runner entry points are present');
