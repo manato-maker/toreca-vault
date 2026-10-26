@@ -589,14 +589,28 @@ function tv2MarketRefreshSummary_(outcome){
  }).length;
  return{ok:true,revision:Number(loaded.revision||state.revision||0),lastMutationId:String(state.lastMutationId||''),lastMarketRunAt:String(health.lastMarketRunAt||''),lastScheduledMarketDate:String(health.lastScheduledMarketDate||''),marketStatus:String(health.marketStatus||''),marketReview:Number(health.marketReview||0),report:outcome&&outcome.report||null,sealedLots:sealed.length,sealedQuotesCurrent:current};
 }
+function tv2MarketRefreshFailure_(requestId,err){
+ const detail=String(err&&err.message||err||'unknown').slice(0,600),subject='[Toreca Vault Market Refresh Error] '+requestId;
+ try{
+  const to=Session.getEffectiveUser().getEmail();
+  if(to&&!GmailApp.getDrafts().some(d=>String(d.getMessage().getSubject()||'').trim()===subject))GmailApp.createDraft(to,subject,JSON.stringify({ok:false,requestId,error:detail},null,2));
+ }catch(mailError){}
+ return{ok:false,requestId,error:'market-refresh-failed'};
+}
 function runTv2MarketRefreshNowOnce(){
- const outcome=runTv2MarketAuto({skipQueue:true,scheduled:false,skipScheduleEnsure:true});
- if(typeof GmailApp!=='undefined'&&GmailApp.getDrafts().some(d=>{const m=d.getMessage();if(String(m.getSubject()||'').trim()!=='[Toreca Vault Command]')return false;try{return String(JSON.parse(String(m.getPlainBody()||'').trim()).type||'')==='market-audit'}catch(e){return false}}))tv2ProcessChatTradeDrafts_();
- return tv2MarketRefreshSummary_(outcome);
+ const requestId='market-refresh-now-'+Utilities.formatDate(new Date(),TZ,'yyyyMMdd-HHmm');
+ try{
+  const outcome=runTv2MarketAuto({skipQueue:true,scheduled:false,skipScheduleEnsure:true});
+  if(typeof GmailApp!=='undefined'&&GmailApp.getDrafts().some(d=>{const m=d.getMessage();if(String(m.getSubject()||'').trim()!=='[Toreca Vault Command]')return false;try{return String(JSON.parse(String(m.getPlainBody()||'').trim()).type||'')==='market-audit'}catch(e){return false}}))tv2ProcessChatTradeDrafts_();
+  return tv2MarketRefreshSummary_(outcome);
+ }catch(err){return tv2MarketRefreshFailure_(requestId,err)}
 }
 function runTv2MarketScheduledOnce(){
- const outcome=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
- return tv2MarketRefreshSummary_(outcome);
+ const requestId='market-refresh-scheduled-'+Utilities.formatDate(new Date(),TZ,'yyyyMMdd');
+ try{
+  const outcome=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
+  return tv2MarketRefreshSummary_(outcome);
+ }catch(err){return tv2MarketRefreshFailure_(requestId,err)}
 }
 function tv2EnsurePickupSchedule_(){
   if(typeof ScriptApp==='undefined')return;
