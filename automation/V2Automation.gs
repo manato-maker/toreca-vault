@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 37508)
+Total output lines: 1618
+
 // Simple free-only automation: Gmail every 15 minutes; market once daily after 13:30 JST.
 // Single-card pricing: Cardrush first, Toretoku fallback; source/date are preserved in each quote.
 // Single-card market policy: Cardrush only; user screenshots may pin the exact Cardrush lookup identity.
@@ -575,6 +578,29 @@ function tv2FetchPickupPosts_(lots,health){if(typeof PropertiesService==='undefi
 }
 function tv2EnsureMarketSchedule_(){tv2EnsureSimpleAutomationSchedule_(false)}
 function runTv2PickupAuto(){return runTv2MarketAuto({skipQueue:true})}
+
+// Scoped GitHub Actions entry points. These never process the general Gmail
+// command queue; only the immediate refresh may emit an already queued,
+// read-only market audit after the V2 market write has completed.
+function tv2MarketRefreshSummary_(outcome){
+ const loaded=tv2Load_(),state=loaded&&loaded.payload||{},health=tv2Health_(state),date=Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
+ const sealed=(state.inventoryLots||[]).filter(l=>Number(l.quantity)>0&&['BOX','パック'].includes(l.category));
+ const quotes=state.marketQuotes||[];
+ const current=sealed.filter(l=>{
+  const q=quotes.find(x=>String(x.lotId||'')===String(l.id||''))||quotes.find(x=>!x.lotId&&normalize_(x.productKey||x.product)===normalize_(l.productKey||l.product)&&String(x.condition||'')===String(l.condition||''));
+  return q&&String(q.checkedAt||'')===date&&Number(q.price)>0&&q.fresh!==false;
+ }).length;
+ return{ok:true,revision:Number(loaded.revision||state.revision||0),lastMutationId:String(state.lastMutationId||''),lastMarketRunAt:String(health.lastMarketRunAt||''),lastScheduledMarketDate:String(health.lastScheduledMarketDate||''),marketStatus:String(health.marketStatus||''),marketReview:Number(health.marketReview||0),report:outcome&&outcome.report||null,sealedLots:sealed.length,sealedQuotesCurrent:current};
+}
+function runTv2MarketRefreshNowOnce(){
+ const outcome=runTv2MarketAuto({skipQueue:true,scheduled:false,skipScheduleEnsure:true});
+ if(typeof GmailApp!=='undefined'&&GmailApp.getDrafts().some(d=>{const m=d.getMessage();if(String(m.getSubject()||'').trim()!=='[Toreca Vault Command]')return false;try{return String(JSON.parse(String(m.getPlainBody()||'').trim()).type||'')==='market-audit'}catch(e){return false}}))tv2ProcessChatTradeDrafts_();
+ return tv2MarketRefreshSummary_(outcome);
+}
+function runTv2MarketScheduledOnce(){
+ const outcome=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
+ return tv2MarketRefreshSummary_(outcome);
+}
 function tv2EnsurePickupSchedule_(){
   if(typeof ScriptApp==='undefined')return;
   ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==='runTv2PickupAuto').forEach(t=>ScriptApp.deleteTrigger(t));
@@ -682,388 +708,7 @@ function runTv2ChatLottery(command){
  const applicationDate=hasApplicationDate?String(input.applicationDate||'').trim():Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd');
  if(!title||!store||!requestId||(applicationDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(applicationDate)))throw new Error('チャット抽選データが不正です');
  if(!['応募前','応募済','当選','落選','購入済'].includes(status))throw new Error('チャット抽選状態が不正です');
- if(resultDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('チャット抽選結果日が不正です');
- if(receiveDeadline&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(receiveDeadline))throw new Error('チャット抽選購入期限が不正です');
- return tv2Mutate_('chat-lottery',state=>{
-  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
-  const id='chat-lottery-'+requestId,existing=state.lotteries.filter(x=>x.id===id);
-  if(existing.length===1)return{duplicate:true,lotteryId:id,changed:false};
-  if(existing.length>1)throw new Error('同一チャット抽選IDが重複しています');
-  const now=new Date().toISOString();
-  state.lotteries.push({
-   id,title,store,status,deadline,resultDate,receiveDeadline,
-   receiptStatus:status==='当選'?'未受取':status==='購入済'?'受取済み':'対象外',
-   receivedDate:'',shrinkStatus:'未選択',memo,owner,
-   applicationDate,source:'chat',requestId,createdAt:now,updatedAt:now
-  });
-  return{duplicate:false,lotteryId:id,changed:true};
- });
-}
-
-
-
-function runTv2PokemonCenterSpouseResult(command){
- const input=command&&typeof command==='object'?command:{};
- const requestId=String(input.requestId||'').trim(),resultDate=String(input.resultDate||'').trim();
- const store='ポケモンセンターオンライン';
- const celebrationTitle='MEGA 拡張パック 30th CELEBRATION BOX';
- const futuristicTitle='MEGA 30th CELEBRATION FUTURISTIC BOX';
- const ownerTag='嫁分';
- if(!requestId||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))throw new Error('ポケモンセンター嫁分結果コマンドが不正です');
- const isSpouse=x=>/(嫁分|妻分|奥さん|嫁|妻)/.test([String(x&&x.memo||''),String(x&&x.title||'')].join('｜'))||String(x&&x.owner||'')===ownerTag;
- const isStore=x=>normalize_(x&&x.store||'')===normalize_(store);
- const isCelebration=x=>{
-  const t=normalize_(x&&x.title||'');
-  return t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'));
- };
- const isFuturistic=x=>normalize_(x&&x.title||'').includes(normalize_('30th CELEBRATION FUTURISTIC'));
- const appendMemo=(value,parts)=>{
-  const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);
-  parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});
-  return out.join('｜');
- };
- const result=tv2Mutate_('chat-pokemoncenter-spouse-result',state=>{
-  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.pokemonCenterSpouseResultIds=Array.isArray(state.automation.pokemonCenterSpouseResultIds)?state.automation.pokemonCenterSpouseResultIds:[];
-  const spouseCelebration=state.lotteries.filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
-  const pendingCelebration=spouseCelebration.filter(x=>['応募済','応募済み'].includes(String(x.status||'')));
-  if(state.automation.pokemonCenterSpouseResultIds.includes(requestId)){
-   if(spouseCelebration.length!==1)throw new Error('嫁分CELEBRATION BOXを一意に再確認できません');
-   const spouseFuturistic=state.lotteries.filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
-   if(spouseFuturistic.length!==1)throw new Error('嫁分FUTURISTIC BOXを一意に再確認できません');
-   return{duplicate:true,changed:false,celebrationId:spouseCelebration[0].id,futuristicId:spouseFuturistic[0].id};
-  }
-  if(pendingCelebration.length!==1)throw new Error('応募済みの嫁分CELEBRATION BOXを一意に特定できません: '+pendingCelebration.length+'件');
-  const celebration=pendingCelebration[0];
-  if(String(celebration.resultDate||'')&&String(celebration.resultDate).slice(0,10)!==resultDate)throw new Error('嫁分CELEBRATION BOXの結果日が想定と一致しません');
-  const now=new Date().toISOString();
-  celebration.title=celebrationTitle;
-  celebration.store=store;
-  celebration.status='落選';
-  celebration.resultDate=resultDate;
-  celebration.receiptStatus='対象外';
-  celebration.receivedDate='';
-  celebration.owner=ownerTag;
-  celebration.memo=appendMemo(celebration.memo,[ownerTag,'9/30 落選確認','ポケモンセンターオンライン']);
-  celebration.updatedAt=now;
-
-  let futuristicMatches=state.lotteries.filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
-  if(futuristicMatches.length>1)throw new Error('嫁分FUTURISTIC BOXが重複しています: '+futuristicMatches.length+'件');
-  let futuristic=futuristicMatches[0];
-  if(futuristic){
-   if(futuristic.status==='購入済'||futuristic.receiptStatus==='受取済み')throw new Error('嫁分FUTURISTIC BOXが購入済み/受取済みのため上書きを停止しました');
-  }else{
-   const id='lottery-pokemoncenter-wife-futuristic-20260930';
-   if(state.lotteries.some(x=>String(x.id||'')===id))throw new Error('FUTURISTIC BOX用IDが既に使用されています');
-   futuristic={id,title:futuristicTitle,store,status:'当選',resultDate,receiveDeadline:'2026-10-06',receiptStatus:'未受取',receivedDate:'',owner:ownerTag,memo:'',source:'chat',requestId,createdAt:now,updatedAt:now};
-   state.lotteries.push(futuristic);
-  }
-  futuristic.title=futuristicTitle;
-  futuristic.store=store;
-  futuristic.status='当選';
-  futuristic.resultDate=resultDate;
-  futuristic.receiveDeadline='2026-10-06';
-  if(futuristic.receiptStatus!=='受取済み')futuristic.receiptStatus='未受取';
-  futuristic.receivedDate=futuristic.receivedDate||'';
-  futuristic.owner=ownerTag;
-  futuristic.memo=appendMemo(futuristic.memo,[ownerTag,'価格 27,500円','9/30 当選確認','注文 9/30 17:00〜10/6 16:59','お届け 2027/3/13〜3/31','商品コード 4521329463872']);
-  futuristic.updatedAt=now;
-
-  state.automation.pokemonCenterSpouseResultIds.push(requestId);
-  state.automation.pokemonCenterSpouseResultIds=state.automation.pokemonCenterSpouseResultIds.slice(-100);
-  return{duplicate:false,changed:true,celebrationId:celebration.id,futuristicId:futuristic.id};
- });
- const check=tv2Load_(),state=check.payload||{};
- const cMatches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.celebrationId||''));
- const fMatches=(state.lotteries||[]).filter(x=>String(x.id||'')===String(result.futuristicId||''));
- if(cMatches.length!==1||cMatches[0].status!=='落選'||cMatches[0].title!==celebrationTitle||normalize_(cMatches[0].store)!==normalize_(store)||String(cMatches[0].owner||'')!==ownerTag)throw new Error('嫁分CELEBRATION BOXの再読込検証に失敗しました');
- if(fMatches.length!==1||fMatches[0].status!=='当選'||fMatches[0].title!==futuristicTitle||normalize_(fMatches[0].store)!==normalize_(store)||String(fMatches[0].owner||'')!==ownerTag)throw new Error('嫁分FUTURISTIC BOXの再読込検証に失敗しました');
- const spouseCelebrationFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isCelebration(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
- const spouseFuturisticFinal=(state.lotteries||[]).filter(x=>isStore(x)&&isFuturistic(x)&&isSpouse(x)&&String(x.resultDate||'').slice(0,10)===resultDate);
- if(spouseCelebrationFinal.length!==1||spouseFuturisticFinal.length!==1)throw new Error('嫁分ポケモンセンター抽選の重複検証に失敗しました');
- return{ok:true,revision:Number(check.revision),celebration:{id:cMatches[0].id,title:cMatches[0].title,status:cMatches[0].status},futuristic:{id:fMatches[0].id,title:fMatches[0].title,status:fMatches[0].status,receiveDeadline:fMatches[0].receiveDeadline},mutationResult:result};
-}
-
-function runTv2ReconcileResults20260930(command){
- const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
- if(!requestId)throw new Error('9/30結果整理コマンドが不正です');
- const resultDate='2026-09-30',store='ポケモンセンターオンライン',wife='嫁分',self='本人分';
- const titles={
-  celebration:'ポケモンカードゲーム MEGA 拡張パック 30th CELEBRATION BOX',
-  futuristic:'ポケモンカードゲーム MEGA 30th CELEBRATION FUTURISTIC BOX',
-  set9:'ポケモンカードゲーム MEGA 30th CELEBRATION カードセット (9種セット)'
- };
- const n=x=>normalize_(x||''),isPc=x=>n(x&&x.store)===n(store);
- const isWife=x=>String(x&&x.owner||'')===wife||/(嫁分|妻分|奥さん|嫁|妻)/.test(String(x&&x.memo||''));
- const isCelebration=x=>{const t=n(x&&x.title);return t.includes(n('30th CELEBRATION'))&&t.includes(n('BOX'))&&!t.includes(n('FUTURISTIC'))&&!t.includes(n('9種セット'))&&!t.includes(n('カードセット'))};
- const isFuturistic=x=>n(x&&x.title).includes(n('30th CELEBRATION FUTURISTIC'));
- const isSet9=x=>{const t=n(x&&x.title);return t.includes(n('30th CELEBRATION'))&&(t.includes(n('9種セット'))||t.includes(n('カードセット')))};
-
- const appendMemo=(value,parts)=>{const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});return out.join('｜')};
- const score=x=>{
-  let s=0;
-  if(x&&x.source==='chat')s+=20;
-  if(!/自動登録/.test(String(x&&x.memo||'')))s+=10;
-  if(String(x&&x.owner||''))s+=5;
-  if(String(x&&x.applicationDate||''))s+=2;
-  if(String(x&&x.deadline||''))s++;
-  return s;
- };
- const mergeGroup=(state,items,spec)=>{
-  if(!items.length){
-   const now=new Date().toISOString(),id='lottery-'+spec.id;
-   const created={id,title:spec.title,store,status:spec.status,resultDate,receiveDeadline:spec.receiveDeadline||'',receiptStatus:spec.status==='当選'?'未受取':'対象外',receivedDate:'',shrinkStatus:'未選択',owner:spec.owner,memo:appendMemo('',spec.memo||[]),source:'chat',requestId,createdAt:now,updatedAt:now};
-   state.lotteries.push(created);return created;
-  }
-  const sorted=items.slice().sort((a,b)=>score(b)-score(a)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))),keep=sorted[0],remove=new Set(sorted.slice(1).map(x=>String(x.id||'')));
-  sorted.slice(1).forEach(x=>{
-   for(const k of ['applicationDate','deadline','gmailMessageId','createdAt']){
-    if(!keep[k]&&x[k])keep[k]=x[k];
-   }
-   if(x.memo)keep.memo=appendMemo(keep.memo,String(x.memo).split('｜'));
-  });
-  keep.title=spec.title;keep.store=store;keep.status=spec.status;keep.resultDate=resultDate;keep.receiveDeadline=spec.receiveDeadline||keep.receiveDeadline||'';
-  keep.receiptStatus=spec.status==='当選'?(keep.receiptStatus==='受取済み'?'受取済み':'未受取'):'対象外';
-  if(spec.status==='落選')keep.receivedDate='';
-  keep.owner=spec.owner;keep.memo=appendMemo(keep.memo,spec.memo||[]);keep.updatedAt=new Date().toISOString();
-  state.lotteries=state.lotteries.filter(x=>x===keep||!remove.has(String(x.id||'')));
-  return keep;
- };
- const mutation=tv2Mutate_('reconcile-results-20260930',state=>{
-  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.resultReconcileIds=Array.isArray(state.automation.resultReconcileIds)?state.automation.resultReconcileIds:[];
-  if(state.automation.resultReconcileIds.includes(requestId))return{duplicate:true,changed:false};
-
-  const pc=state.lotteries.filter(isPc);
-  const celebration=pc.filter(isCelebration),futuristic=pc.filter(isFuturistic),set9=pc.filter(isSet9);
-
-  const selfCelebration=mergeGroup(state,celebration.filter(x=>!isWife(x)),{id:'pokemoncenter-self-celebration-20260930',title:titles.celebration,status:'当選',owner:self,receiveDeadline:'2026-10-06',memo:[self,'9/30 当選確認','商品コード 9900000008284','価格 7,200円']});
-  const wifeCelebration=mergeGroup(state,celebration.filter(isWife),{id:'pokemoncenter-wife-celebration-20260930',title:titles.celebration,status:'落選',owner:wife,receiveDeadline:'',memo:[wife,'9/30 落選確認']});
-  const selfFuturistic=mergeGroup(state,futuristic.filter(x=>!isWife(x)),{id:'pokemoncenter-self-futuristic-20260930',title:titles.futuristic,status:'当選',owner:self,receiveDeadline:'2026-10-06',memo:[self,'9/30 当選確認','商品コード 4521329463872','価格 27,500円']});
-  const wifeFuturistic=mergeGroup(state,futuristic.filter(isWife),{id:'pokemoncenter-wife-futuristic-20260930',title:titles.futuristic,status:'当選',owner:wife,receiveDeadline:'2026-10-06',memo:[wife,'9/30 当選確認','商品コード 4521329463872','価格 27,500円']});
-
-  // User correction: the 9-card set was not entered by the user; all Pokemon
-  // Center records for this product belong to the spouse. Merge them into one.
-  const set9All=(state.lotteries||[]).filter(x=>{if(!isPc(x)||!isSet9(x))return false;const d=String(x.resultDate||'').slice(0,10),r=String(x.requestId||'');return d===resultDate||/20260930/.test(r)||(!d&&['応募済','応募済み'].includes(String(x.status||'')));});
-  const wifeSet9=mergeGroup(state,set9All,{id:'pokemoncenter-wife-cardset9-20260930',title:titles.set9,status:'当選',owner:wife,receiveDeadline:'2026-10-06',memo:[wife,'本人分は応募なし','9/30 当選確認','価格 10,800円']});
-
-  const bee=(state.lotteries||[]).filter(x=>/bee本舗/i.test(String(x.store||''))||/bee本舗/i.test(String(x.title||'')));
-  const beeTargets=bee.filter(x=>String(x.resultDate||'').slice(0,10)===resultDate||['応募済','応募済み'].includes(String(x.status||'')));
-  beeTargets.forEach(x=>{if(x.status==='購入済'||x.receiptStatus==='受取済み')throw new Error('Bee本舗に購入済み/受取済みがあり変更停止');x.status='落選';x.resultDate=resultDate;x.receiptStatus='対象外';x.receivedDate='';x.updatedAt=new Date().toISOString();x.memo=appendMemo(x.memo,['9/30 落選確認'])});
-
-  state.automation.resultReconcileIds.push(requestId);state.automation.resultReconcileIds=state.automation.resultReconcileIds.slice(-100);
-  return{duplicate:false,changed:true,ids:{selfCelebration:selfCelebration.id,wifeCelebration:wifeCelebration.id,selfFuturistic:selfFuturistic.id,wifeFuturistic:wifeFuturistic.id,wifeSet9:wifeSet9.id},beeUpdated:beeTargets.length};
- });
-
- const check=tv2Load_(),state=check.payload||{},all=state.lotteries||[];
- const pc=all.filter(isPc);
- const groups={
-  selfCelebration:pc.filter(x=>isCelebration(x)&&!isWife(x)),
-  wifeCelebration:pc.filter(x=>isCelebration(x)&&isWife(x)),
-  selfFuturistic:pc.filter(x=>isFuturistic(x)&&!isWife(x)),
-  wifeFuturistic:pc.filter(x=>isFuturistic(x)&&isWife(x)),
-  wifeSet9:pc.filter(x=>isSet9(x)&&isWife(x)),
-  selfSet9:pc.filter(x=>isSet9(x)&&!isWife(x))
- };
- const ok=groups.selfCelebration.length===1&&groups.selfCelebration[0].status==='当選'&&
-   groups.wifeCelebration.length===1&&groups.wifeCelebration[0].status==='落選'&&
-   groups.selfFuturistic.length===1&&groups.selfFuturistic[0].status==='当選'&&
-   groups.wifeFuturistic.length===1&&groups.wifeFuturistic[0].status==='当選'&&
-   groups.wifeSet9.length===1&&groups.wifeSet9[0].status==='当選'&&groups.selfSet9.length===0;
- if(!ok)throw new Error('9/30ポケモンセンター結果の再読込検証に失敗しました');
- const beeNow=all.filter(x=>(/bee本舗/i.test(String(x.store||''))||/bee本舗/i.test(String(x.title||'')))&&(String(x.resultDate||'').slice(0,10)===resultDate||/9\/30 落選確認/.test(String(x.memo||''))));
- if(beeNow.some(x=>x.status!=='落選'))throw new Error('Bee本舗の落選再読込検証に失敗しました');
- const summary={ok:true,revision:Number(check.revision),requestId,bee:beeNow.map(x=>({id:x.id,title:x.title,store:x.store,status:x.status})),pokemonCenter:{
-  celebration:{self:{id:groups.selfCelebration[0].id,status:'当選'},wife:{id:groups.wifeCelebration[0].id,status:'落選'}},
-  futuristic:{self:{id:groups.selfFuturistic[0].id,status:'当選'},wife:{id:groups.wifeFuturistic[0].id,status:'当選'}},
-  set9:{self:'未応募（レコードなし）',wife:{id:groups.wifeSet9[0].id,status:'当選'}}
- },mutation};
- const subject='[Toreca Vault 9/30 Result] '+requestId,to=Session.getEffectiveUser().getEmail();
- GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
- if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
- return summary;
-}
-
-function runTv2DedupeBeeHonpo20260930(command){
- const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
- if(!requestId)throw new Error('Bee本舗重複整理コマンドが不正です');
- const result=tv2Mutate_('dedupe-beehonpo-20260930',state=>{
-  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.beeHonpoDedupeIds=Array.isArray(state.automation.beeHonpoDedupeIds)?state.automation.beeHonpoDedupeIds:[];
-  if(state.automation.beeHonpoDedupeIds.includes(requestId))return{duplicate:true,changed:false};
-
-  const isBee=x=>/bee本舗/i.test(String(x&&x.store||''))||/bee本舗/i.test(String(x&&x.title||''));
-  const isCelebration=x=>{
-   const t=normalize_(x&&x.title||'');
-   return t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'))&&!t.includes(normalize_('9種セット'))&&!t.includes(normalize_('カードセット'));
-  };
-  const matches=state.lotteries.filter(x=>isBee(x)&&isCelebration(x));
-  if(matches.length===0)throw new Error('Bee本舗 30th CELEBRATION BOXが見つかりません');
-  const blocked=matches.filter(x=>x.status==='購入済'||x.receiptStatus==='受取済み');
-  if(blocked.length)throw new Error('Bee本舗に購入済み/受取済みが含まれるため重複整理を停止しました');
-
-  const score=x=>{
-   let s=0;
-   if(String(x.status||'')==='落選')s+=20;
-   if(String(x.resultDate||'').slice(0,10)==='2026-09-30')s+=15;
-   if(String(x.source||'')==='chat')s+=10;
-   if(String(x.id||'').startsWith('chat-lottery-'))s+=5;
-   if(String(x.applicationDate||''))s+=2;
-   if(String(x.deadline||''))s++;
-   return s;
-  };
-  const sorted=matches.slice().sort((a,b)=>score(b)-score(a)||String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
-  const keep=sorted[0],remove=sorted.slice(1);
-  const appendMemo=(value,parts)=>{const out=String(value||'').split('｜').map(s=>s.trim()).filter(Boolean);parts.forEach(p=>{if(p&&!out.includes(p))out.push(p)});return out.join('｜')};
-  remove.forEach(x=>{
-   ['applicationDate','deadline','gmailMessageId','createdAt'].forEach(k=>{if(!keep[k]&&x[k])keep[k]=x[k]});
-   if(x.memo)keep.memo=appendMemo(keep.memo,String(x.memo).split('｜'));
-  });
-  keep.title='30th CELEBRATION BOX';
-  keep.store=String(keep.store||'').trim()||'Bee本舗';
-  keep.status='落選';
-  keep.resultDate='2026-09-30';
-  keep.receiptStatus='対象外';
-  keep.receivedDate='';
-  keep.memo=appendMemo(keep.memo,['9/30 落選確認','重複整理済み']);
-  keep.updatedAt=new Date().toISOString();
-
-  const removeIds=new Set(remove.map(x=>String(x.id||'')));
-  state.lotteries=state.lotteries.filter(x=>x===keep||!removeIds.has(String(x.id||'')));
-  state.automation.beeHonpoDedupeIds.push(requestId);
-  state.automation.beeHonpoDedupeIds=state.automation.beeHonpoDedupeIds.slice(-100);
-  return{duplicate:false,changed:true,keptId:keep.id,removedIds:[...removeIds],matchedBefore:matches.length};
- });
-
- const check=tv2Load_(),state=check.payload||{};
- const after=(state.lotteries||[]).filter(x=>{
-  const bee=/bee本舗/i.test(String(x&&x.store||''))||/bee本舗/i.test(String(x&&x.title||''));
-  const t=normalize_(x&&x.title||'');
-  return bee&&t.includes(normalize_('30th CELEBRATION'))&&!t.includes(normalize_('FUTURISTIC'))&&!t.includes(normalize_('9種セット'))&&!t.includes(normalize_('カードセット'));
- });
- if(after.length!==1||after[0].status!=='落選'||String(after[0].resultDate||'').slice(0,10)!=='2026-09-30')throw new Error('Bee本舗重複整理の再読込検証に失敗しました');
- const summary={ok:true,revision:Number(check.revision),requestId,bee:{id:after[0].id,title:after[0].title,store:after[0].store,status:after[0].status,resultDate:after[0].resultDate},mutation:result};
- const subject='[Toreca Vault Bee Dedupe Result] '+requestId,to=Session.getEffectiveUser().getEmail();
- GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
- if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
- return summary;
-}
-
-function runTv2ChatCardMarketLookup(command){
- const input=command&&typeof command==='object'?command:{};
- const requestId=String(input.requestId||'').trim(),lotId=String(input.lotId||'').trim();
- const expectedProduct=String(input.product||input.expectedProduct||'').trim(),expectedSet=String(input.set||input.expectedSet||'').trim();
- const lookupName=String(input.lookupName||input.cardrushName||'').trim(),lookupModel=String(input.lookupModel||input.cardrushModel||'').trim(),lookupSet=String(input.lookupSet||'').trim(),lookupVariant=String(input.lookupVariant||'').trim();
- if(!requestId||!lookupName||!/^\d{3}\/(?:\d{3}|[A-Z0-9-]{3,})$/i.test(lookupModel))throw new Error('カードラッシュ検索固定コマンドが不正です');
- const result=tv2Mutate_('chat-card-market-lookup',state=>{
-  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
-  state.marketQuotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[];
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.cardMarketLookupIds=Array.isArray(state.automation.cardMarketLookupIds)?state.automation.cardMarketLookupIds:[];
-  if(state.automation.cardMarketLookupIds.includes(requestId))return{duplicate:true,changed:false};
-  let matches=state.inventoryLots.filter(l=>Number(l.quantity)>0&&l.category==='カード');
-  if(lotId)matches=matches.filter(l=>String(l.id||'')===lotId);
-  else{
-   if(!expectedProduct||!expectedSet)throw new Error('lotIdがない場合は商品名と収録・型番が必要です');
-   matches=matches.filter(l=>normalize_(l.product||l.productKey)===normalize_(expectedProduct)&&normalize_(l.set||'')===normalize_(expectedSet));
-  }
-  if(matches.length!==1)throw new Error('カードラッシュ検索固定対象を一意に特定できません: '+matches.length+'件');
-  const lot=matches[0];
-  if(expectedProduct&&normalize_(lot.product||lot.productKey)!==normalize_(expectedProduct))throw new Error('対象カード名が想定と一致しません');
-  if(expectedSet&&normalize_(lot.set||'')!==normalize_(expectedSet))throw new Error('対象カード型番が想定と一致しません');
-  lot.marketLookupName=lookupName;lot.marketLookupModel=lookupModel;
-  if(lookupSet)lot.marketLookupSet=lookupSet;else delete lot.marketLookupSet;
-  if(lookupVariant)lot.marketLookupVariant=lookupVariant;else delete lot.marketLookupVariant;
-  lot.marketLookupConfirmedBy='user-screenshot';lot.marketLookupConfirmedAt=new Date().toISOString();
-  const q=tv2FindQuote_(state,lot);
-  if(q&&!/^カードラッシュ/.test(String(q.source||''))){q.previousPrice=Number.isFinite(Number(q.price))?Number(q.price):(q.previousPrice??null);q.previousSource=String(q.source||'');q.price=null;q.fresh=false;q.trend='stale';q.source='カードラッシュ未取得（要確認）'}
-  state.automation.cardMarketLookupIds.push(requestId);state.automation.cardMarketLookupIds=state.automation.cardMarketLookupIds.slice(-200);
-  return{duplicate:false,changed:true,lotId:lot.id,lookupName,lookupModel};
- });
- const check=tv2Load_(),state=check.payload||{},matches=(state.inventoryLots||[]).filter(l=>String(l.id||'')===String(result.lotId||lotId));
- if(result.duplicate)return{ok:true,revision:Number(check.revision),mutationResult:result};
- if(matches.length!==1||String(matches[0].marketLookupName||'')!==lookupName||String(matches[0].marketLookupModel||'')!==lookupModel||String(matches[0].marketLookupConfirmedBy||'')!=='user-screenshot')throw new Error('カードラッシュ検索固定の再読込検証に失敗しました');
- return{ok:true,revision:Number(check.revision),lot:{id:matches[0].id,product:matches[0].product,set:matches[0].set,marketLookupName:matches[0].marketLookupName,marketLookupModel:matches[0].marketLookupModel},mutationResult:result};
-}
-
-function runTv2ChatMarketRefresh(command){
- const input=command&&typeof command==='object'?command:{},requestId=String(input.requestId||'').trim();
- if(!requestId)throw new Error('カード相場再取得コマンドが不正です');
- const targetSpecs=Array.isArray(input.targets)?input.targets:null;
- let targetIds=null;
- if(targetSpecs){
-  if(!targetSpecs.length||targetSpecs.length>20)throw new Error('カード相場再取得の対象指定が不正です');
-  const ids=targetSpecs.map(x=>String(x&&x.lotId||'').trim());
-  if(ids.some(x=>!x)||new Set(ids).size!==ids.length)throw new Error('カード相場再取得lotIdが不正または重複しています');
-  const before=tv2Load_(),state=before&&before.payload||{};
-  targetSpecs.forEach(spec=>{
-   const matches=(state.inventoryLots||[]).filter(l=>String(l.id||'')===String(spec.lotId||'')&&Number(l.quantity)>0&&l.category==='カード');
-   if(matches.length!==1||normalize_(matches[0].product||matches[0].productKey)!==normalize_(spec.product||'')||normalize_(matches[0].set||'')!==normalize_(spec.set||''))throw new Error('カード相場再取得対象が正本と一致しません: '+String(spec.lotId||''));
-  });
-  targetIds=ids;
- }
- const result=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true,lotIds:targetIds||undefined});
- const loaded=tv2Load_(),state=loaded.payload||{},quotes=Array.isArray(state.marketQuotes)?state.marketQuotes:[],lots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
- const cards=lots.filter(l=>Number(l.quantity)>0&&l.category==='カード'&&(!targetIds||targetIds.includes(String(l.id||'')))).map(l=>{
-   const q=quotes.find(x=>String(x.lotId||'')===String(l.id||''))||null;
-   return{id:l.id,product:l.product,set:l.set||'',quantity:Number(l.quantity)||0,price:q&&Number.isFinite(Number(q.price))?Number(q.price):null,source:q?String(q.source||''):'',checkedAt:q?String(q.checkedAt||''):'',fresh:q?q.fresh!==false:false};
- });
- const summary={ok:true,requestId,revision:Number(loaded.revision),report:result&&result.report?result.report:result,cards};
- if(typeof GmailApp!=='undefined'){
-   const subject='[Toreca Vault Market Result] '+requestId,to=Session.getEffectiveUser().getEmail();
-   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
-   if(to)GmailApp.createDraft(to,subject,JSON.stringify(summary,null,2));
- }
- return summary;
-}
-
-function runTv2ChatLotteryBulk(command){
- const input=command&&typeof command==='object'?command:{};
- const dates=Array.isArray(input.resultDates)?input.resultDates.map(x=>String(x||'').trim()).filter(Boolean):[];
- const status=String(input.status||'').trim(),requestId=String(input.requestId||'').trim();
- if(!dates.length||!requestId||!['当選','落選'].includes(status)||dates.some(d=>!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d)))throw new Error('チャット抽選一括データが不正です');
- return tv2Mutate_('chat-lottery-bulk',state=>{
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.chatLotteryBulkIds=Array.isArray(state.automation.chatLotteryBulkIds)?state.automation.chatLotteryBulkIds:[];
-  if(state.automation.chatLotteryBulkIds.includes(requestId))return{duplicate:true,updated:0,changed:false};
-  const targets=(state.lotteries||[]).filter(x=>dates.includes(String(x.resultDate||'').slice(0,10)));
-  const blocked=targets.filter(x=>x.status==='購入済'||x.receiptStatus==='受取済み');
-  if(blocked.length)throw new Error('購入済み/受取済みの抽選が含まれるため一括変更を停止しました: '+blocked.length+'件');
-  let updated=0;const now=new Date().toISOString();
-  targets.forEach(item=>{
-   const old=JSON.stringify(item);
-   item.status=status;
-   if(status==='落選'){item.receiptStatus='対象外';item.receivedDate=''}
-   else if(item.receiptStatus!=='受取済み')item.receiptStatus='未受取';
-   item.updatedAt=now;
-   if(JSON.stringify(item)!==old)updated++;
-  });
-  state.automation.chatLotteryBulkIds.push(requestId);
-  state.automation.chatLotteryBulkIds=state.automation.chatLotteryBulkIds.slice(-200);
-  return{duplicate:false,updated,matched:targets.length,changed:true};
- });
-}
-
-
-function runTv2RepairReceiptSale(command){
- const input=command&&typeof command==='object'?command:{};
- const requestId=String(input.requestId||'').trim(),baseId=String(input.basePurchaseId||'').trim(),saleId=String(input.saleId||'').trim();
- const targetUnitCost=Number(input.purchaseUnitCost),expectedSaleStore=String(input.expectedSaleStore||'').trim(),expectedSaleDate=String(input.expectedSaleDate||'').trim();
- const expectedPurchaseStore=String(input.expectedPurchaseStore||'').trim();
- if(!requestId||!baseId||!saleId||!Number.isFinite(targetUnitCost)||targetUnitCost<0||!expectedSaleStore||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(expectedSaleDate))throw new Error('受取・売却整合コマンドが不正です');
- const result=tv2Mutate_('repair-receipt-sale',state=>{
-  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
-  state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
-  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
-  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
-  state.automation.repairReceiptSaleIds=Array.isArray(state.automation.repairReceiptSaleIds)?state.automation.repairReceiptSaleIds:[];
-  if(state.automation.repairReceiptSaleIds.includes(requestId))return{duplicate:true,changed:false};
-
-  const baseMatches=state.transactions.filter(t=>String(t.id||'')===baseId);
-  if(baseMatches.length!==1||baseMatches[0].type!=='purchase')throw new Error('元購入履歴を一意に確認できません');
+ if(resultDate&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(resultDate))th…7508 tokens truncated…|baseMatches[0].type!=='purchase')throw new Error('元購入履歴を一意に確認できません');
   const base=baseMatches[0],saleMatches=state.transactions.filter(t=>String(t.id||'')===saleId);
   if(saleMatches.length!==1||saleMatches[0].type!=='sale')throw new Error('対象売却を一意に確認できません');
   const sale=saleMatches[0],baseQty=Number(base.quantity||1);
