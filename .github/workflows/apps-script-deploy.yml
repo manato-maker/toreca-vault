@@ -54,3 +54,28 @@ jobs:
           cmp -s automation/Code.gs .apps-script-automation/Code.js
           cmp -s automation/V2Automation.gs .apps-script-automation/V2Automation.js
           cmp -s automation/RetailPricePolicy.gs .apps-script-automation/RetailPricePolicy.js
+      - name: Deploy the private Apps Script API executable
+        env:
+          TV2_API_DEPLOYMENT_DESCRIPTION: Toreca Vault V2 Automation API Executable
+        run: |
+          npx clasp list-deployments --json > /tmp/tv2-deployments-before.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const deployments = JSON.parse(fs.readFileSync('/tmp/tv2-deployments-before.json', 'utf8'));
+          const matches = deployments.filter(item => item.description === process.env.TV2_API_DEPLOYMENT_DESCRIPTION);
+          if (matches.length > 1) throw new Error('duplicate private API executable deployments');
+          fs.writeFileSync('/tmp/tv2-api-deployment-id', matches[0]?.deploymentId || '');
+          NODE
+          if [ -s /tmp/tv2-api-deployment-id ]; then
+            npx clasp create-deployment --deploymentId "$(cat /tmp/tv2-api-deployment-id)" --description "$TV2_API_DEPLOYMENT_DESCRIPTION" >/dev/null
+          else
+            npx clasp create-deployment --description "$TV2_API_DEPLOYMENT_DESCRIPTION" >/dev/null
+          fi
+          npx clasp list-deployments --json > /tmp/tv2-deployments-after.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const deployments = JSON.parse(fs.readFileSync('/tmp/tv2-deployments-after.json', 'utf8'));
+          const matches = deployments.filter(item => item.description === process.env.TV2_API_DEPLOYMENT_DESCRIPTION);
+          if (matches.length !== 1 || !matches[0].deploymentId) throw new Error('private API executable deployment verification failed');
+          console.log('Private Apps Script API executable deployment verified.');
+          NODE
