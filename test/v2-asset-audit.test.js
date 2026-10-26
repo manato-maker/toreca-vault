@@ -90,6 +90,36 @@ test('audit saves a private result draft and stops if that result already exists
  assert.equal(created.length,1);
 });
 
+test('market audit is read-only and reports daily run health and quote dates for active BOX/pack lots',async()=>{
+ const text=await source();
+ const helperStart=text.indexOf('function tv2MarketAuditView_(state,requestId)');
+ const helperEnd=text.indexOf('\nfunction runTv2MarketAudit',helperStart);
+ const runnerStart=helperEnd+1;
+ const runnerEnd=text.indexOf('\n// Scoped, no-argument entry point',runnerStart);
+ assert.ok(helperStart>=0&&helperEnd>helperStart&&runnerEnd>runnerStart);
+ const created=[],state={revision:91,lastMutationId:'market-mutation',automation:{health:{lastMarketRunAt:'2026-10-25T05:00:00.000Z',lastScheduledMarketDate:'2026-10-25',marketPolicyVersion:'sealed-v3',marketStatus:'review',marketReview:2}},inventoryLots:[
+  {id:'box-1',product:'Box One',productKey:'box one',category:'BOX',condition:'shrink',quantity:1},
+  {id:'pack-zero',product:'Pack Zero',category:'パック',quantity:0},
+  {id:'pack-1',product:'Pack One',productKey:'pack one',category:'パック',condition:'sealed',quantity:2}
+ ],marketQuotes:[
+  {lotId:'box-1',price:6000,checkedAt:'2026-10-24',source:'Shop Feed',fresh:true,history:[{date:'2026-10-24',value:6000}]},
+  {productKey:'pack one',condition:'sealed',price:300,checkedAt:'',source:'Shop Feed',fresh:false,history:[{date:'2026-10-20',value:300}]}
+ ]};
+ const context={normalize_:value=>normalize(value),tv2Load_:()=>({payload:state,revision:state.revision}),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:(...args)=>created.push(args)}};
+ vm.runInNewContext(text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.audit=tv2MarketAuditView_;this.run=runTv2MarketAudit;',context);
+ const view=context.audit(state,'market-audit-test');
+ assert.equal(view.readOnly,true);assert.equal(view.revision,91);assert.equal(view.automation.lastScheduledMarketDate,'2026-10-25');
+ assert.deepEqual(JSON.parse(JSON.stringify(view.items.map(x=>x.id))),['box-1','pack-1']);
+ assert.equal(view.items[0].quote.checkedAt,'2026-10-24');assert.equal(view.items[1].quote.checkedAt,'');
+ assert.deepEqual(JSON.parse(JSON.stringify(view.counts)),{activeSealedLots:2,quoted:2,missingQuote:0});
+ assert.equal(context.run({requestId:'market-audit-test'}).revision,91);assert.equal(created.length,1);assert.equal(created[0][0],'owner@example.com');
+ assert.match(created[0][1],/Market Audit/);assert.match(created[0][2],/lastScheduledMarketDate/);
+ const queueStart=text.indexOf('function tv2ProcessChatTradeDrafts_()');
+ const queueEnd=text.indexOf('\nfunction tv2HandleMarketRefreshWeb_',queueStart);
+ const queue=text.slice(queueStart,queueEnd);
+ assert.match(queue,/marketAuditDrafts/);assert.match(queue,/marketAuditDrafts\.length\?marketAuditDrafts/);
+});
+
 test('scoped audit runner processes only one queued audit and preserves other commands',async()=>{
  const text=await source();
  const start=text.indexOf('function runTv2AssetAuditOnce(){');
