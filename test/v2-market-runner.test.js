@@ -14,8 +14,9 @@ const start = source.indexOf('// Scoped GitHub Actions entry points.');
 const end = source.indexOf('function tv2EnsurePickupSchedule_()', start);
 assert.ok(start >= 0 && end > start, 'scoped market runner entry points are present');
 
-function setup(drafts = []) {
+function setup(drafts = [], fail = false) {
   const calls = [];
+  const createdDrafts = [];
   const payload = {
     revision: 2200,
     lastMutationId: 'market-refresh-test',
@@ -34,13 +35,14 @@ function setup(drafts = []) {
     Utilities: { formatDate: () => '2026-10-26' },
     tv2Load_: () => ({ revision: 2200, payload }),
     tv2Health_: state => state.automation.health,
-    runTv2MarketAuto: options => { calls.push(options); return { changed: true, report: { updated: 1, review: 0 } }; },
+    runTv2MarketAuto: options => { calls.push(options); if (fail) throw new Error('V2 revision conflict'); return { changed: true, report: { updated: 1, review: 0 } }; },
     tv2ProcessChatTradeDrafts_: () => calls.push('process-market-audit'),
-    GmailApp: { getDrafts: () => drafts },
+    GmailApp: { getDrafts: () => drafts, createDraft: (to, subject, body) => createdDrafts.push({ to, subject, body }) },
+    Session: { getEffectiveUser: () => ({ getEmail: () => 'owner@example.test' }) },
     normalize_: value => String(value || '').toLowerCase()
   });
   vm.runInContext(source.slice(start, end), context);
-  return { context, calls };
+  return { context, calls, createdDrafts };
 }
 
 {
@@ -51,6 +53,15 @@ function setup(drafts = []) {
   assert.equal(result.revision, 2200, 'summary is based on a canonical V2 reread');
   assert.equal(result.sealedLots, 2);
   assert.equal(result.sealedQuotesCurrent, 1);
+}
+
+{
+  const { context, createdDrafts } = setup([], true);
+  const result = vm.runInContext('runTv2MarketRefreshNowOnce()', context);
+  assert.equal(result.ok, false, 'a canonical write failure is surfaced to the runner');
+  assert.equal(createdDrafts.length, 1, 'failure details remain in a private unsent draft');
+  assert.match(createdDrafts[0].subject, /^\[Toreca Vault Market Refresh Error\]/);
+  assert.match(createdDrafts[0].body, /V2 revision conflict/);
 }
 
 {
