@@ -17,6 +17,7 @@ for (const [status, receiptStatus, result, expectedReview] of [
     CARD_WORDS: /ポケモン/, RESULT_WORDS: /抽選結果/, APPLICATION_WORDS: /申込完了/,
     TZ: 'Asia/Tokyo', Utilities: { formatDate: () => '2026/09/23' },
     GmailApp: { search: () => [{ getMessages: () => [message] }] },
+    PropertiesService: { getScriptProperties: () => ({getProperty:()=>null,setProperty:()=>{},deleteProperty:()=>{}}) },
     matchLottery_: () => ({ kind: 'match', item: lottery }),
     parseResult_: () => ({ status: result, resultDate: '2026-09-24' }),
     tv2Mutate_: (_kind, fn) => fn(state)
