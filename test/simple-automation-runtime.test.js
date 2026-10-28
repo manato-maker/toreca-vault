@@ -7,7 +7,13 @@ const app=fs.readFileSync(new URL('../js/app.js',import.meta.url),'utf8');
 
 test('automation uses one 15-minute server-side runner with one daily market window',()=>{
   assert.match(v2,/function runTv2Automation\(\)/);
-  assert.match(v2,/newTrigger\(handler\)\.timeBased\(\)\.everyMinutes\(15\)/);
+  assert.match(v2,/newTrigger\('runTv2Automation'\)\.timeBased\(\)\.everyMinutes\(15\)/);
+  assert.match(v2,/newTrigger\('runTv2LotteryGmailCheck'\)\.timeBased\(\)\.everyMinutes\(30\)/);
+  assert.match(v2,/atHour\(12\)\.nearMinute\(30\)\.everyDays\(1\)/);
+  assert.match(v2,/atHour\(19\)\.nearMinute\(0\)\.everyDays\(1\)/);
+  const queue=v2.slice(v2.indexOf('function runTv2Automation(){'),v2.indexOf('function runTv2LotteryGmailCheck(){'));
+  assert.match(queue,/tv2ProcessChatTradeDrafts_/);
+  assert.doesNotMatch(queue,/runTv2LotteryAuto/);
   assert.match(v2,/hour>13\|\|\(hour===13&&minute>=30\)/);
   assert.match(v2,/scheduled:true/);
   assert.match(v2,/lastScheduledMarketDate/);
