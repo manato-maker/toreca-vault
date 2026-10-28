@@ -33,7 +33,7 @@ function tv2RetailPriceInfo_(product,category,quantity){
 function tv2PackOpenNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　「」『』()（）\-‐‑‒–—―・]/g,'')}
 function tv2ProcessPackOpeningDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
    const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
@@ -64,7 +64,7 @@ function tv2ProcessPackOpeningDrafts_(){
     state.transactions.push(tx);
     return{changed:true,duplicate:false,openingId,quantity,acquisitionCost:cost};
    });
-   draft.deleteDraft();results.push({ok:true,requestId,result});
+   tv2DeleteDraft_(draft);results.push({ok:true,requestId,result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
  });
  return results;
@@ -77,7 +77,7 @@ function tv2LotteryStoreNormalize_(value){
 }
 function tv2ProcessConfirmedEdionDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
    const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
@@ -125,10 +125,10 @@ function tv2ProcessConfirmedEdionDrafts_(){
    const allSame=(state.lotteries||[]).filter(x=>productMatch(x)&&edionMatch(x)&&kashiharaMatch(x)&&ownerCompatible(x)&&dateCompatible(x));
    if(allSame.length!==1)throw new Error('エディオン当選の重複検証に失敗しました: '+allSame.length+'件');
    const cleanupIds=new Set([requestId,String(command.cleanupRequestId||'')].filter(Boolean));
-   GmailApp.getDrafts().forEach(d=>{try{const m=d.getMessage();if(String(m.getSubject()||'').trim()!==subject)return;const c=JSON.parse(String(m.getPlainBody()||'').trim());if(cleanupIds.has(String(c&&c.requestId||'')))d.deleteDraft()}catch(e){}});
+   tv2GetDrafts_().forEach(d=>{try{const m=d.getMessage();if(String(m.getSubject()||'').trim()!==subject)return;const c=JSON.parse(String(m.getPlainBody()||'').trim());if(cleanupIds.has(String(c&&c.requestId||'')))tv2DeleteDraft_(d)}catch(e){}});
    const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
-   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());
-   if(to)GmailApp.createDraft(to,resultSubject,JSON.stringify({ok:true,requestId,revision:Number(check.revision),result,lottery:{id:item.id,title:item.title,store:item.store,owner:item.owner,status:item.status,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,memo:item.memo}},null,2));
+   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,revision:Number(check.revision),result,lottery:{id:item.id,title:item.title,store:item.store,owner:item.owner,status:item.status,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,memo:item.memo}},null,2));
    results.push({ok:true,requestId,revision:Number(check.revision),result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
  });
@@ -136,7 +136,7 @@ function tv2ProcessConfirmedEdionDrafts_(){
 }
 function tv2ProcessExactLotteryPatchDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
    const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
@@ -168,10 +168,10 @@ function tv2ProcessExactLotteryPatchDrafts_(){
     item.updatedAt=new Date().toISOString();
     return{changed:JSON.stringify(item)!==before,lotteryId:String(item.id||''),status:item.status,resultDate:item.resultDate,title:item.title,store:item.store};
    });
-   draft.deleteDraft();
+   tv2DeleteDraft_(draft);
    const resultSubject='[Toreca Vault Lottery Patch] '+requestId,to=Session.getEffectiveUser().getEmail();
-   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());
-   if(to)GmailApp.createDraft(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
+   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
    results.push({ok:true,requestId,result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
  });
@@ -179,7 +179,7 @@ function tv2ProcessExactLotteryPatchDrafts_(){
 }
 function tv2ProcessExactLotteryResultDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
    const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
@@ -208,10 +208,10 @@ function tv2ProcessExactLotteryResultDrafts_(){
     item.updatedAt=now;
     return{changed:JSON.stringify(item)!==before,lotteryId:String(item.id||''),status:item.status,resultDate:item.resultDate,title:item.title,store:item.store};
    });
-   draft.deleteDraft();
+   tv2DeleteDraft_(draft);
    const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
-   GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>d.deleteDraft());
-   if(to)GmailApp.createDraft(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
+   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
    results.push({ok:true,requestId,result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
  });
@@ -258,8 +258,8 @@ function tv2RepairEdionKashiharaAlias20261015_(){
  const verified=!mutation.review&&matches.length===1&&['当選','購入済'].includes(String(matches[0].status||''))&&String(matches[0].receiveDeadline||'').slice(0,10)==='2026-10-19';
  if(verified&&typeof GmailApp!=='undefined'){
   const requestId='20261015-edion-kashihara-store-alias-repair',subject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail(),body=JSON.stringify({ok:true,requestId,revision:Number(check.revision),mutation,lottery:{id:matches[0].id,title:matches[0].title,store:matches[0].store,owner:matches[0].owner,status:matches[0].status,resultDate:matches[0].resultDate,receiveDeadline:matches[0].receiveDeadline,memo:matches[0].memo}},null,2);
-  GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
-  if(to)GmailApp.createDraft(to,subject,body);
+  tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
+  if(to)tv2CreateDraft_(to,subject,body);
  }
  return{ok:verified,revision:Number(check.revision),mutation,matches:matches.map(x=>({id:x.id,store:x.store,status:x.status,resultDate:x.resultDate,receiveDeadline:x.receiveDeadline}))};
 }
@@ -300,8 +300,8 @@ function tv2EnforceRetailPricePolicy_(){
  if(result&&typeof result==='object'){result.edionAliasRepair=edionAliasRepair;result.edionConfirmed=edionConfirmed;result.lotteryPatches=lotteryPatches;result.lotteryResults=lotteryResults;result.packOpenings=packOpenings}
  if(result&&result.changed&&!result.unchanged){
   const subject='[Toreca Vault MSRP Policy Result] '+TV2_RETAIL_PRICE_POLICY_VERSION,to=Session.getEffectiveUser().getEmail();
-  GmailApp.getDrafts().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>d.deleteDraft());
-  if(to)GmailApp.createDraft(to,subject,JSON.stringify(result,null,2));
+  tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
+  if(to)tv2CreateDraft_(to,subject,JSON.stringify(result,null,2));
  }
  return result;
 }
