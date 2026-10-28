@@ -2,7 +2,10 @@ import assert from'node:assert/strict';import fs from'node:fs';
 const v2=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
 const code=fs.readFileSync(new URL('../automation/Code.gs',import.meta.url),'utf8');
 for(const re of [
- /newTrigger\(handler\)\.timeBased\(\)\.everyMinutes\(15\)/,
+ /newTrigger\('runTv2Automation'\)\.timeBased\(\)\.everyMinutes\(15\)/,
+ /newTrigger\('runTv2LotteryGmailCheck'\)\.timeBased\(\)\.everyMinutes\(30\)/,
+ /atHour\(12\)\.nearMinute\(30\)\.everyDays\(1\)/,
+ /atHour\(19\)\.nearMinute\(0\)\.everyDays\(1\)/,
  /hour>13\|\|\(hour===13&&minute>=30\)/,
  /lastScheduledMarketDate/,
  /fetchCardrushMediaBuyback_/,
