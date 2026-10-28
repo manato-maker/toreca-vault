@@ -293,3 +293,13 @@
 - `clasp list-versions`: 200/200。`clasp list-deployments`: アクティブ6件、その利用版は5種類。説明が `Toreca Vault V2 Automation API Executable` と一致するデプロイは0件。名称以外のAPI executableの存在や種別は未確認。
 - `clasp run tv2AutomationStatus` は終了コード0だが、`ok:true`を検出できず未確認に分類。この診断はreadonlyで、trigger・在庫・version・deploymentに変更なし。APIとV2の復旧は未完了。
 - 対処: Google Apps Scriptエディタで現在の6配布の使用版を保護し、未使用の古い保存版を少数整理する必要がある（チャットの接続先にバージョン削除手段がない）。その後、既存`Apps Script Automation Deploy`を手動実行しprivate API executable配布・機能試験・V2 canonical再読込まで確認。手動整理までは「復旧完了」としない。
+
+
+### 2026-10-28 — Gmail quota対策と処理間隔分離（PR作成中）
+- 目的: 15分ごとのV2 command登録を維持しつつ、Gmail抽選確認を30分間隔へ分離し、当落結果をJST 12:30/19:00付近に重点確認する。相場確認は従来どおり13:30 JST以降に一日一回。
+- 変更案: `runTv2Automation` は小売価格ポリシーと非送信command下書きキューを処理し、Gmail検索を呼ばない。専用 `runTv2LotteryGmailCheck` を30分トリガーにし、結果専用の12:30/19:00 JSTトリガーを追加。新schedule versionで既存の同管理handlerだけを置換し、重複トリガーを作らない。
+- Gmail安全性: parser version切替時も既処理message IDを保持。結果専用確認は結果メールだけを処理し、通常poll timestampとは別にhealth timestampを記録。応募/結果両方の語を含む結果メールは応募として先に処理しない。Apps Script 1実行内でdraft一覧を共有し、成功確認後だけcommand draftを削除。command draftは送信しない。
+- 相場: Apps Scriptと既存GitHub Actionsはいずれも13:30 JST以降の一日一回を維持。シングルとBOX/パックは前回価格・出典・確認日を保ち、照合できない価格は推測で更新しない。
+- テスト案: 15/30分、12:30/19:00 JST trigger、queue/Gmail handler分離、処理済みID維持、draft読み取りの共有をsource testsで確認する。PR CI結果は後続に記録する。
+- 本番状態: branch `fix/tv2-gmail-queue-separation-20261028` に未配布の変更を準備中。Apps Scriptは200/200版でAPI executable配布不可。既存配布版を保護し、未使用版削除の本人確認が完了するまで削除・配布・本番トリガー変更を行わない。Apps Script UIの現在セッションはGoogle認証が必要で、認証完了・成功ログ・V2再読込は未確認。
+- データ状態: この変更準備で在庫・購入原価・抽選履歴・V2 revisionに書き込みなし。実データ検証、Gmail quota回復、GAS実行状態、相場更新の成功/失敗内訳は未確認。
