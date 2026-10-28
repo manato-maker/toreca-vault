@@ -243,7 +243,7 @@ test('failed private commands remain queued and produce one private diagnostic d
  const commandDraft={getMessage:()=>commandMessage,deleteDraft:()=>{throw new Error('failed command must remain queued')}};
  drafts.push(commandDraft);
  const context={
-  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});const draft={getMessage:()=>({getSubject:()=>subject})};drafts.push(draft);return draft}},
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   runTv2AssetAudit:()=>{throw new Error('expected revision check failed')}
  };
