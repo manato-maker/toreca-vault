@@ -39,6 +39,9 @@ function setup(drafts = [], fail = false) {
     runTv2MarketAuto: options => { calls.push(options); if (fail) throw new Error('V2 revision conflict'); return { changed: true, report: { updated: 1, review: 0 } }; },
     tv2ProcessChatTradeDrafts_: () => calls.push('process-market-audit'),
     GmailApp: { getDrafts: () => drafts, createDraft: (to, subject, body) => createdDrafts.push({ to, subject, body }) },
+    tv2GetDrafts_: () => drafts,
+    tv2CreateDraft_: (to, subject, body) => createdDrafts.push({ to, subject, body }),
+    tv2DeleteDraft_: draft => draft.deleteDraft(),
     Session: { getEffectiveUser: () => ({ getEmail: () => 'owner@example.test' }) },
     normalize_: value => String(value || '').toLowerCase()
   });
