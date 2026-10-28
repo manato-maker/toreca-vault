@@ -287,3 +287,9 @@
 - 変更: `.github/workflows/tv2-script-diagnostic.yml` に**読取専用**の診断ジョブを追加。既存の v2-apps-script 環境の認証を使い、Apps Scriptの保存版数、配布数、専用API配布の存在を数値のみ表示し、`tv2AutomationStatus()` を非変更の状態確認として試行する。Script ID、deployment ID、credentialsはログに出さない。
 - 検証予定: pushで診断jobを実行し、結果を読み、API有無・認証・関数参照を切り分ける。GitHub workflow の成功は Apps ScriptのV2正本更新成功を意味しない。
 - 安全: バージョン、デプロイ、trigger、V2データの削除・更新はこの診断では行わない。Google UI上でアクティブ配布に未使用の版だけを整理するには、使用中の版を確認してから別途実行する。Googleの200版制限を回避できたと誤報しない。
+
+#### 2026-10-28 — 診断PR #94を本番実行した実測結果
+- PR #94をmainへsquash merge（`aa989327d43c38173db0c15526feb05ee560fe8f`）、[read-only実行 #40676318499](https://github.com/manato-maker/toreca-vault/actions/runs/40676318499) を確認。
+- `clasp list-versions`: 200/200。`clasp list-deployments`: アクティブ6件、その利用版は5種類。説明が `Toreca Vault V2 Automation API Executable` と一致するデプロイは0件。名称以外のAPI executableの存在や種別は未確認。
+- `clasp run tv2AutomationStatus` は終了コード0だが、`ok:true`を検出できず未確認に分類。この診断はreadonlyで、trigger・在庫・version・deploymentに変更なし。APIとV2の復旧は未完了。
+- 対処: Google Apps Scriptエディタで現在の6配布の使用版を保護し、未使用の古い保存版を少数整理する必要がある（チャットの接続先にバージョン削除手段がない）。その後、既存`Apps Script Automation Deploy`を手動実行しprivate API executable配布・機能試験・V2 canonical再読込まで確認。手動整理までは「復旧完了」としない。
