@@ -1,0 +1,81 @@
+name: V2 Apps Script read-only diagnostics
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tv2-script-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save @google/clasp
+      - name: Configure existing private Apps Script credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          chmod 600 ~/.clasprc.json
+          printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Read-only version and deployment inventory
+        shell: bash
+        run: |
+          npx clasp list-versions --json > /tmp/tv2-versions.json
+          npx clasp list-deployments --json > /tmp/tv2-deployments.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const versions = JSON.parse(fs.readFileSync('/tmp/tv2-versions.json', 'utf8'));
+          const deployments = JSON.parse(fs.readFileSync('/tmp/tv2-deployments.json', 'utf8'));
+          if (!Array.isArray(versions) || !Array.isArray(deployments)) {
+            throw new Error('Unexpected clasp listing shape; diagnosis stopped');
+          }
+          const activeVersions = [...new Set(deployments.map(d => Number(d.versionNumber)).filter(n => Number.isInteger(n) && n > 0))];
+          const expected = deployments.filter(d => d.description === 'Toreca Vault V2 Automation API Executable');
+          console.log('Apps Script saved version count: ' + versions.length + '/200');
+          console.log('Active deployment count: ' + deployments.length);
+          console.log('Distinct active version count: ' + activeVersions.length);
+          console.log('Named private API deployment count: ' + expected.length);
+          console.log('Private API deployment has version: ' + (expected.length === 1 && Number(expected[0].versionNumber) > 0));
+          console.log('No script identifiers, deployment identifiers, or secret values are emitted.');
+          if (versions.length >= 200) {
+            console.log('Version ceiling reached: manual removal of unused script versions is required before a fresh release.');
+          }
+          NODE
+      - name: Probe read-only trigger status through API executable
+        shell: bash
+        run: |
+          set +e
+          output="$(npx clasp run tv2AutomationStatus 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            category=other
+            if printf '%s' "$output" | grep -Eiq 'authorization|permission|insufficient'; then
+              category=authorization
+            elif printf '%s' "$output" | grep -Eiq 'not found|unable to run script function'; then
+              category=function_not_found
+            elif printf '%s' "$output" | grep -Eiq 'not an API executable|not published|not deployed|not enabled'; then
+              category=api_executable_setup
+            fi
+            echo "Read-only API call failed (category=$category); no V2 records were changed."
+            exit 1
+          fi
+          if printf '%s' "$output" | grep -Eiq '"ok"[[:space:]]*:[[:space:]]*true'; then
+            echo 'Read-only API call returned ok:true (triggers are not printed).'
+          else
+            echo 'Read-only API call returned, but ok:true was not verified; no success claim.'
+            exit 1
+          fi
