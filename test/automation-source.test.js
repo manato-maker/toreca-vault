@@ -44,6 +44,9 @@ test('Gmail polling is separated from the 15-minute command queue and remains de
   assert.match(gmail,/resultOnly/);
   assert.match(gmail,/new Set\(health\.gmailMessageIds\|\|\[\]\)/);
   assert.match(gmail,/health\.lastGmailResultCheckAt/);
+  assert.match(gmail,/GmailApp\.search\(query,offset,101\)/);
+  assert.match(gmail,/TV2_GMAIL_SCAN_CURSOR_V1/);
+  assert.match(gmail,/health\.lastGmailRunAt=until\.toISOString\(\)/);
 });
 
 test('Gmail draft queue uses one shared draft snapshot per Apps Script execution',async()=>{
