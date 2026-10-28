@@ -76,7 +76,7 @@ test('audit saves a private result draft and stops if that result already exists
   normalize_:(s)=>normalize(s),
   tv2Load_:()=>({payload:{},revision:77}),
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
-  GmailApp:{getDrafts:()=>drafts,createDraft:(...args)=>created.push(args)}
+  GmailApp:{getDrafts:()=>drafts,createDraft:(...args)=>{created.push(args);return {getMessage:()=>({getSubject:()=>args[1]})}}}
  };
  vm.runInNewContext(cacheHelpers(text)+text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.runAudit=runTv2AssetAudit;',context);
  const command={requestId:'asset-audit-test',filters:{storeIncludes:['Store Alpha'],productIncludes:['Product Alpha']}};
@@ -158,7 +158,7 @@ test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lot
   tv2Load_:()=>({revision:state.revision,payload:state}),
   normalize_:value=>normalize(value),
   Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
-  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});const draft={getMessage:()=>({getSubject:()=>subject})};drafts.push(draft);return draft}}
  };
  vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
  const result=context.run();
