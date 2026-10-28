@@ -1,7 +1,8 @@
 import assert from'node:assert/strict';import fs from'node:fs';
 const code=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
 for(const re of [
- /health\.lastGmailRunAt=now\.toISOString\(\)/,
+ /health\.lastGmailRunAt=until\.toISOString\(\)/,
+ /health\.lastGmailResultCheckAt=until\.toISOString\(\)/,
  /health\.gmailReview=report\.review/,
  /health\.gmailStatus=report\.review\?'review':'ok'/,
  /health\.lastMarketRunAt=now\.toISOString\(\)/,
