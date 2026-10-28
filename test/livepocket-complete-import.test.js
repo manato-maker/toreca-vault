@@ -38,9 +38,11 @@ test('Hobby Station LivePocket uses selected shop ticket as store, not as produc
  assert.equal(r.kind,'created');assert.equal(rows[0].resultDate,'2026-10-09');assert.equal(rows[0].store,"日本橋2's店");assert.match(rows[0].title,/30th CELEBRATION/);
 });
 
-test('scheduled Gmail query always includes LivePocket sender and parser upgrade replays 30 days',()=>{
+test('scheduled Gmail query includes LivePocket sender and bounded parser upgrade preserves processed IDs',()=>{
  const src=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
  assert.match(src,/gmail-efficient-v8-livepocket-complete/);
- assert.match(src,/parserChanged\?new Date\(now\.getTime\(\)-30\*86400000\)/);
- assert.match(src,/after\+' \{from:noreply@livepocket\.jp 抽選 当選 落選 応募 申込\}'/);
+ assert.match(src,/parserChanged\?new Date\(now\.getTime\(\)-7\*86400000\)/);
+ assert.match(src,/new Set\(health\.gmailMessageIds\|\|\[\]\)/);
+ assert.match(src,/TV2_GMAIL_SCAN_CURSOR_V1/);
+ assert.match(src,/after\+before\+' \{from:noreply@livepocket\.jp 抽選 当選 落選 応募 申込\}'/);
 });
