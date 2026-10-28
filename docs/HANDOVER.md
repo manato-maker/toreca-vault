@@ -295,11 +295,13 @@
 - 対処: Google Apps Scriptエディタで現在の6配布の使用版を保護し、未使用の古い保存版を少数整理する必要がある（チャットの接続先にバージョン削除手段がない）。その後、既存`Apps Script Automation Deploy`を手動実行しprivate API executable配布・機能試験・V2 canonical再読込まで確認。手動整理までは「復旧完了」としない。
 
 
-### 2026-10-28 — Gmail quota対策と処理間隔分離（PR作成中）
-- 目的: 15分ごとのV2 command登録を維持しつつ、Gmail抽選確認を30分間隔へ分離し、当落結果をJST 12:30/19:00付近に重点確認する。相場確認は従来どおり13:30 JST以降に一日一回。
-- 変更案: `runTv2Automation` は小売価格ポリシーと非送信command下書きキューを処理し、Gmail検索を呼ばない。専用 `runTv2LotteryGmailCheck` を30分トリガーにし、結果専用の12:30/19:00 JSTトリガーを追加。新schedule versionで既存の同管理handlerだけを置換し、重複トリガーを作らない。
-- Gmail安全性: parser version切替時も既処理message IDを保持。結果専用確認は結果メールだけを処理し、通常poll timestampとは別にhealth timestampを記録。応募/結果両方の語を含む結果メールは応募として先に処理しない。Apps Script 1実行内でdraft一覧を共有し、成功確認後だけcommand draftを削除。command draftは送信しない。
-- 相場: Apps Scriptと既存GitHub Actionsはいずれも13:30 JST以降の一日一回を維持。シングルとBOX/パックは前回価格・出典・確認日を保ち、照合できない価格は推測で更新しない。
-- テスト案: 15/30分、12:30/19:00 JST trigger、queue/Gmail handler分離、処理済みID維持、draft読み取りの共有をsource testsで確認する。PR CI結果は後続に記録する。
-- 本番状態: branch `fix/tv2-gmail-queue-separation-20261028` に未配布の変更を準備中。Apps Scriptは200/200版でAPI executable配布不可。既存配布版を保護し、未使用版削除の本人確認が完了するまで削除・配布・本番トリガー変更を行わない。Apps Script UIの現在セッションはGoogle認証が必要で、認証完了・成功ログ・V2再読込は未確認。
-- データ状態: この変更準備で在庫・購入原価・抽選履歴・V2 revisionに書き込みなし。実データ検証、Gmail quota回復、GAS実行状態、相場更新の成功/失敗内訳は未確認。
+### 2026-10-28 — Gmail quota対策と処理間隔分離（PR #95・CI修正中）
+- PR #95 / branch fix/tv2-gmail-queue-separation-20261028 で、15分のV2 command登録、30分のGmail抽選確認、JST 12:30/19:00の結果確認、13:30以降の日次相場更新へ分離する変更を準備中。
+- 通常の応募/結果Gmail走査は範囲付きカーソルで一度101件まで取得し、次回に残りを継続。parser upgrade時も処理済みIDを保持し、Gmail API quotaを超える全件再走査を避ける。結果確認は独立カーソルを使う。V2反映後にのみ処理位置を進める。
+- Gmail下書き一覧は1回の実行で共有し、同じ実行内の複数ポリシーが繰返し getDrafts() しないようにする。コマンドdraftは送信せず、成功時のみ削除する。
+- 最新CIでhealth/timer/parser関連テストを通過したが、draft mockがApps Scriptの返却値を模擬できず2件失敗。テストmockを修正してPR headに追加。今回の修正後CIは未完了のため、PR merge・本番配布へ進んでいない。
+- Google Docs handoffへ今回の状態、保護対象版、削除候補、認証待ちを記録。Google認証は manato.pt@gmail.com 選択後、安全なログイン選択フォームがタイムアウトし、成功状態は不明。ログイン回避は行っていない。
+- Apps Script状態の最後の実測は診断PR #94/Actions #40676318499: 200/200保存版、active deployment6件、利用版5種類、専用API deployment0件。v199/v95/v4/v3/v2を保護。v1/v5/v6を未使用候補とするが、削除確認待ちで未削除。trigger/Script Properties/deployments/V2 dataはこの作業では変更なし。
+- V2本番コマンド、相場更新、Gmail処理はこの変更作業では実行していない。V2 revision/購入原価/在庫/抽選履歴/資産集計、Apps Script成功ログ、API実行権限、Gmail quota回復、Google側ソース一致は未確認。
+- 次: PRの全CIを成功させてからmainへ反映。Google認証完了後、Apps Scriptで6 deployments/版参照とtrigger/プロパティを再読込し、v1/v5/v6候補の安全性を再確認。削除直前には明示確認を取る。確認後のみ候補版を削除しActionsを再実行、専用API/関数権限/15分・30分・結果時刻・相場runを成功ログとread-only V2再読込で検証する。
+- 通常Chat運用は、購入・受取・開封・売却・抽選応募/当落を文章またはスクリーンショットで報告し、安全な既存連携が作る [Toreca Vault Command] draft queueを15分triggerが処理する想定。実運用はまだ未確認。購入原価二重計上、在庫/履歴削除、開封pack残存を検証し、0円で取得した開封シングルと購入履歴を保持する。
