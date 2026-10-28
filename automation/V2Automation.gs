@@ -78,26 +78,29 @@ function runTv2LotteryResultCheck1900(){
 
 function runTv2LotteryAuto(options){
   if(!(options&&options.skipScheduleEnsure))tv2EnsureSimpleAutomationSchedule_(false);
-  const resultOnly=Boolean(options&&options.resultOnly);
-  return tv2Mutate_('gmail-auto',state=>{
+  const resultOnly=Boolean(options&&options.resultOnly),cursorProps=PropertiesService.getScriptProperties();
+  let cursorWrite=null;
+  const outcome=tv2Mutate_('gmail-auto',state=>{
     const now=new Date(),health=tv2Health_(state),last=health.lastGmailRunAt?new Date(health.lastGmailRunAt):null;
     const parserVersion='gmail-efficient-v8-livepocket-complete',parserChanged=String(health.gmailParserVersion||'')!==parserVersion;
-    // Keep processed IDs across parser upgrades; bounded overlap catches late delivery without duplicate writes.
-    const since=!resultOnly&&parserChanged?new Date(now.getTime()-30*86400000):(last&&!isNaN(last.getTime())?new Date(last.getTime()-6*3600000):new Date(now.getTime()-24*3600000));
+    const cursorKey=resultOnly?'TV2_GMAIL_RESULT_CURSOR_V1':'TV2_GMAIL_SCAN_CURSOR_V1';
+    let priorCursor=null;try{priorCursor=JSON.parse(cursorProps.getProperty(cursorKey)||'null')}catch(e){}
+    const cursorValid=priorCursor&&Number.isFinite(Date.parse(priorCursor.since))&&Number.isFinite(Date.parse(priorCursor.until))&&Number.isFinite(Number(priorCursor.offset))&&Number(priorCursor.offset)>=0;
+    const lastCheck=resultOnly&&health.lastGmailResultCheckAt?new Date(health.lastGmailResultCheckAt):last;
+    // A parser upgrade performs a bounded 7-day backfill. A fixed upper bound plus offset lets us drain >100 threads without skipping older mail.
+    const since=cursorValid?new Date(priorCursor.since):(!resultOnly&&parserChanged?new Date(now.getTime()-7*86400000):(lastCheck&&!isNaN(lastCheck.getTime())?new Date(lastCheck.getTime()-6*3600000):new Date(now.getTime()-24*3600000)));
+    const until=cursorValid?new Date(priorCursor.until):now;
+    const offset=cursorValid?Number(priorCursor.offset):0;
     const processed=new Set(health.gmailMessageIds||[]),newIds=[],reviews=[];let changed=false;
-    const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString()};
-    const after='after:'+Math.floor(since.getTime()/1000);
-    const query=resultOnly
-      ? after+' {当選 落選 抽選結果}'
+    const report={updated:0,created:0,duplicate:0,outside:0,review:0,scanned:0,at:now.toISOString(),pageOffset:offset};
+    const after='after:'+Math.floor(since.getTime()/1000),before=' before:'+Math.floor(until.getTime()/1000);
+    const query=(resultOnly
+      ? after+before+' {当選 落選 抽選結果}'
       : parserChanged
-        ? after+' {from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp}'
-        : after+' {from:noreply@livepocket.jp 抽選 当選 落選 応募 申込}',threads=[];
-    for(let offset=0;offset<500;offset+=100){
-      const page=GmailApp.search(query,offset,100);
-      threads.push(...page);
-      if(page.length<100)break;
-      if(offset===400)throw new Error('Gmail検索が500スレッドを超えました。検索条件を確認してください');
-    }
+        ? after+before+' {from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp}'
+        : after+before+' {from:noreply@livepocket.jp 抽選 当選 落選 応募 申込}');
+    const threads=GmailApp.search(query,offset,101),hasMore=threads.length===101;
+    report.hasMore=hasMore;report.nextPageOffset=hasMore?offset+threads.length:null;
     threads.forEach(th=>th.getMessages().forEach(message=>{
       if(message.getDate()<=since)return;const id=message.getId();if(processed.has(id))return;
       const text=[message.getSubject(),message.getPlainBody()].join('\n'),normalizedText=String(text).normalize('NFKC'),isApplication=tv2IsApplicationMessage_(message,text),isResult=tv2IsResultMessage_(message,text);
@@ -145,11 +148,19 @@ function runTv2LotteryAuto(options){
       }newIds.push(id);
     }));
     health.gmailMessageIds=[...processed,...newIds].slice(-3000);
-    if(!resultOnly){health.gmailParserVersion=parserVersion;health.lastGmailRunAt=now.toISOString()}
-    else health.lastGmailResultCheckAt=now.toISOString();
+    cursorWrite={key:cursorKey,since:since.toISOString(),until:until.toISOString(),offset:hasMore?offset+threads.length:0,hasMore};
+    if(!hasMore){
+      if(!resultOnly){health.gmailParserVersion=parserVersion;health.lastGmailRunAt=until.toISOString()}
+      else health.lastGmailResultCheckAt=until.toISOString();
+    }
     health.gmailReview=report.review;health.gmailStatus=report.review?'review':'ok';health.gmailNeedsReview=[...(health.gmailNeedsReview||[]),...reviews].slice(-200);
     return {changed:true,report};
   });
+  if(cursorWrite&&!(outcome&&outcome.skipped)){
+    if(cursorWrite.hasMore)cursorProps.setProperty(cursorWrite.key,JSON.stringify(cursorWrite));
+    else cursorProps.deleteProperty(cursorWrite.key);
+  }
+  return outcome;
 }
 
 
