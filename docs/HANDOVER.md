@@ -280,3 +280,10 @@
 - テスト: active lotのみの抽出、lot/商品一致quote、日次health、履歴、private result draftを検証する。
 - 本番状態: 未deploy。PR・CI・Pages/Apps Script配布後に監査commandをキュー処理し、結果draftとV2の実測revisionを確認する。
 - 制限: auditはread-onlyで、取得日・価格・freshnessを補完・推定しない。
+
+### 2026-10-28 — Apps Script 200バージョン障害の安全な診断（通常Chat）
+- 原因確認: 10/26 GitHub Actionsの deploy ジョブは source push/remote一致まで成功、API executable の配布で Apps Script保存版の200個上限（Cannot create more versions）により失敗。GitHubコミット・在庫データ数の上限ではない。
+- 10/27・10/28の market refresh GitHub Actions も失敗。10/27の報告分類は function_not_found。V2正本への直接反映は未検証であり成功扱いしない。
+- 変更: `.github/workflows/tv2-script-diagnostic.yml` に**読取専用**の診断ジョブを追加。既存の v2-apps-script 環境の認証を使い、Apps Scriptの保存版数、配布数、専用API配布の存在を数値のみ表示し、`tv2AutomationStatus()` を非変更の状態確認として試行する。Script ID、deployment ID、credentialsはログに出さない。
+- 検証予定: pushで診断jobを実行し、結果を読み、API有無・認証・関数参照を切り分ける。GitHub workflow の成功は Apps ScriptのV2正本更新成功を意味しない。
+- 安全: バージョン、デプロイ、trigger、V2データの削除・更新はこの診断では行わない。Google UI上でアクティブ配布に未使用の版だけを整理するには、使用中の版を確認してから別途実行する。Googleの200版制限を回避できたと誤報しない。
