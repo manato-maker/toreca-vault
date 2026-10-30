@@ -68,7 +68,7 @@ function tv2EnsureSimpleAutomationSchedule_(force){
   props.setProperty('TV2_AUTOMATION_SCHEDULE',version);
 }
 
-const TV2_COMMAND_QUEUE_SHEET_ID_='1SlGDJ93z3tmgFsfK1SrzSKT225hkllNm-eWvO8xYLzA';
+const TV2_COMMAND_QUEUE_SHEET_ID_='1SlGDJ93z3tmgFsfK1SrzSK2T25hkllNm-eWvO8xYLzA';
 const TV2_COMMAND_QUEUE_TAB_='Queue';
 const TV2_COMMAND_QUEUE_BATCH_SIZE_=5;
 const TV2_COMMAND_QUEUE_STALE_MS_=30*60*1000;
