@@ -388,3 +388,6 @@ GitHub mainの `automation/V2Automation.gs` を確認。GitHub Actionsの `scrip
 Apps Scriptの実行履歴を再確認：22:40:56 JSTの `runTv2LotteryGmailCheck` は1.256秒で「完了」だが、Cloudログは空。バックオフによる早期skipか検索成功かを区別できず、Gmail新着・当落処理成功とは扱わない。22:46:12 JSTの `runTv2Automation` は63.674秒後に「不明」（成功/失敗の判定不可）、Cloudログなし。従って15分コマンド登録、V2 revision更新、相場更新の成功は未確認。PR #99はGmail quota発生時に6時間backoffし、backoff中はGmail依存の価格方針/コマンド下書き/Gmail pollをskipして、保留下書きは残し、独立market runnerを継続する実装。
 
 Google Cloud projectの切替は未実施。先に対象projectの権限・必要APIを確認し、既存ユーザー再認証等の影響を評価する。既存V2データを変更する手動/テストコマンドは投入していない。
+
+
+追記：通常のV2同期経路を読み取りだけで確認するためDriveコネクタから正本ファイルを取得したが404となり、canonical JSON再読込はできなかった（別アカウント/共有権限/ID照合のいずれかは未特定）。ファイルへの書込み・変更はなし。
