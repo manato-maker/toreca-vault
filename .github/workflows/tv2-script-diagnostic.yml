@@ -54,49 +54,62 @@ jobs:
             console.log('Version ceiling reached: manual removal of unused script versions is required before a fresh release.');
           }
           NODE
-      - name: Probe read-only trigger status through API executable
-        shell: bash
+      - name: Probe read-only trigger status and API completion
+        env:
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
         run: |
-          set +e
-          output="$(npx clasp run tv2AutomationStatus --nondev --json 2>&1)"
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            category=other
-            if printf '%s' "$output" | grep -Eiq 'authorization|permission|insufficient'; then
-              category=authorization
-            elif printf '%s' "$output" | grep -Eiq 'not found|unable to run script function'; then
-              category=function_not_found
-            elif printf '%s' "$output" | grep -Eiq 'not an API executable|not published|not deployed|not enabled'; then
-              category=api_executable_setup
-            fi
-            echo "Read-only API call failed (category=$category); no V2 records were changed."
-            exit 1
-          fi
-          if printf '%s' "$output" | grep -Eiq '"ok"[[:space:]]*:[[:space:]]*true'; then
-            echo 'Read-only API call returned ok:true (triggers are not printed).'
-          else
-            API_OUTPUT="$output" node <<'NODE'
-          const raw = String(process.env.API_OUTPUT || '').replace(/\u001b\[[0-9;]*m/g, '');
-          let parsed = null;
-          try {
-            const start = raw.indexOf('{');
-            if (start >= 0) parsed = JSON.parse(raw.slice(start));
-          } catch (_) {}
-          const apiMessage = String(parsed?.error?.message || '');
-          const executionMessage = String(parsed?.error?.details?.[0]?.errorMessage || '');
+          node <<'NODE'
+          const fs = require('node:fs');
+          const {GoogleAuth} = require('google-auth-library');
+          const {google} = require('googleapis');
+          const store = JSON.parse(fs.readFileSync(require('node:path').join(require('node:os').homedir(), '.clasprc.json'), 'utf8'));
+          const saved = store.tokens?.default || (store.token ? {
+            type: 'authorized_user',
+            ...store.token,
+            client_id: store.oauth2ClientSettings?.clientId,
+            client_secret: store.oauth2ClientSettings?.clientSecret,
+          } : null);
+          if (!saved?.refresh_token && !saved?.access_token) {
+            console.log('Read-only API probe stopped: saved OAuth credential format unavailable.');
+            process.exit(1);
+          }
+          const auth = new GoogleAuth().fromJSON(saved);
+          const api = google.script({version: 'v1', auth});
           const classify = value => /permission|authoriz|not_authorized/i.test(value) ? 'authorization'
             : /not found|not_found/i.test(value) ? 'not_found'
             : value ? 'other_error' : 'none';
-          console.log(JSON.stringify({
-            apiErrorCode: parsed?.error?.code ?? null,
-            apiErrorClass: classify(apiMessage),
-            executionErrorClass: classify(executionMessage),
-            hasResponse: Boolean(parsed?.response),
-            resultType: parsed?.response?.result === null ? 'null' : typeof parsed?.response?.result,
-            resultOk: parsed?.response?.result?.ok === true
-          }));
+          (async () => {
+            try {
+              const {data} = await api.scripts.run({
+                scriptId: process.env.TV2_SCRIPT_ID,
+                requestBody: {function: 'tv2AutomationStatus', parameters: [], devMode: false},
+              });
+              const result = data?.response?.result;
+              const apiMessage = String(data?.error?.message || '');
+              const executionMessage = String(data?.error?.details?.[0]?.errorMessage || '');
+              console.log(JSON.stringify({
+                done: data?.done === true,
+                apiErrorCode: data?.error?.code ?? null,
+                apiErrorClass: classify(apiMessage),
+                executionErrorClass: classify(executionMessage),
+                hasResponse: Boolean(data?.response),
+                resultType: result === null ? 'null' : typeof result,
+                resultOk: result?.ok === true,
+              }));
+              if (data?.done !== true || data?.error || result?.ok !== true) process.exitCode = 1;
+            } catch (error) {
+              const status = Number(error?.code || error?.response?.status || 0) || null;
+              const message = String(error?.message || '');
+              console.log(JSON.stringify({
+                done: false,
+                apiErrorCode: status,
+                apiErrorClass: classify(message),
+                executionErrorClass: 'none',
+                hasResponse: false,
+                resultType: 'undefined',
+                resultOk: false,
+              }));
+              process.exitCode = 1;
+            }
+          })();
           NODE
-            echo 'Read-only API call returned, but ok:true was not verified; no success claim.'
-            exit 1
-          fi
