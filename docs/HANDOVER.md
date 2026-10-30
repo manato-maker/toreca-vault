@@ -338,3 +338,10 @@
 - Apps Script Web UIでは現セッションがログアウト状態で、Apps Script実行履歴/trigger状態/Google側のdeployment versionを確認できなかった。次はGoogleアカウントでブラウザへ再ログイン後、Apps Scriptの実行履歴を確認し、当該APIのexecution状態・失敗理由を特定する。Apps Scriptソースの追加変更・新規deploymentは未実施（version上限まで残り1件）。既存trigger/Script Properties/V2データは意図的に変更していない。
 - market更新workflowが実行されたため、canonical quote更新の有無はV2 JSON再読込が必要。revision/購入原価/数量/資産合計はまだ未検証。認証またはscope承認が必要と判明するまでは安全な診断を続ける。
 - 通常Chatの購入・受取・開封・売却・抽選報告の自動登録も未確認。15分command queue、30分Gmail確認、JST 12:30/19:00重点確認、日次13:30以降相場更新を成功ログとV2正本再読込で確認すること。
+### 2026-10-30 — Apps Script API 403の特定（Cloud project照合待ち）
+- PR #97で読取専用 tv2AutomationStatus 呼出しをGoogle Apps Script APIへ直接行い、Apps Script APIの done と応答有無を標準化ログへ出す処理を追加。CI #41058168642 success、PR squash merge SHA 5b680137d29e5fe5a40659192028c829109f936e。
+- Apps Script診断run 41058211573では scripts.run がHTTP 403 authorization。API error classはauthorization、response無し。claspの空応答が隠していた実行状態とは別に、Google側がAPI呼出しを拒否したことを確認。
+- Google公式 scripts.run の説明では403 PERMISSION_DENIEDは、呼び出しOAuthクライアントのCloud projectとApps Script projectのCloud project不一致を指す。推定原因は共通のstandard Cloud project設定不一致。正確なproject ID・必要scopeは未確認。
+- Actionsのlist-versions/list-deploymentsは成功する一方、scripts.runだけが403。専用API executable 1件・deployment version有り。版数199/200。アプリコードの関数不存在と断定しない。
+- 次: Apps Script Project Settingsで現在関連付けられたstandard Cloud projectを読み取り確認し、GitHub OAuth clientが所属するCloud projectと照合する。変更は既存GCP project関連付け・OAuth client/secret・API設定への影響を調査後に行う。現在のクラウドブラウザはGoogleログアウト状態で、UI確認にはGoogleアカウントの再ログインが必要。アカウント認証・project選択はユーザー対応待ち。
+- 403が出たため、Actions経由のmarket更新・asset runnerはAPI呼出しが拒否される。V2 quote/revision/原価/在庫は正本再読込で確認する。既存trigger/Script Properties/V2データは意図的に変更していない。
