@@ -353,3 +353,16 @@
 - 2026-10-30 22:08 JSTにUIからread-only `tv2AutomationStatus()` を手動実行し、Apps Script実行ログ「実行完了」を確認。V2読み書きなし。直近の15分runnerは22:01 JST、30分Gmail pollは21:40 JSTに `Service invoked too many times for one day: gmail` で失敗。各トリガーは1件で重複なし：15分command queue、30分Gmail、12:30/19:00 JST結果check。両稼働runnerの直近表示エラー率100%。
 - PR #99: Gmail draft message/subject/bodyの実行内キャッシュ、Gmail日次quota時の6時間CacheService backoff、backoff中にGmail処理をskipして独立market処理を継続する修正とテスト。Gmail cursorはquota失敗時に進めない。draft送信・削除・再作成、既存Script Propertiesやtrigger変更なし。PR/CI/配布/本番再検証は未完了。
 - V2正本JSON/revision/購入原価/在庫/抽選履歴/資産集計、相場quotes、Gmail重複防止の実データ確認は未完了。テスト用V2レコードやコマンドは投入していない。PR #99配布後にApps Script実行ログとcanonical readbackで検証する。
+
+
+## 2026-10-30 — PR #99 CI修正・Apps Script配布前確認
+
+PR #99「Prevent Gmail quota failures from stopping V2 automation」はCI #41061993707（npm test / npm run check）success後、mainへsquash merge（merge SHA fa0d798cd6ee18afd825af90c9e34bc1be61b086）。バックオフ日時のテスト比較をISO日時として正しく検証する修正を含む。
+
+Apps Script実行履歴の再確認では、15分処理と30分Gmail処理がGmail日次上限で失敗。PR #99の変更はまだ本番適用・実行確認できていない。既存4トリガー（15分queue、30分Gmail、12:30/19:00当落）は画面上で重複なし。
+
+Apps Script保存履歴は上限200/200。デプロイ管理で確認したアクティブdeployment使用版はAPI executable v202、Market Refresh v199/v95、secure read v4、V2 web app v3、Restored v2 deployment v2。一括削除画面は「200件中6件がアクティブdeploymentで使用」と表示する一方、候補一覧にv202も表示する不整合を確認したため、削除は未実施。アクティブ一覧にないv201（10/30 21:28）とv200（9/29 6:29）は非稼働候補。本人確認後に限り削除する。
+
+専用API deployment v202は存在するがscripts.runの403は未解消。Apps Script GCPはDefaultで、OAuth client Cloud Projectとの共通standard project切替が必要と見込まれる。Google UIはDefaultに戻せないこと、既存ユーザー認証の取消し、新projectのAPI再有効化が必要と警告。Cloud Console権限/API設定の事前確認は未完了で、project変更は未実施。
+
+本番Apps Scriptへのquota対策配布、API呼出し成功、Gmail実行成功、Chat queue実登録、market更新、Gmail重複防止、canonical V2 JSON/revision/購入原価/在庫/資産集計の再読込は未確認。既存在庫・購入原価・抽選履歴・トリガー・Script Propertiesに意図した変更なし。
