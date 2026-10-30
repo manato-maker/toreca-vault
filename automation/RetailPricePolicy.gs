@@ -33,10 +33,10 @@ function tv2RetailPriceInfo_(product,category,quantity){
 function tv2PackOpenNormalize_(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　「」『』()（）\-‐‑‒–—―・]/g,'')}
 function tv2ProcessPackOpeningDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
-   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   const raw=String(tv2DraftPlainBody_(draft)||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
    if(String(command&&command.type||'')!=='open-packs')return;
    const requestId=String(command.requestId||'').trim(),product=String(command.product||'').trim(),store=String(command.store||'').trim(),date=String(command.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim(),quantity=Number(command.quantity),memo=String(command.memo||'パック開封｜シングル登録なし').trim();
    if(!requestId||!product||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0)throw new Error('パック開封コマンドが不正です');
@@ -77,10 +77,10 @@ function tv2LotteryStoreNormalize_(value){
 }
 function tv2ProcessConfirmedEdionDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
-   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   const raw=String(tv2DraftPlainBody_(draft)||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
    if(String(command&&command.type||'')!=='lottery-edion-confirmed-win')return;
    const requestId=String(command.requestId||'').trim(),title=String(command.title||'').trim(),store=String(command.store||'').trim(),owner=String(command.owner||'本人').trim(),resultDate=String(command.resultDate||'').trim(),receiveDeadline=String(command.receiveDeadline||'').trim(),referenceId=String(command.referenceId||'').trim(),memo=String(command.memo||'').trim();
    const quantity=Number(command.quantity||2);
@@ -125,9 +125,9 @@ function tv2ProcessConfirmedEdionDrafts_(){
    const allSame=(state.lotteries||[]).filter(x=>productMatch(x)&&edionMatch(x)&&kashiharaMatch(x)&&ownerCompatible(x)&&dateCompatible(x));
    if(allSame.length!==1)throw new Error('エディオン当選の重複検証に失敗しました: '+allSame.length+'件');
    const cleanupIds=new Set([requestId,String(command.cleanupRequestId||'')].filter(Boolean));
-   tv2GetDrafts_().forEach(d=>{try{const m=d.getMessage();if(String(m.getSubject()||'').trim()!==subject)return;const c=JSON.parse(String(m.getPlainBody()||'').trim());if(cleanupIds.has(String(c&&c.requestId||'')))tv2DeleteDraft_(d)}catch(e){}});
+   tv2GetDrafts_().forEach(d=>{try{if(String(tv2DraftSubject_(d)||'').trim()!==subject)return;const c=JSON.parse(String(tv2DraftPlainBody_(d)||'').trim());if(cleanupIds.has(String(c&&c.requestId||'')))tv2DeleteDraft_(d)}catch(e){}});
    const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
-   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
    if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,revision:Number(check.revision),result,lottery:{id:item.id,title:item.title,store:item.store,owner:item.owner,status:item.status,resultDate:item.resultDate,receiveDeadline:item.receiveDeadline,memo:item.memo}},null,2));
    results.push({ok:true,requestId,revision:Number(check.revision),result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
@@ -136,10 +136,10 @@ function tv2ProcessConfirmedEdionDrafts_(){
 }
 function tv2ProcessExactLotteryPatchDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
-   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   const raw=String(tv2DraftPlainBody_(draft)||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
    if(String(command&&command.type||'')!=='lottery-patch-exact')return;
    const requestId=String(command.requestId||'').trim(),matchTitle=String(command.matchTitle||command.title||'').trim(),store=String(command.store||'').trim(),owner=String(command.owner||'').trim(),resultDate=String(command.resultDate||'').trim(),applicationDate=String(command.applicationDate||'').trim(),newTitle=String(command.newTitle||'').trim(),deadline=String(command.deadline||'').trim(),receiveDeadline=String(command.receiveDeadline||'').trim(),memo=String(command.memo||'').trim();
    if(!requestId||!matchTitle||!store||!newTitle||!/^\d{4}-\d{2}-\d{2}$/.test(resultDate))throw new Error('抽選patch exactコマンドが不正です');
@@ -170,7 +170,7 @@ function tv2ProcessExactLotteryPatchDrafts_(){
    });
    tv2DeleteDraft_(draft);
    const resultSubject='[Toreca Vault Lottery Patch] '+requestId,to=Session.getEffectiveUser().getEmail();
-   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
    if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
    results.push({ok:true,requestId,result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
@@ -179,10 +179,10 @@ function tv2ProcessExactLotteryPatchDrafts_(){
 }
 function tv2ProcessExactLotteryResultDrafts_(){
  const subject='[Toreca Vault Command]',results=[];
- const drafts=tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject);
+ const drafts=tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject);
  drafts.forEach(draft=>{
   try{
-   const raw=String(draft.getMessage().getPlainBody()||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
+   const raw=String(tv2DraftPlainBody_(draft)||'').trim();let command;try{command=JSON.parse(raw)}catch(e){return}
    if(String(command&&command.type||'')!=='lottery-result-exact')return;
    const requestId=String(command.requestId||'').trim(),title=String(command.title||command.product||'').trim(),store=String(command.store||'').trim(),owner=String(command.owner||'').trim(),status=String(command.status||'').trim(),resultDate=String(command.resultDate||'').trim(),memo=String(command.memo||'').trim();
    if(!requestId||!title||!store||!['当選','落選'].includes(status)||!/^\d{4}-\d{2}-\d{2}$/.test(resultDate))throw new Error('抽選結果exactコマンドが不正です');
@@ -210,7 +210,7 @@ function tv2ProcessExactLotteryResultDrafts_(){
    });
    tv2DeleteDraft_(draft);
    const resultSubject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail();
-   tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
+   tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===resultSubject).forEach(d=>tv2DeleteDraft_(d));
    if(to)tv2CreateDraft_(to,resultSubject,JSON.stringify({ok:true,requestId,result},null,2));
    results.push({ok:true,requestId,result});
   }catch(err){results.push({ok:false,error:String(err&&err.message||err)})}
@@ -258,7 +258,7 @@ function tv2RepairEdionKashiharaAlias20261015_(){
  const verified=!mutation.review&&matches.length===1&&['当選','購入済'].includes(String(matches[0].status||''))&&String(matches[0].receiveDeadline||'').slice(0,10)==='2026-10-19';
  if(verified&&typeof GmailApp!=='undefined'){
   const requestId='20261015-edion-kashihara-store-alias-repair',subject='[Toreca Vault Lottery Result] '+requestId,to=Session.getEffectiveUser().getEmail(),body=JSON.stringify({ok:true,requestId,revision:Number(check.revision),mutation,lottery:{id:matches[0].id,title:matches[0].title,store:matches[0].store,owner:matches[0].owner,status:matches[0].status,resultDate:matches[0].resultDate,receiveDeadline:matches[0].receiveDeadline,memo:matches[0].memo}},null,2);
-  tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
+  tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
   if(to)tv2CreateDraft_(to,subject,body);
  }
  return{ok:verified,revision:Number(check.revision),mutation,matches:matches.map(x=>({id:x.id,store:x.store,status:x.status,resultDate:x.resultDate,receiveDeadline:x.receiveDeadline}))};
@@ -300,7 +300,7 @@ function tv2EnforceRetailPricePolicy_(){
  if(result&&typeof result==='object'){result.edionAliasRepair=edionAliasRepair;result.edionConfirmed=edionConfirmed;result.lotteryPatches=lotteryPatches;result.lotteryResults=lotteryResults;result.packOpenings=packOpenings}
  if(result&&result.changed&&!result.unchanged){
   const subject='[Toreca Vault MSRP Policy Result] '+TV2_RETAIL_PRICE_POLICY_VERSION,to=Session.getEffectiveUser().getEmail();
-  tv2GetDrafts_().filter(d=>String(d.getMessage().getSubject()||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
+  tv2GetDrafts_().filter(d=>String(tv2DraftSubject_(d)||'').trim()===subject).forEach(d=>tv2DeleteDraft_(d));
   if(to)tv2CreateDraft_(to,subject,JSON.stringify(result,null,2));
  }
  return result;
