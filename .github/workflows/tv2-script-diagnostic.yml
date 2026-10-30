@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          output="$(npx clasp run tv2AutomationStatus 2>&1)"
+          output="$(npx clasp run tv2AutomationStatus --nondev --json 2>&1)"
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
