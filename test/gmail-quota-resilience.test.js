@@ -2,9 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import path from 'node:path';
 
-const source=fs.readFileSync(path.join(__dirname,'..','automation','V2Automation.gs'),'utf8');
+const source=fs.readFileSync(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
 const helperStart=source.indexOf('var TV2_GMAIL_DRAFT_CACHE_=null;');
 const helperEnd=source.indexOf('function tv2CreateDraft_()',helperStart);
 const wrappersStart=source.indexOf('function tv2RunGmailWithBackoff_(');
