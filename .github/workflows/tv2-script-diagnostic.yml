@@ -38,7 +38,7 @@ jobs:
           const store = JSON.parse(process.env.CLASPRC_JSON);
           const saved = store.tokens?.default || store.token || {};
           const clientId = saved.client_id || store.oauth2ClientSettings?.clientId || '';
-          const match = /^(\\d+)-/.exec(String(clientId));
+          const match = /^(\d+)-/.exec(String(clientId));
           if (!match) throw new Error('OAuth client project number unavailable; credential values were not emitted.');
           console.log('OAuth client Cloud project number: ' + match[1]);
           NODE
