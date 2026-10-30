@@ -76,9 +76,8 @@ jobs:
           if printf '%s' "$output" | grep -Eiq '"ok"[[:space:]]*:[[:space:]]*true'; then
             echo 'Read-only API call returned ok:true (triggers are not printed).'
           else
-            printf '%s' "$output" | node <<'NODE'
-          const fs = require('node:fs');
-          const raw = fs.readFileSync(0, 'utf8').replace(/\u001b\[[0-9;]*m/g, '');
+            API_OUTPUT="$output" node <<'NODE'
+          const raw = String(process.env.API_OUTPUT || '').replace(/\u001b\[[0-9;]*m/g, '');
           let parsed = null;
           try {
             const start = raw.indexOf('{');
