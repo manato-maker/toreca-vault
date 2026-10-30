@@ -409,3 +409,14 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - 旧Apps Script保存版は配布前199/200、稼働deployment参照版は保護対象。今回の配布後版数と参照版はUI再読込未確認。版削除は実施していない。trigger以外のScript Properties/認証情報、抽選履歴、購入履歴、在庫は意図的に変更していない。
 - 通常Chatの運用設計は、報告を既存の安全なコマンド経路でSheets queueへ登録し、15分Apps Scriptが処理する方式。今回の配布だけで通常Chatからqueueへの投入・本番登録が確認できたわけではない。ユーザーのチャット報告から実際のqueue投入が可能な接続/認可を確立し、受取の購入履歴反映も重複なしで確認するまで運用完成とはしない。コマンド下書きは送信しない。
 - 次: Google未確認アプリ警告をユーザーがどう扱うか確認後、必要ならスコープを確認して認可し、空queueの `runTv2Automation` を実行して成功ログを確認。既存default Cloud projectからstandardへの切替は不可逆警告があり、IAM/API設定を照合するまで変更しない。V2 JSONを正本から再読込しrevision・購入原価・在庫数量・資産集計をread-only照合し、market APIの実行可否を再診断する。
+
+
+### 2026-10-31 — PR #101配布後の実行確認（追加）
+
+- Apps Script実行履歴を再読込し、PR #101配布後の runTv2Automation は01:16、01:31、01:46 JSTに「完了」、runTv2LotteryGmailCheck は01:10、01:40 JSTに「完了」を確認。01:22のread-only tv2AutomationStatus() も「完了」。ただし最新実行のCloud Logging詳細はUIで取得できず、完了状態以上の処理結果は未確認。
+- Queue Sheet「Toreca Vault V2 Command Queue」はQueueタブのヘッダー行のみでデータ行なし。実データ/テストコマンドは投入していないため、queue消費・V2登録は未検証。
+- Gmail runnerが完了状態になったことは確認したが、今回処理したメール件数や重複防止の実行結果はログから確認できず。Gmail quota backoffの実測も未確認。
+- 相場更新Action #41088349811は失敗（refresh jobの失敗）。既知の function_not_found と整合するが、GitHub上のjob stepは失敗表示のみで生レスポンスは取得できない。相場更新とAPI復旧は未確認。
+- Apps ScriptのEditor UIから追加権限を確認しようとしたが、Google UIが「ページを再読み込みして、もう一度お試しください」のエラー状態となり、OAuth scope画面には到達せず。デプロイ済みmanifestにoauthScopesの明示指定はない。シート限定のscopeであることを確認・承認していない。
+- GitHub docs/HANDOVER.md / Google Docにもこの実行結果と認可/UI障害を記録。既存在庫、購入原価、抽選履歴、trigger、Script Properties、デプロイ、Google認証情報の変更・削除なし。
+- 未解決: Apps Script API scripts.run / market refreshの function_not_found。15分/30分処理の完了状態は見えたが、V2正本JSONの再読込、revision、在庫数量、購入原価、資産集計、quotesのfreshnessは未検証。Google Cloud project変更はDefaultからStandardへの不可逆変更と既存認証失効の可能性があるため未実施。
