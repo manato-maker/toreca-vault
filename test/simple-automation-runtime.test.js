@@ -12,7 +12,7 @@ test('automation uses one 15-minute server-side runner with one daily market win
   assert.match(v2,/atHour\(12\)\.nearMinute\(30\)\.everyDays\(1\)/);
   assert.match(v2,/atHour\(19\)\.nearMinute\(0\)\.everyDays\(1\)/);
   const queue=v2.slice(v2.indexOf('function runTv2Automation(){'),v2.indexOf('function runTv2LotteryGmailCheck(){'));
-  assert.match(queue,/tv2ProcessChatTradeDrafts_/);
+  assert.match(queue,/tv2ProcessSheetCommandQueue_\(\)/);
   assert.doesNotMatch(queue,/runTv2LotteryAuto/);
   assert.match(v2,/hour>13\|\|\(hour===13&&minute>=30\)/);
   assert.match(v2,/scheduled:true/);
