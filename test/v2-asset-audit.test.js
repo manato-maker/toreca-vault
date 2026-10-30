@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source=()=>readFile(new URL('../automation/V2Automation.gs',import.meta.url),'utf8');
+const cacheHelpers=text=>text.slice(text.indexOf('var TV2_GMAIL_DRAFT_CACHE_'),text.indexOf('\nfunction installTv2Automation'));
+
 const normalize=value=>String(value||'').normalize('NFKC').replace(/[\s\p{P}\p{S}]/gu,'').toLowerCase();
 
 test('2026-10-18 asset audit is read-only and returns only reconciliation-relevant records',async()=>{
@@ -12,7 +14,7 @@ test('2026-10-18 asset audit is read-only and returns only reconciliation-releva
  const end=text.indexOf('\nfunction runTv2AssetAudit',start);
  assert.ok(start>=0&&end>start);
  const context={normalize_:(s)=>normalize(s)};
- vm.runInNewContext(text.slice(start,end)+';this.audit=tv2AssetAuditView_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.audit=tv2AssetAuditView_;',context);
  const view=context.audit({revision:77,lastMutationId:'m1',
   transactions:[
    {id:'target-tx',type:'purchase',product:'Product Alpha',store:'Store Alpha',date:'2020-01-01',quantity:2,price:10,total:20},
@@ -41,7 +43,7 @@ test('asset audit can explicitly scan a product across all stores',async()=>{
  const start=text.indexOf('function tv2AssetAuditView_(state,requestId,filters)');
  const end=text.indexOf('\nfunction runTv2AssetAudit',start);
  const context={normalize_:(s)=>normalize(s)};
- vm.runInNewContext(text.slice(start,end)+';this.audit=tv2AssetAuditView_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.audit=tv2AssetAuditView_;',context);
  const view=context.audit({transactions:[{id:'shop-a',type:'purchase',product:'MEGA スタートデッキ100',store:'AMTAF'},{id:'shop-b',type:'purchase',product:'MEGA スタートデッキ100 バトルコレクション',store:'カードラボ'},{id:'unrelated',type:'purchase',product:'別商品',store:'AMTAF'}],inventoryLots:[{id:'gift',product:'スタートデッキ100',category:'BOX',quantity:1,store:'親から譲受'}]},'asset-audit-global',{allStores:true,productIncludes:['スタートデッキ100']});
  assert.deepEqual(JSON.parse(JSON.stringify(view.transactions.map(x=>x.id))),['shop-a','shop-b']);
  assert.deepEqual(JSON.parse(JSON.stringify(view.lots.map(x=>x.id))),['gift']);
@@ -74,9 +76,9 @@ test('audit saves a private result draft and stops if that result already exists
   normalize_:(s)=>normalize(s),
   tv2Load_:()=>({payload:{},revision:77}),
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
-  GmailApp:{getDrafts:()=>drafts,createDraft:(...args)=>created.push(args)}
+  GmailApp:{getDrafts:()=>drafts,createDraft:(...args)=>{created.push(args);return {getMessage:()=>({getSubject:()=>args[1]})}}}
  };
- vm.runInNewContext(text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.runAudit=runTv2AssetAudit;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.runAudit=runTv2AssetAudit;',context);
  const command={requestId:'asset-audit-test',filters:{storeIncludes:['Store Alpha'],productIncludes:['Product Alpha']}};
  const result=context.runAudit(command);
  assert.equal(result.ok,true);
@@ -106,7 +108,7 @@ test('market audit is read-only and reports daily run health and quote dates for
   {productKey:'pack one',condition:'sealed',price:300,checkedAt:'',source:'Shop Feed',fresh:false,history:[{date:'2026-10-20',value:300}]}
  ]};
  const context={normalize_:value=>normalize(value),tv2Load_:()=>({payload:state,revision:state.revision}),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:(...args)=>created.push(args)}};
- vm.runInNewContext(text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.audit=tv2MarketAuditView_;this.run=runTv2MarketAudit;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(helperStart,helperEnd)+'\n'+text.slice(runnerStart,runnerEnd)+';this.audit=tv2MarketAuditView_;this.run=runTv2MarketAudit;',context);
  const view=context.audit(state,'market-audit-test');
  assert.equal(view.readOnly,true);assert.equal(view.revision,91);assert.equal(view.automation.lastScheduledMarketDate,'2026-10-25');
  assert.deepEqual(JSON.parse(JSON.stringify(view.items.map(x=>x.id))),['box-1','pack-1']);
@@ -128,7 +130,7 @@ test('scoped audit runner processes only one queued audit and preserves other co
  const make=(type,id)=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type,requestId:id})}),deleteDraft:()=>deleted.push(id)});
  const unrelated=make('sale','old-sale'),audit=make('asset-audit','asset-audit-cardbox');drafts.push(unrelated,audit);
  const context={GmailApp:{getDrafts:()=>drafts},runTv2AssetAudit:command=>({ok:true,requestId:command.requestId,revision:2201})};
- vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
  const result=context.runOnce();
  assert.deepEqual(JSON.parse(JSON.stringify(result)),{ok:true,processed:1,requestId:'asset-audit-cardbox',revision:2201});
  assert.deepEqual(deleted,['asset-audit-cardbox']);
@@ -141,7 +143,7 @@ test('scoped audit runner fails closed when multiple audits are queued',async()=
  const end=text.indexOf('\nfunction runTv2AssetReconcile',start);
  const make=id=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type:'asset-audit',requestId:id})}),deleteDraft:()=>{throw new Error('must not delete')}});
  const context={GmailApp:{getDrafts:()=>[make('audit-one'),make('audit-two')]}};
- vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.runOnce=runTv2AssetAuditOnce;',context);
  assert.throws(()=>context.runOnce(),/複数あるため安全停止/);
 });
 
@@ -156,9 +158,9 @@ test('Cardbox 2026-10-24 registration writes exactly three screenshot-backed lot
   tv2Load_:()=>({revision:state.revision,payload:state}),
   normalize_:value=>normalize(value),
   Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
-  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});const draft={getMessage:()=>({getSubject:()=>subject})};drafts.push(draft);return draft}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
  const result=context.run();
  assert.equal(result.ok,true);
  assert.equal(result.revision,2179);
@@ -181,7 +183,7 @@ test('Cardbox application registration fails closed on a partial semantic duplic
  const state={revision:2178,lotteries:[{id:'preexisting',title:'ポケモンカードゲーム MEGA 拡張パック「ハドウシーカー」1BOX',store:'カードボックス オーサカ店'}],automation:{}};
  let resultDrafts=0;
  const context={tv2Mutate_:(kind,fn)=>fn(state),tv2Load_:()=>({revision:state.revision,payload:state}),normalize_:v=>normalize(v),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{resultDrafts++}}};
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.run=runTv2CardboxLotteryApplications20261024;',context);
  assert.throws(()=>context.run(),/一部だけ既存登録済み/);
  assert.equal(state.lotteries.length,1);
  assert.equal(resultDrafts,0);
@@ -200,7 +202,7 @@ test('additional Cardbox Osaka OP-18 screenshot registration writes one applicat
   Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},
   GmailApp:{getDrafts:()=>[],createDraft:(to,subject,body)=>created.push({to,subject,body})}
  };
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
  const result=context.run();
  assert.equal(result.ok,true);
  assert.equal(result.revision,2180);
@@ -224,7 +226,7 @@ test('additional Cardbox Osaka OP-18 registration recognizes an existing exact-d
  const item={id:'gmail-imported-cardbox-op18',title:'【オーサカ店】ONE PIECEカードブースターパック【神の支配】1BOX',store:'カードボックス オーサカ店',status:'応募済',applicationDate:'2026-10-24',deadline:'2026-11-03',resultDate:'2026-11-04',receiveDeadline:'2026-11-13'};
  const state={revision:2179,lotteries:[item],automation:{}};let drafts=0;
  const context={tv2Mutate_:(kind,fn)=>{const result=fn(state);if(result.changed)state.revision++;return{revision:state.revision,...result}},tv2Load_:()=>({revision:state.revision,payload:state}),normalize_:value=>normalize(value),Session:{getEffectiveUser:()=>({getEmail:()=> 'owner@example.com'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{drafts++}}};
- vm.runInNewContext(text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.run=runTv2CardboxOsakaKaminoshihaiApplication20261024;',context);
  const result=context.run();
  assert.equal(result.mutation.duplicate,true);
  assert.equal(result.revision,2179);
@@ -241,11 +243,11 @@ test('failed private commands remain queued and produce one private diagnostic d
  const commandDraft={getMessage:()=>commandMessage,deleteDraft:()=>{throw new Error('failed command must remain queued')}};
  drafts.push(commandDraft);
  const context={
-  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}},
+  GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});const draft={getMessage:()=>({getSubject:()=>subject})};drafts.push(draft);return draft}},
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   runTv2AssetAudit:()=>{throw new Error('expected revision check failed')}
  };
- vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
  const result=context.process();
  assert.equal(result.length,1);
  assert.equal(result[0].ok,false);
@@ -271,7 +273,7 @@ test('asset reconciliation records zero-cost gifts, adds purchases, consumes ope
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
  const command={requestId:'asset-reconcile-test',expectedRevision:5,gifts:[{id:'gift-start-deck',product:'MEGA スタートデッキ100 バトルコレクション',giver:'親から譲受',date:'2026-10-25',category:'BOX',condition:'未開封',quantity:1}],purchases:[{id:'buy-pack-1',product:'30th CELEBRATION pack',store:'Store A',date:'2026-10-18',category:'パック',condition:'',quantity:10,price:360,actualPaidTotal:3456},{id:'buy-set-self',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-self'},{id:'buy-set-wife',product:'Card set alpha',store:'Same Store',date:'2026-10-17',category:'BOX',condition:'未開封',quantity:1,price:10800,sourceLotteryId:'win-wife'}],openings:[{id:'open-pack-1',product:'30th CELEBRATION pack',sourceLotId:'lot-buy-pack-1',quantity:10,date:'2026-10-18',store:'Store A',derivedLots:[{id:'card-1',product:'Jirachi ex SAR',category:'カード',set:'M6a 132/103',quantity:1,unitCost:1800},{id:'card-2',product:'Gengar 30th gold',category:'カード',set:'M6a 150/103',quantity:1,unitCost:1800}]}],lotteryUpdates:[{id:'win-1',expected:{status:'当選',receiptStatus:'未受取',owner:'本人',resultDate:'2026-10-15'},updates:{status:'購入済',receiptStatus:'受取済み',receivedDate:'2026-10-18',receiptAmount:3600,receiptPaidAmount:3456,receiptQuantity:10}}]};
  const result=context.reconcile(command);
  assert.equal(result.ok,true);
@@ -299,7 +301,7 @@ test('a gift adds a distinct zero-cost lot beside paid stock but blocks the same
  const end=text.indexOf('\nfunction runTv2AssetReconcileOnce()',start);
  let state={revision:2,transactions:[],inventoryLots:[{id:'paid-startdeck',product:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',productKey:'ポケモンカードゲーム MEGA スタートデッキ100 バトルコレクション',category:'BOX',quantity:1,unitCost:891,source:'purchase',acquiredAt:'2026-09-26',store:'GEO香芝店'}],lotteries:[],auditLog:[]};
  const context={normalize_:(s)=>normalize(s),tv2RetailPriceInfo_:()=>({price:800}),tv2Mutate_:(kind,fn)=>{const next=structuredClone(state),result=fn(next)||{};if(result.changed!==false){next.revision++;state=next;}return{revision:state.revision,...result};},tv2Load_:()=>({payload:structuredClone(state),revision:state.revision}),Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},GmailApp:{getDrafts:()=>[],createDraft:()=>{}}};
- vm.runInNewContext(text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.reconcile=runTv2AssetReconcile;',context);
  const gift={id:'gift-one',product:'MEGA スタートデッキ100 バトルコレクション',giver:'親から譲受',date:'2026-10-25',category:'BOX',condition:'未開封',quantity:1};
  const command={requestId:'asset-reconcile-gift-only',expectedRevision:2,gifts:[gift]};
  const saved=context.reconcile(command);
@@ -327,7 +329,7 @@ test('scoped one-shot runner processes only asset-reconcile drafts and returns n
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   runTv2AssetReconcile:()=>({ok:true,requestId:'private-request',revision:99,purchases:[{store:'private store',total:1}]})
  };
- vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetReconcileOnce;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.runOnce=runTv2AssetReconcileOnce;',context);
  const result=context.runOnce();
  assert.deepEqual(JSON.parse(JSON.stringify(result)),{ok:true,processed:1,revision:99});
  assert.deepEqual(deleted,['[Toreca Vault Command]']);
@@ -342,7 +344,7 @@ test('scoped runner fails closed when multiple reconciliation drafts are queued'
  const end=text.indexOf('\nfunction tv2ProcessChatTradeDrafts_',start);
  const mk=id=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type:'asset-reconcile',requestId:id})}),deleteDraft:()=>{throw new Error('must not delete')}});
  const context={GmailApp:{getDrafts:()=>[mk('asset-reconcile-one'),mk('asset-reconcile-two')]}};
- vm.runInNewContext(text.slice(start,end)+';this.runOnce=runTv2AssetReconcileOnce;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.runOnce=runTv2AssetReconcileOnce;',context);
  assert.throws(()=>context.runOnce(),/複数あるため安全停止/);
 });
 
@@ -361,7 +363,7 @@ test('pack opening singles are zero cost while the pack purchase history remains
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>{created.push({to,subject,body});drafts.push({getMessage:()=>({getSubject:()=>subject})})}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.adjust=runTv2AssetCostAdjustment;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.adjust=runTv2AssetCostAdjustment;',context);
  const command={type:'asset-cost-adjustment',requestId:'asset-cost-adjustment-20261018-pack-opening-zero',expectedRevision:1840};
  const result=context.adjust(command);
  assert.equal(state.revision,1841);
@@ -392,7 +394,7 @@ test('Cardbox Osaka OP-18 screenshot uses the guarded handler through the existi
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   runTv2CardboxOsakaKaminoshihaiApplication20261024:()=>{calls.push(true);return{ok:true,revision:2180}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
  const result=context.process();
  assert.equal(result.length,1);
  assert.equal(result[0].ok,true);
@@ -409,7 +411,7 @@ test('Cardbox Osaka OP-18 queued command rejects a mismatched request id without
  const draft={getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify(command)}),deleteDraft:()=>deleted.push(command.requestId)};
  drafts.push(draft);
  const context={GmailApp:{getDrafts:()=>drafts,createDraft:(to,subject,body)=>created.push({subject,body})},Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})}};
- vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
  const result=context.process();
  assert.equal(result[0].ok,false);
  assert.match(result[0].error,/requestIdが一致しません/);
@@ -425,7 +427,7 @@ test('adjustment commands run alone and leave unrelated queued drafts untouched'
  const make=(type,id)=>({getMessage:()=>({getSubject:()=> '[Toreca Vault Command]',getPlainBody:()=>JSON.stringify({type,requestId:id})}),deleteDraft:()=>deleted.push(id)});
  const unrelated=make('sale','old-sale'),adjustment=make('asset-cost-adjustment','zero-cost');drafts.push(unrelated,adjustment);
  const context={GmailApp:{getDrafts:()=>drafts,createDraft:()=>{}},Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},runTv2AssetCostAdjustment:()=>({ok:true,revision:1841})};
- vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
  const result=context.process();
  assert.equal(result.length,1);
  assert.deepEqual(deleted,['zero-cost']);
@@ -445,7 +447,7 @@ test('a scoped market refresh runs alone and leaves other command drafts untouch
   Session:{getEffectiveUser:()=>({getEmail:()=> 'private@example.test'})},
   runTv2ChatMarketRefresh:command=>{calls.push(command);return{ok:true,requestId:command.requestId,revision:1900}}
  };
- vm.runInNewContext(text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
+ vm.runInNewContext(cacheHelpers(text)+text.slice(start,end)+';this.process=tv2ProcessChatTradeDrafts_;',context);
  const result=context.process();
  assert.equal(result.length,1);
  assert.equal(result[0].ok,true);

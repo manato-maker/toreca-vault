@@ -293,3 +293,24 @@
 - `clasp list-versions`: 200/200。`clasp list-deployments`: アクティブ6件、その利用版は5種類。説明が `Toreca Vault V2 Automation API Executable` と一致するデプロイは0件。名称以外のAPI executableの存在や種別は未確認。
 - `clasp run tv2AutomationStatus` は終了コード0だが、`ok:true`を検出できず未確認に分類。この診断はreadonlyで、trigger・在庫・version・deploymentに変更なし。APIとV2の復旧は未完了。
 - 対処: Google Apps Scriptエディタで現在の6配布の使用版を保護し、未使用の古い保存版を少数整理する必要がある（チャットの接続先にバージョン削除手段がない）。その後、既存`Apps Script Automation Deploy`を手動実行しprivate API executable配布・機能試験・V2 canonical再読込まで確認。手動整理までは「復旧完了」としない。
+
+
+### 2026-10-28 — Gmail quota対策と処理間隔分離（PR #95・CI修正中）
+- PR #95 / branch fix/tv2-gmail-queue-separation-20261028 で、15分のV2 command登録、30分のGmail抽選確認、JST 12:30/19:00の結果確認、13:30以降の日次相場更新へ分離する変更を準備中。
+- 通常の応募/結果Gmail走査は範囲付きカーソルで一度101件まで取得し、次回に残りを継続。parser upgrade時も処理済みIDを保持し、Gmail API quotaを超える全件再走査を避ける。結果確認は独立カーソルを使う。V2反映後にのみ処理位置を進める。
+- Gmail下書き一覧は1回の実行で共有し、同じ実行内の複数ポリシーが繰返し getDrafts() しないようにする。コマンドdraftは送信せず、成功時のみ削除する。
+- 最新CIでhealth/timer/parser関連テストを通過したが、draft mockがApps Scriptの返却値を模擬できず2件失敗。テストmockを修正してPR headに追加。今回の修正後CIは未完了のため、PR merge・本番配布へ進んでいない。
+- Google Docs handoffへ今回の状態、保護対象版、削除候補、認証待ちを記録。Google認証は manato.pt@gmail.com 選択後、安全なログイン選択フォームがタイムアウトし、成功状態は不明。ログイン回避は行っていない。
+- Apps Script状態の最後の実測は診断PR #94/Actions #40676318499: 200/200保存版、active deployment6件、利用版5種類、専用API deployment0件。v199/v95/v4/v3/v2を保護。v1/v5/v6を未使用候補とするが、削除確認待ちで未削除。trigger/Script Properties/deployments/V2 dataはこの作業では変更なし。
+- V2本番コマンド、相場更新、Gmail処理はこの変更作業では実行していない。V2 revision/購入原価/在庫/抽選履歴/資産集計、Apps Script成功ログ、API実行権限、Gmail quota回復、Google側ソース一致は未確認。
+- 次: PRの全CIを成功させてからmainへ反映。Google認証完了後、Apps Scriptで6 deployments/版参照とtrigger/プロパティを再読込し、v1/v5/v6候補の安全性を再確認。削除直前には明示確認を取る。確認後のみ候補版を削除しActionsを再実行、専用API/関数権限/15分・30分・結果時刻・相場runを成功ログとread-only V2再読込で検証する。
+- 通常Chat運用は、購入・受取・開封・売却・抽選応募/当落を文章またはスクリーンショットで報告し、安全な既存連携が作る [Toreca Vault Command] draft queueを15分triggerが処理する想定。実運用はまだ未確認。購入原価二重計上、在庫/履歴削除、開封pack残存を検証し、0円で取得した開封シングルと購入履歴を保持する。
+
+
+### 2026-10-28 — Apps Script再認証・削除候補確認・PR CI（確認待ち）
+- Apps Scriptブラウザ認証を完了し、対象プロジェクト「Toreca Vault 抽選自動化」を読み取り確認。履歴は200/200、現在版は2026-10-26 17:42。
+- 管理画面のアクティブ配布一覧は5件を表示（PR #94診断の6件と1件差があるため、GUI観測値として記録）。使用版は v199 / v95（Toreca Vault Market Refresh API）、v4（Toreca Vault V2 secure read）、v3（Toreca Vault V2）、v2（Restored version 2）。この5版は保護。
+- 版の一括削除画面では、アクティブ配布版は選択候補から除外される。未使用候補 v1（2026-09-19 14:30）、v5（2026-09-24 20:16）、v6（2026-09-24 21:31）の3件だけを選択。まだ削除していない。削除は版履歴の不可逆削除であり、実行直前に本人承認が必要。トリガー・スクリプトプロパティ・認証情報・V2データに変更なし。
+- PR #95 のhead 4623c4705d733c28a4ffed233db00d9db6a0ffb7 に対するCI run 40708710877 / 40708701790 は両方success。PRはopen、main未反映、本番未配布。
+- Gmail quota対策と15分command・30分Gmail・12:30/19:00結果確認・13:30以降日次相場のコード変更はまだ本番未反映。Apps Script成功ログ、専用API、実行権限、Gmail重複処理、相場更新、V2最新revision/JSONは未検証。
+- 削除確認が得られた場合のみ選択したv1/v5/v6を削除し、Actions配布と本番検証に進む。削除前の確認を飛ばさない。
