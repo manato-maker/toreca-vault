@@ -379,3 +379,12 @@ Apps Script UIでread-only `tv2AutomationStatus()` を22:37:07 JSTに実行し�
 API診断Action #41060523449のfailed jobを配布後に再実行したが、scripts.runはなおHTTP 403 authorization（hasResponse=false）。API deployment作成・更新だけでは実行復旧と扱わない。Apps Script GCPはDefault。OAuth client projectをApps Scriptに関連付けると、旧ユーザー認証取消し、Defaultへ戻せないこと、新projectでAPI再有効化が必要とのGoogle UI警告がある。Google Cloud ConsoleはSite Unavailableとなり、project IAMとAPI有効状態を確認できていないため、切替は未実施。切替は具体的な利用者承認を得てから行う。
 
 V2 canonical JSON/revision、購入原価、在庫数量、資産集計、抽選履歴、相場quote/source/date、Gmail重複防止は正本を再読込していないため未検証。PR #99配布後のquota backoff動作もGmail 30分pollログで未確認。売買テストやコマンド送信、重複テスト記録は投入していない。
+
+
+### 2026-10-30 — 配布後トリガーとAPI 403影響範囲の再整理
+
+GitHub mainの `automation/V2Automation.gs` を確認。GitHub Actionsの `scripts.run` API呼び出し（read-only診断など）の403は、Apps Scriptの時間トリガーが内部でV2を書き込む経路とは別。通常のV2 read/writeはApps Scriptから `TV2_SYNC_URL` とスクリプトプロパティ内tokenを使う同期Webアプリへ送信し、`tv2Mutate_` はexpectedRevision付き保存後に正本を再読込してrevision/lastMutationIdを照合する。値は記録しない。この既存同期経路が現在も正常かは未検証のため、403を無関係とは断定しない。
+
+Apps Scriptの実行履歴を再確認：22:40:56 JSTの `runTv2LotteryGmailCheck` は1.256秒で「完了」だが、Cloudログは空。バックオフによる早期skipか検索成功かを区別できず、Gmail新着・当落処理成功とは扱わない。22:46:12 JSTの `runTv2Automation` は63.674秒後に「不明」（成功/失敗の判定不可）、Cloudログなし。従って15分コマンド登録、V2 revision更新、相場更新の成功は未確認。PR #99はGmail quota発生時に6時間backoffし、backoff中はGmail依存の価格方針/コマンド下書き/Gmail pollをskipして、保留下書きは残し、独立market runnerを継続する実装。
+
+Google Cloud projectの切替は未実施。先に対象projectの権限・必要APIを確認し、既存ユーザー再認証等の影響を評価する。既存V2データを変更する手動/テストコマンドは投入していない。
