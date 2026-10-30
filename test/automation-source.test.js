@@ -46,6 +46,7 @@ test('15-minute command queue is isolated from Gmail and lottery polling',async(
 });
 test('queue authorization check is read-only and validates the exact queue headers',async()=>{
   const s=await read('automation/V2Automation.gs');
+  assert.match(s,/TV2_COMMAND_QUEUE_SHEET_ID_='1SlGDJ93z3tmgFsfK1SrzSK2T25hkllNm-eWvO8xYLzA'/);
   const start=s.indexOf('function tv2AuthorizeCommandQueue()');
   const end=s.indexOf('function tv2DispatchQueuedCommand_',start);
   const check=s.slice(start,end);
