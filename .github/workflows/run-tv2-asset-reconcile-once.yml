@@ -30,7 +30,7 @@ jobs:
         run: |
           for function in runTv2AssetAuditOnce runTv2AssetReconcileOnce; do
             set +e
-            output="$(npx clasp run "$function" 2>&1)"
+            output="$(npx clasp run "$function" --nondev --json 2>&1)"
             status=$?
             set -e
             if [ "$status" -ne 0 ]; then
