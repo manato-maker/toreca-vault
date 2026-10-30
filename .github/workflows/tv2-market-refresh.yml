@@ -42,7 +42,7 @@ jobs:
             function=runTv2MarketScheduledOnce
           fi
           set +e
-          output="$(npx clasp run "$function" 2>&1)"
+          output="$(npx clasp run "$function" --nondev --json 2>&1)"
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -51,7 +51,7 @@ jobs:
           fi
           if ! printf '%s' "$output" | grep -Eiq '\"ok\"[[:space:]]*:[[:space:]]*true'; then
             category=unknown
-            if printf '%s' "$output" | grep -Eiq 'authorization|required.*permission|permission_denied|caller does not have permission'; then
+            if printf '%s' "$output" | grep -Eiq 'not_authorized|authorization|required.*permission|permission_denied|caller does not have permission'; then
               category=authorization
             elif printf '%s' "$output" | grep -Eiq 'unable to run script function|function.*not found|script function.*not found'; then
               category=function_not_found
