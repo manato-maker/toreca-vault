@@ -44,6 +44,16 @@ test('15-minute command queue is isolated from Gmail and lottery polling',async(
   assert.match(gmail,/tv2EnforceRetailPricePolicy_/);
   assert.match(gmail,/resultOnly/);
 });
+test('queue authorization check is read-only and validates the exact queue headers',async()=>{
+  const s=await read('automation/V2Automation.gs');
+  const start=s.indexOf('function tv2AuthorizeCommandQueue()');
+  const end=s.indexOf('function tv2DispatchQueuedCommand_',start);
+  const check=s.slice(start,end);
+  assert.match(check,/SpreadsheetApp\\.openById/);
+  assert.match(check,/readOnly:true/);
+  assert.match(check,/queue headers do not match/);
+  assert.doesNotMatch(check,/setValues|appendRow|deleteRow|deleteSheet|tv2Mutate_/);
+});
 test('sheet queue commands use stable request ids and safely cover chat operations',async()=>{
   const s=await read('automation/V2Automation.gs');
   assert.match(s,/function tv2ProcessSheetCommandQueue_\\(\\)/);
