@@ -1,8 +1,8 @@
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const vm=require('node:vm');
-const path=require('node:path');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
 
 const source=fs.readFileSync(path.join(__dirname,'..','automation','V2Automation.gs'),'utf8');
 const helperStart=source.indexOf('var TV2_GMAIL_DRAFT_CACHE_=null;');
