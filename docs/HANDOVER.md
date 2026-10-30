@@ -366,3 +366,16 @@ Apps Script保存履歴は上限200/200。デプロイ管理で確認したア�
 専用API deployment v202は存在するがscripts.runの403は未解消。Apps Script GCPはDefaultで、OAuth client Cloud Projectとの共通standard project切替が必要と見込まれる。Google UIはDefaultに戻せないこと、既存ユーザー認証の取消し、新projectのAPI再有効化が必要と警告。Cloud Console権限/API設定の事前確認は未完了で、project変更は未実施。
 
 本番Apps Scriptへのquota対策配布、API呼出し成功、Gmail実行成功、Chat queue実登録、market更新、Gmail重複防止、canonical V2 JSON/revision/購入原価/在庫/資産集計の再読込は未確認。既存在庫・購入原価・抽選履歴・トリガー・Script Propertiesに意図した変更なし。
+
+
+## 2026-10-30 — PR #99 配布とAPI再検証
+
+利用者了承後、アクティブdeployment一覧にない旧版v200（2026-09-29 06:29）のみApps Script履歴から削除。Google UIの完了表示は「1個のバージョンを削除しました」。保存版199/200、アクティブdeployment 6件。稼働中のv203/v199/v95/v4/v3/v2、トリガー、Script Propertiesには変更なし。
+
+PR #99のApps Script deployment Action #41062078786はtest/deploy success。canonical source push、remote source verification、private Apps Script API executable updateの各stepが成功。Google UIでも専用API executable deployment v203（2026-10-30 22:18）、保存版199/200、アクセス範囲「自分のみ」を確認。
+
+Apps Script UIでread-only `tv2AutomationStatus()` を22:37:07 JSTに実行し、実行ログ「実行開始」「実行完了」を確認。22:31:12 JSTの15分runnerは68.583秒で「完了」だが、詳細ログ/返却内容/canonical readbackは未確認。トリガー画面は合計4件：queue 15m、Gmail 30m、結果check 12:30/19:00。Gmail pollの前回実行は配布前の22:10:56、エラー率100%で、配布後の30分処理成功は未確認。
+
+API診断Action #41060523449のfailed jobを配布後に再実行したが、scripts.runはなおHTTP 403 authorization（hasResponse=false）。API deployment作成・更新だけでは実行復旧と扱わない。Apps Script GCPはDefault。OAuth client projectをApps Scriptに関連付けると、旧ユーザー認証取消し、Defaultへ戻せないこと、新projectでAPI再有効化が必要とのGoogle UI警告がある。Google Cloud ConsoleはSite Unavailableとなり、project IAMとAPI有効状態を確認できていないため、切替は未実施。切替は具体的な利用者承認を得てから行う。
+
+V2 canonical JSON/revision、購入原価、在庫数量、資産集計、抽選履歴、相場quote/source/date、Gmail重複防止は正本を再読込していないため未検証。PR #99配布後のquota backoff動作もGmail 30分pollログで未確認。売買テストやコマンド送信、重複テスト記録は投入していない。
