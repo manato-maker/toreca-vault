@@ -328,3 +328,13 @@
 - 相場更新run `41055622315`（21:28 JST、workflow_run trigger）のjob `refresh` は失敗。workflow実行はmain commit `849eaa6...` をcheckoutし、Apps Script呼び出しstepで `category=function_not_found`。実行レスポンス自体はprivate情報保護で抑制されている。workflowは `runTv2MarketRefreshNowOnce` を指定。コード上の関数存在だけではGoogle側デプロイ版への反映を証明できない。runを一度再実行したが、再実行結果は確認待ち。
 - 同日のScheduled run `41044554229` も失敗表示を確認。job log未取得。初回の18:58 JST頃のrun IDとして報告されていた対象は `41044554229` の可能性があるが時刻と番号を画面で再確認する。
 - API source push/remote verify/test/deploy jobのsuccessは確認できた一方、専用API実行可能性・market handler実行・canonical V2更新は未証明。Apps Script UI履歴版数の削除後再読込、API deployment一覧、successful execution log、trigger execution、V2 JSON/revision/quotesの照合を続ける。
+
+### 2026-10-30 — API実行結果の再診断（認証画面の再ログイン待ち）
+- PR #96でGitHub ActionsのApps Script API呼出しを `clasp --nondev --json` に変更。配布済みAPI executableを対象にする。CI run `41057399519` はsuccess。merge SHA `ba154037655fb069f46ee5730225c9025d58296e`。
+- 変更したのはmarket refresh / 読取diagnostic / scoped asset reconcile workflow。ActionsログにはV2内容や下書き本文を出さず、API応答の有無とエラー分類だけを出す。
+- 10/30の再実行でApps Script saved versionsは199/200、active deploymentは7件、異なる利用版6種類、名前が一致するprivate API deploymentは1件・version参照あり。版整理後も版数に余裕は1件のみ。
+- market refresh run `41057199273` は失敗。read-only `tv2AutomationStatus` run `41057438708` も失敗し、Actionsの標準化ログではAPI error/Apps Script exceptionもresponse.resultもない空の応答（`{}`相当）だった。以前の `function_not_found` 分類だけでは本当の原因を確定できない。Gmail triggerやV2正本の読み取り成功を確認できていない。
+- 読取diagnostic PR #96を追加。empty responseを成功とせず、API code / エラー分類 / result有無だけを出す。最新Actionsで分類は `apiErrorCode=null, apiErrorClass=none, executionErrorClass=none, hasResponse=false, resultType=undefined`。APIが成功完了した証拠ではない。
+- Apps Script Web UIでは現セッションがログアウト状態で、Apps Script実行履歴/trigger状態/Google側のdeployment versionを確認できなかった。次はGoogleアカウントでブラウザへ再ログイン後、Apps Scriptの実行履歴を確認し、当該APIのexecution状態・失敗理由を特定する。Apps Scriptソースの追加変更・新規deploymentは未実施（version上限まで残り1件）。既存trigger/Script Properties/V2データは意図的に変更していない。
+- market更新workflowが実行されたため、canonical quote更新の有無はV2 JSON再読込が必要。revision/購入原価/数量/資産合計はまだ未検証。認証またはscope承認が必要と判明するまでは安全な診断を続ける。
+- 通常Chatの購入・受取・開封・売却・抽選報告の自動登録も未確認。15分command queue、30分Gmail確認、JST 12:30/19:00重点確認、日次13:30以降相場更新を成功ログとV2正本再読込で確認すること。
