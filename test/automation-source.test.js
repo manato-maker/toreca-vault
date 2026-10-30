@@ -34,19 +34,43 @@ test('single market sources are Cardrush then Toretoku only',async()=>{
   assert.match(s,/user-screenshot/);
 });
 
-test('Gmail polling is separated from the 15-minute command queue and remains deduplicated',async()=>{
+test('15-minute command queue is isolated from Gmail and lottery polling',async()=>{
   const s=await read('automation/V2Automation.gs');
   const queue=s.slice(s.indexOf('function runTv2Automation(){'),s.indexOf('function runTv2LotteryGmailCheck(){'));
-  const gmail=s.slice(s.indexOf('function runTv2LotteryAuto(options){'),s.indexOf('function tv2ResolvePokemonCenterResult_'));
-  assert.match(queue,/tv2ProcessChatTradeDrafts_/);
-  assert.doesNotMatch(queue,/runTv2LotteryAuto/);
-  assert.doesNotMatch(gmail,/tv2ProcessChatTradeDrafts_/);
+  const gmail=s.slice(s.indexOf('function tv2RunGmailWithBackoff_(options){'),s.indexOf('function runTv2LotteryAuto(options){'));
+  assert.ok(queue.includes('tv2ProcessSheetCommandQueue_()'));
+  assert.doesNotMatch(queue,/GmailApp|tv2GetDrafts_|tv2ProcessChatTradeDrafts_|runTv2LotteryAuto/);
+  assert.ok(gmail.includes('runTv2LotteryAuto(options)'));
+  assert.match(gmail,/tv2EnforceRetailPricePolicy_/);
   assert.match(gmail,/resultOnly/);
-  assert.match(gmail,/new Set\(health\.gmailMessageIds\|\|\[\]\)/);
-  assert.match(gmail,/health\.lastGmailResultCheckAt/);
-  assert.match(gmail,/GmailApp\.search\(query,offset,101\)/);
-  assert.match(gmail,/TV2_GMAIL_SCAN_CURSOR_V1/);
-  assert.match(gmail,/health\.lastGmailRunAt=until\.toISOString\(\)/);
+});
+test('queue authorization check is read-only and validates the exact queue headers',async()=>{
+  const s=await read('automation/V2Automation.gs');
+  assert.match(s,/TV2_COMMAND_QUEUE_SHEET_ID_='1SlGDJ93z3tmgFsfK1SrzSK2T25hkllNm-eWvO8xYLzA'/);
+  const start=s.indexOf('function tv2AuthorizeCommandQueue()');
+  const end=s.indexOf('function tv2DispatchQueuedCommand_',start);
+  const check=s.slice(start,end);
+  assert.ok(check.includes('SpreadsheetApp.openById'));
+  assert.match(check,/readOnly:true/);
+  assert.match(check,/queue headers do not match/);
+  assert.doesNotMatch(check,/setValues|appendRow|deleteRow|deleteSheet|tv2Mutate_/);
+});
+test('sheet queue commands use stable request ids and safely cover chat operations',async()=>{
+  const s=await read('automation/V2Automation.gs');
+  assert.ok(s.includes('function tv2ProcessSheetCommandQueue_()'));
+  assert.ok(s.includes('function runTv2ChatOpenPacks(command)'));
+  assert.ok(s.includes('function runTv2ChatLotteryResultExact(command)'));
+  assert.ok(s.includes('function runTv2ChatLotteryReceipt(command)'));
+  assert.match(s,/chatLotteryResultIds/);
+  assert.match(s,/chatLotteryReceiptIds/);
+  assert.match(s,/V2正本に開封対象パック在庫がありません/);
+  assert.match(s,/受取対象の抽選が複数一致しました/);
+  const start=s.indexOf('function runTv2ChatOpenPacks(command)');
+  const end=s.indexOf('function runTv2ChatLotteryResultExact(command)',start);
+  const opening=s.slice(start,end);
+  assert.match(opening,/const unit=Number\(lot\.unitCost\),cost=Number\.isFinite\(unit\)\?unit\*quantity:null/);
+  assert.doesNotMatch(opening,/tv2RetailPriceInfo_/);
+  assert.match(opening,/acquisitionCostBasis='購入履歴のみ保持'/);
 });
 
 test('Gmail draft queue uses one shared draft snapshot per Apps Script execution',async()=>{

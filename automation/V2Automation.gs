@@ -67,25 +67,219 @@ function tv2EnsureSimpleAutomationSchedule_(force){
   ScriptApp.newTrigger('runTv2LotteryResultCheck1900').timeBased().atHour(19).nearMinute(0).everyDays(1).create();
   props.setProperty('TV2_AUTOMATION_SCHEDULE',version);
 }
+
+const TV2_COMMAND_QUEUE_SHEET_ID_='1SlGDJ93z3tmgFsfK1SrzSK2T25hkllNm-eWvO8xYLzA';
+const TV2_COMMAND_QUEUE_TAB_='Queue';
+const TV2_COMMAND_QUEUE_BATCH_SIZE_=5;
+const TV2_COMMAND_QUEUE_STALE_MS_=30*60*1000;
+const TV2_COMMAND_QUEUE_ALLOWED_TYPES_=['purchase','sale','lottery','lottery-bulk','open-packs','lottery-result-exact','lottery-receipt','pokemoncenter-spouse-result','repair-receipt-sale'];
+
+function tv2AuthorizeCommandQueue(){
+ const spreadsheet=SpreadsheetApp.openById(TV2_COMMAND_QUEUE_SHEET_ID_);
+ const sheet=spreadsheet.getSheetByName(TV2_COMMAND_QUEUE_TAB_);
+ if(!sheet)throw new Error('Toreca Vault command queue sheet/tab not found');
+ const headers=sheet.getRange(1,1,1,8).getValues()[0].map(x=>String(x||'').trim());
+ const expected=['requestId','payloadJson','status','attempts','createdAt','processedAt','result','error'];
+ if(JSON.stringify(headers)!==JSON.stringify(expected))throw new Error('Toreca Vault command queue headers do not match');
+ return{ok:true,readOnly:true,spreadsheet:spreadsheet.getName(),tab:TV2_COMMAND_QUEUE_TAB_};
+}
+
+function tv2DispatchQueuedCommand_(command){
+ const type=String(command&&command.type||'');
+ if(!TV2_COMMAND_QUEUE_ALLOWED_TYPES_.includes(type))throw new Error('command type is not enabled for the Sheets queue');
+ if(type==='purchase')return runTv2ChatPurchase(command);
+ if(type==='sale')return runTv2ChatSale(command);
+ if(type==='lottery')return runTv2ChatLottery(command);
+ if(type==='lottery-bulk')return runTv2ChatLotteryBulk(command);
+ if(type==='open-packs')return runTv2ChatOpenPacks(command);
+ if(type==='lottery-result-exact')return runTv2ChatLotteryResultExact(command);
+ if(type==='lottery-receipt')return runTv2ChatLotteryReceipt(command);
+ if(type==='pokemoncenter-spouse-result')return runTv2PokemonCenterSpouseResult(command);
+ return runTv2RepairReceiptSale(command);
+}
+
+function tv2SetCommandQueueRow_(sheet,row,status,attempts,createdAt,processedAt,result,error){
+ sheet.getRange(row,3,1,6).setValues([[status,attempts,createdAt||'',processedAt||'',result||'',error||'']]);
+}
+
+function tv2ProcessSheetCommandQueue_(){
+ if(typeof SpreadsheetApp==='undefined')return{ok:false,processed:0,error:'spreadsheet-service-unavailable'};
+ const lock=LockService.getScriptLock();
+ if(!lock.tryLock(10000))return{ok:true,skipped:'locked',processed:0};
+ let sheet,jobs=[];
+ try{
+  sheet=SpreadsheetApp.openById(TV2_COMMAND_QUEUE_SHEET_ID_).getSheetByName(TV2_COMMAND_QUEUE_TAB_);
+  if(!sheet)throw new Error('queue sheet tab missing');
+  const lastRow=sheet.getLastRow();
+  if(lastRow<2)return{ok:true,processed:0,review:0};
+  const values=sheet.getRange(2,1,lastRow-1,8).getValues();
+  const now=Date.now(),nowIso=new Date(now).toISOString(),seen=new Map();
+  for(let i=0;i<values.length;i++){
+   const row=i+2,requestId=String(values[i][0]||'').trim(),raw=String(values[i][1]||''),status=String(values[i][2]||'').trim().toLowerCase();
+   const attempts=Math.max(0,Number(values[i][3])||0),createdAt=String(values[i][4]||'').trim()||nowIso,processedAt=String(values[i][5]||'').trim();
+   if(!requestId)continue;
+   if(seen.has(requestId)){
+    if(['pending','processing'].includes(status)){
+     const prior=seen.get(requestId);
+     tv2SetCommandQueueRow_(sheet,row,prior.raw===raw?'duplicate':'review',attempts,createdAt,nowIso,prior.raw===raw?'': '',prior.raw===raw?'duplicate requestId':'requestId payload collision');
+    }
+    continue;
+   }
+   seen.set(requestId,{raw,status,row});
+   const stale=status==='processing'&&(!Date.parse(processedAt)||now-Date.parse(processedAt)>TV2_COMMAND_QUEUE_STALE_MS_);
+   if(status!=='pending'&&!stale)continue;
+   if(jobs.length>=TV2_COMMAND_QUEUE_BATCH_SIZE_)continue;
+   let command;
+   try{
+    command=JSON.parse(raw);
+    if(!command||typeof command!=='object'||Array.isArray(command))throw new Error('payload must be an object');
+    if(String(command.requestId||'').trim()!==requestId)throw new Error('requestId column and payload do not match');
+    if(!TV2_COMMAND_QUEUE_ALLOWED_TYPES_.includes(String(command.type||'')))throw new Error('unsupported command type');
+   }catch(error){
+    tv2SetCommandQueueRow_(sheet,row,'review',attempts,createdAt,nowIso,'',String(error&&error.message||error).slice(0,500));
+    continue;
+   }
+   const nextAttempts=attempts+1;
+   tv2SetCommandQueueRow_(sheet,row,'processing',nextAttempts,createdAt,nowIso,'','');
+   jobs.push({row,requestId,command,attempts:nextAttempts,createdAt});
+  }
+  SpreadsheetApp.flush();
+ }catch(error){
+  return{ok:false,processed:0,error:'queue-read-failed: '+String(error&&error.message||error).slice(0,300)};
+ }finally{lock.releaseLock()}
+ let processed=0,review=0,retry=0;
+ jobs.forEach(job=>{
+  let status='done',resultText='',errorText='';
+  try{
+   const result=tv2DispatchQueuedCommand_(job.command);
+   resultText=JSON.stringify(result||{}).slice(0,3000);
+   if(result&&result.skipped){status='pending';retry++;errorText=String(result.reason||'command was skipped')}
+   else if(result&&result.ok===false){status='review';review++;errorText=String(result.error||'command returned ok=false').slice(0,500)}
+   else processed++;
+  }catch(error){status='review';review++;errorText=String(error&&error.message||error).slice(0,500)}
+  try{tv2SetCommandQueueRow_(sheet,job.row,status,job.attempts,job.createdAt,new Date().toISOString(),resultText,errorText);SpreadsheetApp.flush()}
+  catch(error){review++;Logger.log('TV2 command queue status write failed for request '+job.requestId)}
+ });
+ return{ok:review===0,processed,review,retry,claimed:jobs.length};
+}
+
+function runTv2ChatOpenPacks(command){
+ const input=command&&typeof command==='object'?command:{};
+ const requestId=String(input.requestId||'').trim(),product=String(input.product||'').trim(),store=String(input.store||'').trim();
+ const date=String(input.date||Utilities.formatDate(new Date(),TZ,'yyyy-MM-dd')).trim(),quantity=Number(input.quantity),memo=String(input.memo||'パック開封｜シングル登録なし').trim();
+ if(!requestId||!product||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isInteger(quantity)||quantity<=0)throw new Error('パック開封コマンドが不正です');
+ const sourceIds=(Array.isArray(input.sourcePurchaseRequestIds)?input.sourcePurchaseRequestIds:[input.sourcePurchaseRequestId]).filter(Boolean).map(String);
+ return tv2Mutate_('chat-open-packs',state=>{
+  state.transactions=Array.isArray(state.transactions)?state.transactions:[];state.inventoryLots=Array.isArray(state.inventoryLots)?state.inventoryLots:[];
+  const openingId='chat-opening-'+requestId,existing=state.transactions.filter(t=>String(t.id||'')===openingId);
+  if(existing.length===1)return{changed:false,duplicate:true,openingId};
+  if(existing.length>1)throw new Error('同一パック開封IDが重複しています');
+  const wanted=tv2PackOpenNormalize_(product),wantedStore=tv2PackOpenNormalize_(store);
+  let lots=state.inventoryLots.filter(l=>{
+   if(String(l.category||'')!=='パック'||Number(l.quantity)<=0)return false;
+   if(String(l.acquiredAt||'')!==date)return false;
+   const name=tv2PackOpenNormalize_(l.productKey||l.product),shop=tv2PackOpenNormalize_(l.store||'');
+   if(!(name===wanted||name.includes(wanted)||wanted.includes(name)))return false;
+   return !wantedStore||shop===wantedStore;
+  });
+  if(sourceIds.length){const preferred=lots.filter(l=>sourceIds.includes(String(l.requestId||'')));if(preferred.length)lots=preferred}
+  if(lots.length!==1)throw new Error(lots.length?'開封対象パック在庫が複数あるため特定できません':'V2正本に開封対象パック在庫がありません');
+  const lot=lots[0];if(Number(lot.quantity)<quantity)throw new Error('開封数がV2正本のパック在庫を超えています');
+  const unit=Number(lot.unitCost),cost=Number.isFinite(unit)?unit*quantity:null;
+  lot.quantity=Number(lot.quantity)-quantity;state.inventoryLots=state.inventoryLots.filter(l=>Number(l.quantity)>0);
+  const tx={id:openingId,type:'opening',product,productKey:product,category:'パック',condition:'開封済み',quantity,price:0,total:0,date,store:String(lot.store||store),source:'chat',requestId,memo,acquisitionCost:cost};
+  tx.acquisitionCostBasis='購入履歴のみ保持';
+  state.transactions.push(tx);
+  return{changed:true,duplicate:false,openingId,quantity,acquisitionCost:cost};
+ });
+}
+
+function runTv2ChatLotteryResultExact(command){
+ const input=command&&typeof command==='object'?command:{};
+ const requestId=String(input.requestId||'').trim(),title=String(input.title||input.product||'').trim(),store=String(input.store||'').trim();
+ const owner=String(input.owner||'').trim(),status=String(input.status||'').trim(),resultDate=String(input.resultDate||'').trim(),memo=String(input.memo||'').trim();
+ if(!requestId||!title||!store||!['当選','落選'].includes(status)||!/^\d{4}-\d{2}-\d{2}$/.test(resultDate))throw new Error('抽選結果データが不正です');
+ const wantedTitle=tv2LotteryExactNormalize_(title),wantedStore=tv2LotteryStoreNormalize_(store),wantedOwner=tv2LotteryExactNormalize_(owner);
+ return tv2Mutate_('chat-lottery-result-exact',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.chatLotteryResultIds=Array.isArray(state.automation.chatLotteryResultIds)?state.automation.chatLotteryResultIds:[];
+  if(state.automation.chatLotteryResultIds.includes(requestId))return{duplicate:true,changed:false};
+  const matches=state.lotteries.filter(item=>{
+   const itemTitle=tv2LotteryExactNormalize_(item.title||''),itemStore=tv2LotteryStoreNormalize_(item.store||''),itemOwner=tv2LotteryExactNormalize_(item.owner||'');
+   const titleMatch=itemTitle===wantedTitle||itemTitle.includes(wantedTitle)||wantedTitle.includes(itemTitle);
+   const storeMatch=itemStore===wantedStore||itemStore.includes(wantedStore)||wantedStore.includes(itemStore);
+   const existingResultDate=String(item.resultDate||'').slice(0,10),dateMatch=!existingResultDate||existingResultDate===resultDate;
+   const ownerMatch=!wantedOwner||!itemOwner||itemOwner===wantedOwner;
+   return titleMatch&&storeMatch&&dateMatch&&ownerMatch;
+  });
+  if(matches.length!==1)throw new Error(matches.length?'抽選結果対象が複数一致しました':'抽選結果対象が見つかりません');
+  const item=matches[0];
+  if(status==='落選'&&(item.status==='購入済'||item.receiptStatus==='受取済み'))throw new Error('購入済み/受取済み抽選を落選へ変更できません');
+  const before=JSON.stringify(item),now=new Date().toISOString();
+  item.status=status;item.resultDate=resultDate;
+  if(status==='落選'&&item.receiptStatus!=='受取済み')item.receiptStatus='対象外';
+  if(status==='当選'&&!['未受取','受取済み'].includes(String(item.receiptStatus||'')))item.receiptStatus='未受取';
+  if(memo&&!String(item.memo||'').includes(memo))item.memo=[String(item.memo||'').trim(),memo].filter(Boolean).join('｜');
+  item.updatedAt=now;
+  state.automation.chatLotteryResultIds.push(requestId);
+  state.automation.chatLotteryResultIds=state.automation.chatLotteryResultIds.slice(-500);
+  return{duplicate:false,changed:JSON.stringify(item)!==before,lotteryId:String(item.id||''),status:item.status,resultDate:item.resultDate};
+ });
+}
+
+function runTv2ChatLotteryReceipt(command){
+ const input=command&&typeof command==='object'?command:{};
+ const requestId=String(input.requestId||'').trim(),title=String(input.title||input.product||'').trim(),store=String(input.store||'').trim();
+ const owner=String(input.owner||'').trim(),receivedDate=String(input.receivedDate||input.date||'').trim();
+ if(!requestId||!title||!store||!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate))throw new Error('受取情報が不正です');
+ const wantedTitle=tv2LotteryExactNormalize_(title),wantedStore=tv2LotteryStoreNormalize_(store),wantedOwner=tv2LotteryExactNormalize_(owner);
+ return tv2Mutate_('chat-lottery-receipt',state=>{
+  state.lotteries=Array.isArray(state.lotteries)?state.lotteries:[];
+  state.automation=state.automation&&typeof state.automation==='object'?state.automation:{};
+  state.automation.chatLotteryReceiptIds=Array.isArray(state.automation.chatLotteryReceiptIds)?state.automation.chatLotteryReceiptIds:[];
+  if(state.automation.chatLotteryReceiptIds.includes(requestId))return{duplicate:true,changed:false};
+  const matches=state.lotteries.filter(item=>{
+   const itemTitle=tv2LotteryExactNormalize_(item.title||''),itemStore=tv2LotteryStoreNormalize_(item.store||''),itemOwner=tv2LotteryExactNormalize_(item.owner||'');
+   const titleMatch=itemTitle===wantedTitle||itemTitle.includes(wantedTitle)||wantedTitle.includes(itemTitle);
+   const storeMatch=itemStore===wantedStore||itemStore.includes(wantedStore)||wantedStore.includes(itemStore);
+   const ownerMatch=!wantedOwner||!itemOwner||itemOwner===wantedOwner;
+   return titleMatch&&storeMatch&&ownerMatch;
+  });
+  if(matches.length!==1)throw new Error(matches.length?'受取対象の抽選が複数一致しました':'受取対象の抽選が見つかりません');
+  const item=matches[0];
+  if(!['当選','購入済'].includes(String(item.status||''))&&item.receiptStatus!=='受取済み')throw new Error('当選済み以外の抽選を受取済みにできません');
+  const before=JSON.stringify(item);
+  item.status='購入済';item.receiptStatus='受取済み';item.receivedDate=receivedDate;item.updatedAt=new Date().toISOString();
+  state.automation.chatLotteryReceiptIds.push(requestId);
+  state.automation.chatLotteryReceiptIds=state.automation.chatLotteryReceiptIds.slice(-500);
+  return{duplicate:false,changed:JSON.stringify(item)!==before,lotteryId:String(item.id||''),status:item.status,receiptStatus:item.receiptStatus,receivedDate:item.receivedDate};
+ });
+}
 function runTv2Automation(){
-  tv2ResetGmailDraftCache_();tv2EnsureSimpleAutomationSchedule_(false);
-  let retail={skipped:true,reason:'gmail-quota-backoff'},commands=[];
-  let gmailSkipped=tv2GmailBackoffRemaining_()>0;
-  if(!gmailSkipped){try{retail=typeof tv2EnforceRetailPricePolicy_==='function'?tv2EnforceRetailPricePolicy_():{skipped:true,reason:'retail-policy-unavailable'}}
-    catch(error){if(!tv2GmailQuotaError_(error))throw error;const until=tv2SetGmailBackoff_();gmailSkipped=true;retail={ok:false,skipped:true,reason:'gmail-quota',retryAfter:new Date(until).toISOString()}}}
-  if(!gmailSkipped){try{commands=typeof tv2ProcessChatTradeDrafts_==='function'?tv2ProcessChatTradeDrafts_():[]}
-    catch(error){if(!tv2GmailQuotaError_(error))throw error;const until=tv2SetGmailBackoff_();gmailSkipped=true;commands={ok:false,skipped:true,reason:'gmail-quota',retryAfter:new Date(until).toISOString()}}}
+  tv2EnsureSimpleAutomationSchedule_(false);
+  const commands=tv2ProcessSheetCommandQueue_();
   const hour=Number(Utilities.formatDate(new Date(),TZ,'H')),minute=Number(Utilities.formatDate(new Date(),TZ,'m'));let market={skipped:true,reason:'before-13:30'};
   if(hour>13||(hour===13&&minute>=30))market=runTv2MarketAuto({skipQueue:true,scheduled:true,skipScheduleEnsure:true});
   else{const loaded=tv2Load_(),health=loaded&&loaded.payload&&loaded.payload.automation&&loaded.payload.automation.health||{};if(String(health.marketPolicyVersion||'')!=='cardrush-toretoku-v6')market=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true})}
-  return{ok:!gmailSkipped,retail,commands,market}
+  return{ok:Boolean(commands&&commands.ok),commands,market}
 }
 function runTv2LotteryGmailCheck(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true})}
 function runTv2LotteryResultCheck1230(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
 function runTv2LotteryResultCheck1900(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
 function tv2RunGmailWithBackoff_(options){
-  tv2ResetGmailDraftCache_();if(tv2GmailBackoffRemaining_()>0)return tv2GmailBackoffResult_('gmail-quota-backoff');
-  try{return runTv2LotteryAuto(options)}catch(error){if(!tv2GmailQuotaError_(error))throw error;tv2SetGmailBackoff_();return tv2GmailBackoffResult_('gmail-quota')}
+  tv2ResetGmailDraftCache_();
+  if(tv2GmailBackoffRemaining_()>0)return tv2GmailBackoffResult_('gmail-quota-backoff');
+  try{
+    const lottery=runTv2LotteryAuto(options);
+    if(options&&options.resultOnly)return lottery;
+    const retail=typeof tv2EnforceRetailPricePolicy_==='function'?tv2EnforceRetailPricePolicy_():{skipped:true,reason:'retail-policy-unavailable'};
+    return{ok:true,lottery,retail};
+  }catch(error){
+    if(!tv2GmailQuotaError_(error))throw error;
+    tv2SetGmailBackoff_();
+    return tv2GmailBackoffResult_('gmail-quota');
+  }
 }
 function runTv2LotteryAuto(options){
   if(!(options&&options.skipScheduleEnsure))tv2EnsureSimpleAutomationSchedule_(false);
