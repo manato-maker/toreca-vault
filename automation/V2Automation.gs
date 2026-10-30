@@ -80,13 +80,13 @@ function runTv2Automation(){
   else{const loaded=tv2Load_(),health=loaded&&loaded.payload&&loaded.payload.automation&&loaded.payload.automation.health||{};if(String(health.marketPolicyVersion||'')!=='cardrush-toretoku-v6')market=runTv2MarketAuto({skipQueue:true,singleOnly:true,skipScheduleEnsure:true})}
   return{ok:!gmailSkipped,retail,commands,market}
 }
+function runTv2LotteryGmailCheck(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true})}
+function runTv2LotteryResultCheck1230(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
+function runTv2LotteryResultCheck1900(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
 function tv2RunGmailWithBackoff_(options){
   tv2ResetGmailDraftCache_();if(tv2GmailBackoffRemaining_()>0)return tv2GmailBackoffResult_('gmail-quota-backoff');
   try{return runTv2LotteryAuto(options)}catch(error){if(!tv2GmailQuotaError_(error))throw error;tv2SetGmailBackoff_();return tv2GmailBackoffResult_('gmail-quota')}
 }
-function runTv2LotteryGmailCheck(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true})}
-function runTv2LotteryResultCheck1230(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
-function runTv2LotteryResultCheck1900(){return tv2RunGmailWithBackoff_({skipScheduleEnsure:true,resultOnly:true})}
 function runTv2LotteryAuto(options){
   if(!(options&&options.skipScheduleEnsure))tv2EnsureSimpleAutomationSchedule_(false);
   const resultOnly=Boolean(options&&options.resultOnly),cursorProps=PropertiesService.getScriptProperties();
