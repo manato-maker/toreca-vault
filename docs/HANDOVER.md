@@ -321,3 +321,10 @@
 - PR #95 の最終head f55cbe822df924200f25a01ca9525afdfc45ef1c に対するCI #40712168384 success。PRをsquash mergeし、main merge SHAは 9d5a317eca88b418c73b000b867596c85af281b3。
 - 10/30 19:58 JSTのmarket refreshはfunction_not_foundと報告あり。mainのworkflowは定時/デプロイ後に runTv2MarketRefreshNowOnce、手動起動時に runTv2MarketScheduledOnce を選択し、どちらもmainソース内に定義がある。該当run IDと失敗jobログは未取得のため原因は確定していない。Actions/Apps Scriptへの再配布・V2相場更新・canonical再読込も未確認。
 - 次: main merge後のApps Script deploy workflowと10/30 market refresh runをGitHub Actions画面/APIで特定。remote source一致、専用API deploy、tv2AutomationStatus、トリガー、Gmail quotaと重複防止、market結果、V2 canonical revisionを個別に確認し、Google Docsと本ファイルを再更新する。
+
+
+### 2026-10-30 — Apps Script配布成功・相場更新function_not_found追跡中
+- main merge `9d5a317eca88b418c73b000b867596c85af281b3` のApps Script Automation Deploy run `41055517447` はtest/deploy両job success。
+- 相場更新run `41055622315`（21:28 JST、workflow_run trigger）のjob `refresh` は失敗。workflow実行はmain commit `849eaa6...` をcheckoutし、Apps Script呼び出しstepで `category=function_not_found`。実行レスポンス自体はprivate情報保護で抑制されている。workflowは `runTv2MarketRefreshNowOnce` を指定。コード上の関数存在だけではGoogle側デプロイ版への反映を証明できない。runを一度再実行したが、再実行結果は確認待ち。
+- 同日のScheduled run `41044554229` も失敗表示を確認。job log未取得。初回の18:58 JST頃のrun IDとして報告されていた対象は `41044554229` の可能性があるが時刻と番号を画面で再確認する。
+- API source push/remote verify/test/deploy jobのsuccessは確認できた一方、専用API実行可能性・market handler実行・canonical V2更新は未証明。Apps Script UI履歴版数の削除後再読込、API deployment一覧、successful execution log、trigger execution、V2 JSON/revision/quotesの照合を続ける。
