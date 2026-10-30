@@ -185,10 +185,10 @@ function runTv2ChatOpenPacks(command){
   if(sourceIds.length){const preferred=lots.filter(l=>sourceIds.includes(String(l.requestId||'')));if(preferred.length)lots=preferred}
   if(lots.length!==1)throw new Error(lots.length?'開封対象パック在庫が複数あるため特定できません':'V2正本に開封対象パック在庫がありません');
   const lot=lots[0];if(Number(lot.quantity)<quantity)throw new Error('開封数がV2正本のパック在庫を超えています');
-  const info=tv2RetailPriceInfo_(product,'パック',quantity),unit=info?info.price:Number(lot.unitCost),cost=Number.isFinite(unit)?unit*quantity:null;
+  const unit=Number(lot.unitCost),cost=Number.isFinite(unit)?unit*quantity:null;
   lot.quantity=Number(lot.quantity)-quantity;state.inventoryLots=state.inventoryLots.filter(l=>Number(l.quantity)>0);
   const tx={id:openingId,type:'opening',product,productKey:product,category:'パック',condition:'開封済み',quantity,price:0,total:0,date,store:String(lot.store||store),source:'chat',requestId,memo,acquisitionCost:cost};
-  if(info){tx.acquisitionCostBasis='希望小売価格';tx.retailPriceSource=info.source}
+  tx.acquisitionCostBasis='購入履歴のみ保持';
   state.transactions.push(tx);
   return{changed:true,duplicate:false,openingId,quantity,acquisitionCost:cost};
  });
