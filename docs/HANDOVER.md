@@ -397,3 +397,15 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - PR #100で市場価格取得の旧パーサー（fetchCardValueBuyback_ / fetchGamepediaBuyback_ / fetchToresiaBuyback_）削除を提案したが、CI #41068648592 が test/v2-market-card-auto.test.js の直接参照で失敗。テスト契約が残るため削除しない。
 - PR #100は未マージでクローズ。作業ブランチの automation/Code.gs は main と同一blob SHA 914e4950ccc3d97e36e4bf9177cc0eb033e83c8e に復元済み。Apps Scriptへのコード配布・本番変更はなし。
 - 他の未参照候補にも手動実行/API入口・移行/修復処理が含まれ、影響ゼロを証明できないため削除せず。コード整理は今回未実施。
+
+## 2026-10-31 — PR #101分離配布・API再診断（Google認可待ち）
+
+- PR #101をsquash merge。main SHA `f3f81c9850badfa189086ac83f16269e3f931b1f`。ローカル `npm test` は241件成功。Apps Script Deploy Action `41088210600` はtest/deploy success。`clasp push` 後の Google 側 source pull/比較も成功し、専用 private API deployment を更新した。
+- 実装: 15分 `runTv2Automation` はSheets command queueのみを処理し、Gmail pollやGmail依存処理から分離。Gmail確認は30分、結果重点確認は12:30/19:00 JST、相場は13:30以降1日1回。既存4トリガーを配布時点では手作業で変更していない。15分・30分はApps Script実行履歴の次回成功ログで確認する。
+- Google Sheets queue (`Toreca Vault V2 Command Queue`) はID/tab/headersを確認し、データ行なし（空）を読み取り確認。本番コマンドやテスト記録は投入していない。パック開封原価は元inventory lotのunitCostを使い、希望小売価格で原価を上書きしない。
+- 15分runnerの手動実行時、Googleは `Toreca Vault 抽選自動化` を「Googleで確認されていないアプリ」と警告。許可/スコープ画面へ進まず停止した。したがってSpreadsheet認可と本番queue readerの実行成功は未確認。認可がなければqueue処理はまだ有効化されたと扱わない。
+- 配布後のmarket workflow run `41088349811` は `runTv2MarketRefreshNowOnce` 呼出しで再び `function_not_found`。Google側source比較とdeployment更新成功では解決しなかった。既知のscripts.run HTTP 403 authorization / Apps Script GCP `Default` と整合する疑いがあるが、今回runの生レスポンスは伏せられており原因は未確定。API再実行・相場更新・canonical read-backは未成功。
+- Apps Script UIでのread-only `tv2AutomationStatus()` 成功ログは配布前の2026-10-31 01:11 JST。配布後の15分/30分実行履歴、Gmailの quota backoff/メール重複防止、相場の成功・失敗内訳、V2 JSON/revision/原価/在庫/資産は未確認。直前に表示された既存15分runner（01:01）とGmail runner（01:10）は「完了」だが、新sourceの実行ではない。
+- 旧Apps Script保存版は配布前199/200、稼働deployment参照版は保護対象。今回の配布後版数と参照版はUI再読込未確認。版削除は実施していない。trigger以外のScript Properties/認証情報、抽選履歴、購入履歴、在庫は意図的に変更していない。
+- 通常Chatの運用設計は、報告を既存の安全なコマンド経路でSheets queueへ登録し、15分Apps Scriptが処理する方式。今回の配布だけで通常Chatからqueueへの投入・本番登録が確認できたわけではない。ユーザーのチャット報告から実際のqueue投入が可能な接続/認可を確立し、受取の購入履歴反映も重複なしで確認するまで運用完成とはしない。コマンド下書きは送信しない。
+- 次: Google未確認アプリ警告をユーザーがどう扱うか確認後、必要ならスコープを確認して認可し、空queueの `runTv2Automation` を実行して成功ログを確認。既存default Cloud projectからstandardへの切替は不可逆警告があり、IAM/API設定を照合するまで変更しない。V2 JSONを正本から再読込しrevision・購入原価・在庫数量・資産集計をread-only照合し、market APIの実行可否を再診断する。
