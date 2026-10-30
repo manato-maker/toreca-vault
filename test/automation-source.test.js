@@ -64,6 +64,12 @@ test('sheet queue commands use stable request ids and safely cover chat operatio
   assert.match(s,/chatLotteryReceiptIds/);
   assert.match(s,/V2正本に開封対象パック在庫がありません/);
   assert.match(s,/受取対象の抽選が複数一致しました/);
+  const start=s.indexOf('function runTv2ChatOpenPacks(command)');
+  const end=s.indexOf('function runTv2ChatLotteryResultExact(command)',start);
+  const opening=s.slice(start,end);
+  assert.match(opening,/const unit=Number\(lot\.unitCost\),cost=Number\.isFinite\(unit\)\?unit\*quantity:null/);
+  assert.doesNotMatch(opening,/tv2RetailPriceInfo_/);
+  assert.match(opening,/acquisitionCostBasis='購入履歴のみ保持'/);
 });
 
 test('Gmail draft queue uses one shared draft snapshot per Apps Script execution',async()=>{
