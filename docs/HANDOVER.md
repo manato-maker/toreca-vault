@@ -345,3 +345,11 @@
 - Actionsのlist-versions/list-deploymentsは成功する一方、scripts.runだけが403。専用API executable 1件・deployment version有り。版数199/200。アプリコードの関数不存在と断定しない。
 - 次: Apps Script Project Settingsで現在関連付けられたstandard Cloud projectを読み取り確認し、GitHub OAuth clientが所属するCloud projectと照合する。変更は既存GCP project関連付け・OAuth client/secret・API設定への影響を調査後に行う。現在のクラウドブラウザはGoogleログアウト状態で、UI確認にはGoogleアカウントの再ログインが必要。アカウント認証・project選択はユーザー対応待ち。
 - 403が出たため、Actions経由のmarket更新・asset runnerはAPI呼出しが拒否される。V2 quote/revision/原価/在庫は正本再読込で確認する。既存trigger/Script Properties/V2データは意図的に変更していない。
+
+### 2026-10-30 — OAuth project照合・Gmail quota再診断
+- PR #98をCI成功後にmerge（SHA `b9b203ff41d1e9047f64691e4a94a9d76d8d955b`）。read-only Actions #41060523449がGitHub Actions OAuth client Cloud Project number `1072944905499` を取得。client ID・secret・access token・refresh tokenはログに出していない。
+- Apps Script UI「プロジェクトの設定」はGCP Default。read-only scripts.runは403。Google公式要件は呼出側とスクリプト側が同じstandard Cloud projectを共有すること。Cloud ConsoleはブラウザでSite Unavailableとなり、OAuth projectのIAM・Apps Script API・Drive API有効状態をまだ検証できない。
+- Apps Scriptのプロジェクト切替フォームは、DefaultからStandardへの変更で旧プロジェクトの全ユーザー認証を取り消し、Defaultへ戻せず、Advanced Services API再有効化が必要と警告。Project number `1072944905499` の所有・編集権限と必要APIを確認してから変更する。切替は不可逆設定のため、実行直前に利用者確認を取る。現時点でフォームへ入力・Set projectは未実行。
+- 2026-10-30 22:08 JSTにUIからread-only `tv2AutomationStatus()` を手動実行し、Apps Script実行ログ「実行完了」を確認。V2読み書きなし。直近の15分runnerは22:01 JST、30分Gmail pollは21:40 JSTに `Service invoked too many times for one day: gmail` で失敗。各トリガーは1件で重複なし：15分command queue、30分Gmail、12:30/19:00 JST結果check。両稼働runnerの直近表示エラー率100%。
+- PR #99: Gmail draft message/subject/bodyの実行内キャッシュ、Gmail日次quota時の6時間CacheService backoff、backoff中にGmail処理をskipして独立market処理を継続する修正とテスト。Gmail cursorはquota失敗時に進めない。draft送信・削除・再作成、既存Script Propertiesやtrigger変更なし。PR/CI/配布/本番再検証は未完了。
+- V2正本JSON/revision/購入原価/在庫/抽選履歴/資産集計、相場quotes、Gmail重複防止の実データ確認は未完了。テスト用V2レコードやコマンドは投入していない。PR #99配布後にApps Script実行ログとcanonical readbackで検証する。

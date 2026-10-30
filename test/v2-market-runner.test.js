@@ -42,6 +42,8 @@ function setup(drafts = [], fail = false) {
     tv2GetDrafts_: () => drafts,
     tv2CreateDraft_: (to, subject, body) => createdDrafts.push({ to, subject, body }),
     tv2DeleteDraft_: draft => draft.deleteDraft(),
+    tv2DraftSubject_: draft => draft.getMessage().getSubject(),
+    tv2DraftPlainBody_: draft => draft.getMessage().getPlainBody(),
     Session: { getEffectiveUser: () => ({ getEmail: () => 'owner@example.test' }) },
     normalize_: value => String(value || '').toLowerCase()
   });
