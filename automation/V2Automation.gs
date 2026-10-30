@@ -74,6 +74,16 @@ const TV2_COMMAND_QUEUE_BATCH_SIZE_=5;
 const TV2_COMMAND_QUEUE_STALE_MS_=30*60*1000;
 const TV2_COMMAND_QUEUE_ALLOWED_TYPES_=['purchase','sale','lottery','lottery-bulk','open-packs','lottery-result-exact','lottery-receipt','pokemoncenter-spouse-result','repair-receipt-sale'];
 
+function tv2AuthorizeCommandQueue(){
+ const spreadsheet=SpreadsheetApp.openById(TV2_COMMAND_QUEUE_SHEET_ID_);
+ const sheet=spreadsheet.getSheetByName(TV2_COMMAND_QUEUE_TAB_);
+ if(!sheet)throw new Error('Toreca Vault command queue sheet/tab not found');
+ const headers=sheet.getRange(1,1,1,8).getValues()[0].map(x=>String(x||'').trim());
+ const expected=['requestId','payloadJson','status','attempts','createdAt','processedAt','result','error'];
+ if(JSON.stringify(headers)!==JSON.stringify(expected))throw new Error('Toreca Vault command queue headers do not match');
+ return{ok:true,readOnly:true,spreadsheet:spreadsheet.getName(),tab:TV2_COMMAND_QUEUE_TAB_};
+}
+
 function tv2DispatchQueuedCommand_(command){
  const type=String(command&&command.type||'');
  if(!TV2_COMMAND_QUEUE_ALLOWED_TYPES_.includes(type))throw new Error('command type is not enabled for the Sheets queue');
