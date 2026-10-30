@@ -44,7 +44,7 @@ test('Gmail daily quota activates bounded backoff and skips later polls',()=>{
  assert.equal(first.reason,'gmail-quota');
  assert.equal(second.reason,'gmail-quota-backoff');
  assert.equal(calls,1);
- assert.ok(Number(first.retryAfter)>Date.now());
+ assert.ok(Date.parse(first.retryAfter)>Date.now());
 });
 
 test('quota errors are recognized without logging their original message',()=>{
