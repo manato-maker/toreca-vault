@@ -391,3 +391,9 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 
 
 追記：通常のV2同期経路を読み取りだけで確認するためDriveコネクタから正本ファイルを取得したが404となり、canonical JSON再読込はできなかった（別アカウント/共有権限/ID照合のいずれかは未特定）。ファイルへの書込み・変更はなし。
+
+## 2026-10-30 — 未使用コード整理の安全性監査
+
+- PR #100で市場価格取得の旧パーサー（fetchCardValueBuyback_ / fetchGamepediaBuyback_ / fetchToresiaBuyback_）削除を提案したが、CI #41068648592 が test/v2-market-card-auto.test.js の直接参照で失敗。テスト契約が残るため削除しない。
+- PR #100は未マージでクローズ。作業ブランチの automation/Code.gs は main と同一blob SHA 914e4950ccc3d97e36e4bf9177cc0eb033e83c8e に復元済み。Apps Scriptへのコード配布・本番変更はなし。
+- 他の未参照候補にも手動実行/API入口・移行/修復処理が含まれ、影響ゼロを証明できないため削除せず。コード整理は今回未実施。
