@@ -38,9 +38,9 @@ test('15-minute command queue is isolated from Gmail and lottery polling',async(
   const s=await read('automation/V2Automation.gs');
   const queue=s.slice(s.indexOf('function runTv2Automation(){'),s.indexOf('function runTv2LotteryGmailCheck(){'));
   const gmail=s.slice(s.indexOf('function tv2RunGmailWithBackoff_(options){'),s.indexOf('function runTv2LotteryAuto(options){'));
-  assert.match(queue,/tv2ProcessSheetCommandQueue_\\(\\)/);
+  assert.ok(queue.includes('tv2ProcessSheetCommandQueue_()'));
   assert.doesNotMatch(queue,/GmailApp|tv2GetDrafts_|tv2ProcessChatTradeDrafts_|runTv2LotteryAuto/);
-  assert.match(gmail,/runTv2LotteryAuto\\(options\\)/);
+  assert.ok(gmail.includes('runTv2LotteryAuto(options)'));
   assert.match(gmail,/tv2EnforceRetailPricePolicy_/);
   assert.match(gmail,/resultOnly/);
 });
@@ -49,17 +49,17 @@ test('queue authorization check is read-only and validates the exact queue heade
   const start=s.indexOf('function tv2AuthorizeCommandQueue()');
   const end=s.indexOf('function tv2DispatchQueuedCommand_',start);
   const check=s.slice(start,end);
-  assert.match(check,/SpreadsheetApp\\.openById/);
+  assert.ok(check.includes('SpreadsheetApp.openById'));
   assert.match(check,/readOnly:true/);
   assert.match(check,/queue headers do not match/);
   assert.doesNotMatch(check,/setValues|appendRow|deleteRow|deleteSheet|tv2Mutate_/);
 });
 test('sheet queue commands use stable request ids and safely cover chat operations',async()=>{
   const s=await read('automation/V2Automation.gs');
-  assert.match(s,/function tv2ProcessSheetCommandQueue_\\(\\)/);
-  assert.match(s,/function runTv2ChatOpenPacks\\(command\\)/);
-  assert.match(s,/function runTv2ChatLotteryResultExact\\(command\\)/);
-  assert.match(s,/function runTv2ChatLotteryReceipt\\(command\\)/);
+  assert.ok(s.includes('function tv2ProcessSheetCommandQueue_()'));
+  assert.ok(s.includes('function runTv2ChatOpenPacks(command)'));
+  assert.ok(s.includes('function runTv2ChatLotteryResultExact(command)'));
+  assert.ok(s.includes('function runTv2ChatLotteryReceipt(command)'));
   assert.match(s,/chatLotteryResultIds/);
   assert.match(s,/chatLotteryReceiptIds/);
   assert.match(s,/V2正本に開封対象パック在庫がありません/);
