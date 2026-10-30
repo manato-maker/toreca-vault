@@ -30,6 +30,18 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           chmod 600 ~/.clasprc.json
           printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Identify OAuth client Cloud project without exposing credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          node <<'NODE'
+          const store = JSON.parse(process.env.CLASPRC_JSON);
+          const saved = store.tokens?.default || store.token || {};
+          const clientId = saved.client_id || store.oauth2ClientSettings?.clientId || '';
+          const match = /^(\\d+)-/.exec(String(clientId));
+          if (!match) throw new Error('OAuth client project number unavailable; credential values were not emitted.');
+          console.log('OAuth client Cloud project number: ' + match[1]);
+          NODE
       - name: Read-only version and deployment inventory
         shell: bash
         run: |
