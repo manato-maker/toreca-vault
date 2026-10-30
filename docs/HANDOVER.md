@@ -314,3 +314,10 @@
 - PR #95 のhead 4623c4705d733c28a4ffed233db00d9db6a0ffb7 に対するCI run 40708710877 / 40708701790 は両方success。PRはopen、main未反映、本番未配布。
 - Gmail quota対策と15分command・30分Gmail・12:30/19:00結果確認・13:30以降日次相場のコード変更はまだ本番未反映。Apps Script成功ログ、専用API、実行権限、Gmail重複処理、相場更新、V2最新revision/JSONは未検証。
 - 削除確認が得られた場合のみ選択したv1/v5/v6を削除し、Actions配布と本番検証に進む。削除前の確認を飛ばさない。
+
+
+### 2026-10-30 — 承認済み旧版整理・PR #95 main反映
+- Apps Scriptの一括削除確認画面で本人承認を受け、非稼働スナップショット v1（2026-09-19）、v5（2026-09-24）、v6（2026-09-24）だけを削除。UIは「3個のバージョンを削除しました」と確認。稼働デプロイ使用版 v199/v95/v4/v3/v2 は削除対象外。版数の再読込は未確認。
+- PR #95 の最終head f55cbe822df924200f25a01ca9525afdfc45ef1c に対するCI #40712168384 success。PRをsquash mergeし、main merge SHAは 9d5a317eca88b418c73b000b867596c85af281b3。
+- 10/30 19:58 JSTのmarket refreshはfunction_not_foundと報告あり。mainのworkflowは定時/デプロイ後に runTv2MarketRefreshNowOnce、手動起動時に runTv2MarketScheduledOnce を選択し、どちらもmainソース内に定義がある。該当run IDと失敗jobログは未取得のため原因は確定していない。Actions/Apps Scriptへの再配布・V2相場更新・canonical再読込も未確認。
+- 次: main merge後のApps Script deploy workflowと10/30 market refresh runをGitHub Actions画面/APIで特定。remote source一致、専用API deploy、tv2AutomationStatus、トリガー、Gmail quotaと重複防止、market結果、V2 canonical revisionを個別に確認し、Google Docsと本ファイルを再更新する。
