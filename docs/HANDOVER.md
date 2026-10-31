@@ -420,3 +420,11 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - Apps ScriptのEditor UIから追加権限を確認しようとしたが、Google UIが「ページを再読み込みして、もう一度お試しください」のエラー状態となり、OAuth scope画面には到達せず。デプロイ済みmanifestにoauthScopesの明示指定はない。シート限定のscopeであることを確認・承認していない。
 - GitHub docs/HANDOVER.md / Google Docにもこの実行結果と認可/UI障害を記録。既存在庫、購入原価、抽選履歴、trigger、Script Properties、デプロイ、Google認証情報の変更・削除なし。
 - 未解決: Apps Script API scripts.run / market refreshの function_not_found。15分/30分処理の完了状態は見えたが、V2正本JSONの再読込、revision、在庫数量、購入原価、資産集計、quotesのfreshnessは未検証。Google Cloud project変更はDefaultからStandardへの不可逆変更と既存認証失効の可能性があるため未実施。
+
+## 2026-10-31 V2在庫相違の読取監査（Issue #102）
+ユーザーから「現在の在庫が違う」と報告あり。GitHub issue: https://github.com/manato-maker/toreca-vault/issues/102 。最新のV2 canonical JSONと画面表示のrevisionは、現在の接続権限では取得できていない。Google Drive上の旧schemaVersion=1 JSON（10/5更新）をV2正本と取り違えない。
+- 最後のprivate market audit（10/26, V2 revision 2205）では30th CELEBRATION 9種セット未開封5個：ジョーシン上牧1、エディオン橿原2、ポケセンオンライン本人1、妻1。新しい在庫の確定値ではない。
+- 2026/10/21のユーザー報告「9種セットを1セット開封」およびミュウツーex FUR M6a 134/103、ゲッコウガex SAR M6a 125/103、ホゲータex SAR M6a 124/103、カスミ M6a 138/103の4枚は、現存V2の開封取引・派生カード在庫を未照合。もし5個のうち1個を開封したなら未開封4個となるが、開封元lot不明につき無断減算しない。
+- 2026/10/16に購入報告のカードボックス日本橋30th拡張パック1BOX(7,200円)は、10/26の未開封lot14件の一覧に見えない。開封/売却/購入未登録の可能性を切り分けるまで新規追加しない。
+- 10/18ジョーシン大和高田のバラパック10は全開封済み。パック購入履歴維持、獲得シングルの原価0（ジラーチex M6a132/103・ゲンガー M6a150/103）、トイザらスの開封済みランダムセットは未開封として戻さない。193の10/31抽選応募は購入ではなく在庫加算しない。
+- 対応: まず最新V2 JSONのrevision、inventoryLots、transactions、openings、salesをread-onlyで取得。現物・画面表示と照合し、欠落や重複を特定。修正するならexpectedRevision/冪等キーで最小変更し保存後canonical再読込と数量・原価・資産・購入履歴不変を検証。確認できない限り在庫修正完了と報告しない。
