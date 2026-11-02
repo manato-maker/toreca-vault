@@ -31,6 +31,18 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           chmod 600 ~/.clasprc.json
           printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Classify configured script target (never print ID)
+        shell: bash
+        env:
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          set -euo pipefail
+          target_hash="$(printf '%s' "$TV2_SCRIPT_ID" | sha256sum | cut -d' ' -f1)"
+          case "$target_hash" in
+            b0e31036cbc9d8c9610b7ee97fe04218df6abaceaa343a533e42d1f937dd3545) echo 'Target: automation project.' ;;
+            c2e4dc8d16d7a893f9031e7e1574bf92e11a645317a86fb21a1fcfa312ed4771) echo 'Target: separate V2 API project (tv2AutomationStatus is not expected there).' ;;
+            *) echo 'Target: another project (ID withheld).' ;;
+          esac
       - name: Read-only probe before trigger changes
         shell: bash
         run: |
