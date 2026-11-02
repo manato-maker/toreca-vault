@@ -494,3 +494,9 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - Read-only Drive fetch of the JSON file configured in the automation project's `TV_V2_DATA_FILE_ID` property returned a file named `toreca-vault-v2-staging.json`, revision 2410, 97 transactions, and 32 lots. It has no 2026-11-01 sale transactions; the MEGAドリームex lot remains quantity 2 at unit cost ¥5,500. Because the configured filename says “staging”, confirm canonical-file identity before treating this as canonical verification. Neither stock nor sales were manually changed.
 - Queue readback still shows eight sales pending with attempts=0 (plus the TCG193 lottery row). No sale records were re-submitted. Expected 11/1 gross ¥55,300 and profit ¥21,000 are not yet reflected in the read-back data.
 - Blockers before processing: determine why the Actions credential/target project resolves to a script without the callable function, verify Standard GCP project/API settings, and resolve the required OAuth scopes. Do not re-submit sales or grant the broad scopes without user approval. After the blocker is cleared, process only existing queue rows once and verify canonical revision, lots, transactions, and realized P&L.
+
+
+### 2026-11-02 — Actions target classification follow-up
+- PR #104 merged (3b01168f66466adbf97234bb2ce0d66764c9ab1e). Its diagnostic hashes `TV2_SCRIPT_ID` and prints only a label. Actions #41462078443 classified it as the `Toreca Vault 抽選自動化` project (ID itself withheld); it did not target the separate V2 API project.
+- The follow-up read-only API probe still failed `function_not_found`; trigger restoration/read-back were skipped. The editor source contains `tv2AutomationStatus`, and an active API executable deployment exists (selected version 204), so target-ID mismatch is ruled out. GCP is still `Default`; project alignment/deployment configuration remains unresolved.
+- No triggers, sales queue rows, inventory, or V2 transactions were modified by the follow-up Action.
