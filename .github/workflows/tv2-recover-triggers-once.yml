@@ -1,0 +1,81 @@
+name: Restore V2 command queue triggers once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tv2-recover-triggers-once.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toreca-vault-v2-trigger-recovery
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    environment: v2-apps-script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save @google/clasp
+      - name: Configure existing credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          TV2_SCRIPT_ID: ${{ secrets.TV2_SCRIPT_ID }}
+        run: |
+          test -n "$CLASPRC_JSON" && test -n "$TV2_SCRIPT_ID"
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          chmod 600 ~/.clasprc.json
+          printf '{"scriptId":"%s"}' "$TV2_SCRIPT_ID" > .clasp.json
+      - name: Read-only probe before trigger changes
+        shell: bash
+        run: |
+          set +e
+          out="$(npx clasp run tv2AutomationStatus --nondev --json 2>&1)"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] || ! printf '%s' "$out" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+            category=unknown
+            if printf '%s' "$out" | grep -Eiq 'unable to run script function|function.*not found|script function.*not found'; then
+              category=function_not_found
+            elif printf '%s' "$out" | grep -Eiq 'not_authorized|authorization|permission|insufficient'; then
+              category=authorization
+            elif printf '%s' "$out" | grep -Eiq 'not an API executable|API.*disabled'; then
+              category=api_executable_setup
+            fi
+            echo "API probe failed; category=$category; no triggers or V2 data changed."
+            exit 1
+          fi
+          echo 'Read-only Apps Script status completed successfully.'
+      - name: Restore managed 15m/30m triggers
+        shell: bash
+        run: |
+          set +e
+          out="$(npx clasp run installTv2Automation --nondev --json 2>&1)"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] || ! printf '%s' "$out" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+            echo 'Trigger restoration failed; output omitted to protect account data.'
+            exit 1
+          fi
+          echo 'Apps Script installTv2Automation returned ok:true.'
+      - name: Read-back trigger counts (no private identifiers)
+        shell: bash
+        run: |
+          set +e
+          out="$(npx clasp run tv2AutomationStatus --nondev --json 2>&1)"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] || ! printf '%s' "$out" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'; then
+            echo 'Could not confirm trigger read-back; no success reported.'
+            exit 1
+          fi
+          if ! printf '%s' "$out" | grep -Eq '"recurring"[[:space:]]*:[[:space:]]*1([^0-9]|$)' || ! printf '%s' "$out" | grep -Eq '"gmailPolls"[[:space:]]*:[[:space:]]*1([^0-9]|$)'; then
+            echo 'Trigger count verification failed. No further changes made.'
+            exit 1
+          fi
+          echo 'Verified: one V2 command trigger (15 minutes) and one Gmail polling trigger (30 minutes).'
