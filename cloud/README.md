@@ -31,6 +31,10 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 
 The first prototype stores the complete V2 snapshot in one Firestore document to preserve current client compatibility. Firestore documents have a 1 MiB limit; the adapter enforces a conservative 900,000-byte ceiling and fails closed. Before production, measure the canonical snapshot and either confirm ample headroom or normalize records into collections before migration.
 
+## Read-only migration inspection
+
+After the owner confirms the canonical source file, run `npm run report --prefix cloud -- /path/to/v2.json`. The command validates schema and IDs, reports counts/quantities, input bytes and SHA-256, and estimates Firestore document size. It omits product names, transaction IDs, email addresses, and other record details. It never writes to Firestore or changes the input file. Do not run it against the `staging`-named file as if it were canonical.
+
 ## Local verification
 
 ```sh

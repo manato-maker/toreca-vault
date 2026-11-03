@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test ../test/cloud-api.test.js ../test/cloud-firestore-store.test.js",
-    "check": "node --check src/server.js && node --check src/firestore-store.js"
+    "test": "node --test ../test/cloud-api.test.js ../test/cloud-firestore-store.test.js ../test/cloud-migration-report.test.js",
+    "check": "node --check src/server.js && node --check src/firestore-store.js && node --check src/migration-report.js && node --check scripts/report-snapshot.js",
+    "report": "node scripts/report-snapshot.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0"
