@@ -9,13 +9,17 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 - Bearer token comparison, exact-origin CORS, read-after-write verification, and a public health endpoint that reveals no data.
 - Empty Firestore is treated as **not initialized**. The service never creates an empty V2 dataset automatically.
 - Writes default to disabled. The service rejects every non-read request before it reaches Firestore unless a later, separately reviewed migration step explicitly enables them.
-- No Gmail, Sheets queue, Cloud Scheduler, or production migration is enabled in this slice.
+- Firestore-backed, create-once command queue accepts only the existing nine command types, verifies stable `requestId`, hashes canonical payloads to recognize exact retries, and rejects same-ID/different-payload collisions.
+- The authenticated `/api/v2` `enqueueCommand` action is disabled by default (`TV2_ENABLE_COMMAND_QUEUE=false`). When enabled it returns only status metadata; it does not run the command or send email.
+- No Gmail reader, Apps Script/Sheets bridge, Cloud Scheduler, or production migration is enabled in this slice.
 
 ## Schedule plan
 
 `src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key. `src/job-ledger.js` claims that key in a Firestore transaction, fences off stale workers with a per-claim token, and limits retries. `src/worker-dispatcher.js` runs each handler independently and stores only a safe error code, never Gmail content or a raw error message.
 
 The lease ledger cannot make an external Gmail/Sheets side effect exactly-once if a process crashes after the side effect but before marking completion. Every worker must also use message/request IDs and the V2 mutation ID guard. The dispatcher and ledger are implemented but have no production Firestore connection yet.
+
+`src/firestore-command-queue.js` persists pending command payloads so accepted commands can survive restarts and exact retries. Queue documents are hashed by request ID, bounded to 20 KB, and retain their payload for retry/audit; no TTL is configured. Production needs an explicit retention policy that preserves enough request-ID deduplication history before queue writes are enabled. Claim leases are fenced; the attempt cap moves an item to review. The queue API is not a command executor and has no legacy Apps Script handler wired to it yet.
 
 - Command queue: each 15-minute boundary.
 - Gmail lottery inbox scan: hourly from 09:00 through 23:00 JST.
@@ -28,7 +32,7 @@ Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL p
 
 ## Planned operations
 
-- Keep ChatGPT's current Google Sheets command queue as the input bridge until the ChatGPT mobile write connector is confirmed. The worker will read only the dedicated queue sheet every 15 minutes, claim request IDs, and update each row to `done`, `review`, or bounded retry state.
+- Keep ChatGPT's current Google Sheets command queue as the input bridge until a secure Chat ingress is confirmed. The new API queue is only a tested receiving boundary; no dual processing or production bridge is enabled. Do not point the current Sheets producer at it until an audited one-way adapter and cutover/rollback procedure exist.
 - Scan Gmail lottery messages separately once per hour from 09:00 through 23:00 JST, with additional focused scans at 12:30 and 19:00 JST. Use Gmail message IDs and overlapping checkpoints for deduplication and late delivery.
 - Run one Cloud Scheduler dispatcher every 15 minutes. It dispatches due queue, Gmail, result-check, and daily market jobs, so the schedule does not need separate Scheduler resources.
 - Keep price quotes with source, checked time, freshness, and outcome. Failed or ambiguous lookups preserve the last confirmed quote and record a stale/review state.
@@ -57,4 +61,4 @@ npm test --prefix cloud
 npm run check --prefix cloud
 ```
 
-Cloud Run deployment, Firestore creation/TTL configuration, OAuth consent, Gmail/Sheets access, and production cutover are intentionally outside this prototype.
+Cloud Run deployment, Firestore creation/TTL/retention configuration, OAuth consent, Gmail/Sheets access, legacy command execution, and production cutover are intentionally outside this prototype.
