@@ -90,3 +90,25 @@ The existing Sheets queue still contains eight pending sales and the TCG193 lott
 ## Handoff rule
 
 After every work turn, append the actual result, verified tests/CI, next scheduled work, and blockers to Google Docs `Toreca Vault Handoff (CURRENT)` and GitHub `docs/HANDOVER.md`. Also provide a dated portable handoff file. Never copy planned schedule values as if production automation were live.
+
+
+## Progress update — 2026-11-03 (idempotent command intake)
+
+Added a disabled-by-default authenticated command intake slice to PR #105:
+
+- POST /api/v2 action enqueueCommand with Firestore create-once documents keyed by SHA-256(requestId).
+- Existing nine Apps Script command types are allowlisted; request ID must match the payload. Payloads are canonicalized for exact duplicate detection; same ID with different contents is rejected as a collision.
+- Fenced queue claims, retry attempts capped at three, expired lease recovery, and review state after attempts are exhausted.
+- API does not execute commands; no worker is connected. Queue persistence is append-only for now; no TTL or retention configuration exists.
+- Runtime flag TV2_ENABLE_COMMAND_QUEUE=false by default. Cloud resources are still absent; no production records or pending queue rows were changed.
+- Local verification: 31 tests pass and syntax checks pass. No Firestore emulator or real API/auth execution has been verified.
+
+### Next work
+
+1. Add Firestore emulator integration tests for transaction create-once semantics and concurrent claims.
+2. Decide retention for command payloads and dedupe IDs; then implement redacted result/status polling for clients.
+3. Implement command handlers as pure domain transformations over the V2 schema. Validate purchase cost, sale inventory, open-pack removal, zero-cost acquired singles, lottery application evidence, revision, and mutation IDs before wiring persistence.
+4. Build the legacy Sheets bridge as read-only shadow first. Never let old Apps Script and new Cloud Run both execute a request.
+5. Verify canonical JSON source, export/hash/totals, isolated import and readback before any production cutover.
+
+Current state: PR #105 draft, no merge/deploy; existing Apps Script and V2 data remain authoritative.
