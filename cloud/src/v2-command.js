@@ -236,6 +236,85 @@ function applyLottery(state, command, requestId, mutationId, now) {
   return { state: next, duplicate: false, mutationId, lotteryIds: [id] };
 }
 
+function lotteryIdentity(item, command) {
+  const title = norm(command.title || command.product);
+  const store = norm(command.store);
+  const owner = norm(command.owner);
+  return norm(item.title) === title && norm(item.store) === store && (!owner || !norm(item.owner) || norm(item.owner) === owner);
+}
+
+function appendAutomationRequest(state, key, requestId, limit) {
+  state.automation = state.automation && typeof state.automation === 'object' ? state.automation : {};
+  state.automation[key] = Array.isArray(state.automation[key]) ? state.automation[key] : [];
+  state.automation[key].push(requestId);
+  state.automation[key] = state.automation[key].slice(-limit);
+}
+
+function applyLotteryResult(state, command, requestId, mutationId, now) {
+  const status = String(command.status || '');
+  const resultDate = commandDate(command, 'resultDate');
+  if (!['当選', '落選'].includes(status)) throw new TypeError('lottery result status must be 当選 or 落選');
+  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command)
+    && (!item.resultDate || String(item.resultDate).slice(0, 10) === resultDate));
+  if (matches.length !== 1) throw new Error(matches.length ? 'lottery result match is ambiguous' : 'lottery result target was not found');
+  const next = clone(state);
+  const item = next.lotteries.find((row) => row.id === matches[0].id);
+  if (status === '落選' && (item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('cannot mark a purchased or received lottery as lost');
+  item.status = status;
+  item.resultDate = resultDate;
+  if (status === '落選' && item.receiptStatus !== '受取済み') {
+    item.receiptStatus = '対象外';
+    item.receivedDate = '';
+  } else if (status === '当選' && !['未受取', '受取済み'].includes(String(item.receiptStatus || ''))) {
+    item.receiptStatus = '未受取';
+  }
+  const memo = String(command.memo || '').trim();
+  if (memo && !String(item.memo || '').includes(memo)) item.memo = [String(item.memo || '').trim(), memo].filter(Boolean).join('｜');
+  item.updatedAt = new Date(now).toISOString();
+  appendAutomationRequest(next, 'chatLotteryResultIds', requestId, 500);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, lotteryIds: [item.id] };
+}
+
+function applyLotteryReceipt(state, command, requestId, mutationId, now) {
+  const receivedDate = String(command.receivedDate || command.date || '');
+  if (!isoDate(receivedDate)) throw new TypeError('receivedDate must be a valid YYYY-MM-DD date');
+  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command));
+  if (matches.length !== 1) throw new Error(matches.length ? 'lottery receipt match is ambiguous' : 'lottery receipt target was not found');
+  const next = clone(state);
+  const item = next.lotteries.find((row) => row.id === matches[0].id);
+  if (!['当選', '購入済'].includes(String(item.status || '')) && item.receiptStatus !== '受取済み') throw new Error('only a winning lottery can be received');
+  item.status = '購入済';
+  item.receiptStatus = '受取済み';
+  item.receivedDate = receivedDate;
+  item.updatedAt = new Date(now).toISOString();
+  appendAutomationRequest(next, 'chatLotteryReceiptIds', requestId, 500);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, lotteryIds: [item.id] };
+}
+
+function applyLotteryBulk(state, command, requestId, mutationId, now) {
+  const dates = Array.isArray(command.resultDates) ? [...new Set(command.resultDates.map(String))] : [];
+  const status = String(command.status || '');
+  if (!dates.length || dates.some((date) => !isoDate(date)) || !['当選', '落選'].includes(status)) throw new TypeError('invalid lottery bulk fields');
+  const targets = state.lotteries.filter((item) => dates.includes(String(item.resultDate || '').slice(0, 10)));
+  if (!targets.length) throw new Error('lottery bulk targets were not found');
+  if (targets.some((item) => item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('bulk result includes a purchased or received lottery');
+  const next = clone(state);
+  let updated = 0;
+  for (const item of next.lotteries.filter((row) => targets.some((target) => target.id === row.id))) {
+    const before = JSON.stringify(item);
+    item.status = status;
+    if (status === '落選') { item.receiptStatus = '対象外'; item.receivedDate = ''; }
+    else if (item.receiptStatus !== '受取済み') item.receiptStatus = '未受取';
+    item.updatedAt = new Date(now).toISOString();
+    if (JSON.stringify(item) !== before) updated++;
+  }
+  appendAutomationRequest(next, 'chatLotteryBulkIds', requestId, 200);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, updated, matched: targets.length };
+}
+
 /** Pure V2 state transition for the first safe command set; it never performs I/O. */
 export function applyChatCommand(currentState, command, { now = Date.now() } = {}) {
   checkBase(currentState);
@@ -248,6 +327,9 @@ export function applyChatCommand(currentState, command, { now = Date.now() } = {
     case 'sale': return applySale(currentState, command, requestId, mutationId);
     case 'open-packs': return applyOpening(currentState, command, requestId, mutationId);
     case 'lottery': return applyLottery(currentState, command, requestId, mutationId, now);
+    case 'lottery-result-exact': return applyLotteryResult(currentState, command, requestId, mutationId, now);
+    case 'lottery-receipt': return applyLotteryReceipt(currentState, command, requestId, mutationId, now);
+    case 'lottery-bulk': return applyLotteryBulk(currentState, command, requestId, mutationId, now);
     default: throw new Error(`command type ${type || '(empty)'} is not implemented; manual review required`);
   }
 }
