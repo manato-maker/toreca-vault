@@ -81,6 +81,41 @@ test('screenshot lottery application creates a lottery row and no purchase or in
   assert.equal(state.inventoryLots.length, 0);
 });
 
+test('exact lottery result requires one unambiguous application and is idempotent', () => {
+  let state = run(emptyV2(), { type: 'lottery', requestId: 'lot-1', title: '商品A', store: '店舗A', status: '応募済', applicationDate: '2026-11-01', owner: '本人' }).state;
+  const result = run(state, { type: 'lottery-result-exact', requestId: 'result-1', title: '商品A', store: '店舗A', owner: '本人', status: '当選', resultDate: '2026-11-03' });
+  state = result.state;
+  assert.equal(state.lotteries[0].status, '当選');
+  assert.equal(state.lotteries[0].receiptStatus, '未受取');
+  assert.equal(state.transactions.length, 0);
+  assert.equal(run(state, { type: 'lottery-result-exact', requestId: 'result-1', title: '商品A', store: '店舗A', owner: '本人', status: '当選', resultDate: '2026-11-03' }).duplicate, true);
+});
+
+test('lottery receipt requires one win and does not create purchase or inventory', () => {
+  let state = run(emptyV2(), { type: 'lottery', requestId: 'lot-1', title: '商品A', store: '店舗A', status: '応募済', applicationDate: '2026-11-01', owner: '本人' }).state;
+  state = run(state, { type: 'lottery-result-exact', requestId: 'result-1', title: '商品A', store: '店舗A', owner: '本人', status: '当選', resultDate: '2026-11-03' }).state;
+  state = run(state, { type: 'lottery-receipt', requestId: 'receipt-1', title: '商品A', store: '店舗A', owner: '本人', receivedDate: '2026-11-04' }).state;
+  assert.equal(state.lotteries[0].status, '購入済');
+  assert.equal(state.lotteries[0].receiptStatus, '受取済み');
+  assert.equal(state.transactions.length, 0);
+  assert.equal(state.inventoryLots.length, 0);
+});
+
+test('lottery result and bulk updates fail closed around ambiguous or purchased rows', () => {
+  let state = run(emptyV2(), { type: 'lottery', requestId: 'lot-1', title: '商品A', store: '店舗A', status: '応募済', applicationDate: '2026-11-01', owner: '本人' }).state;
+  state = run(state, { type: 'lottery', requestId: 'lot-2', title: '商品A', store: '店舗A', status: '応募済', applicationDate: '2026-11-01', owner: '配偶者' }).state;
+  const before = structuredClone(state);
+  assert.throws(() => run(state, { type: 'lottery-result-exact', requestId: 'result-x', title: '商品A', store: '店舗A', status: '当選', resultDate: '2026-11-03' }), /ambiguous/);
+  assert.deepEqual(state, before);
+  state.lotteries[0].resultDate = '2026-11-03';
+  state.lotteries[1].resultDate = '2026-11-03';
+  state.lotteries[0].status = '購入済';
+  state.lotteries[0].receiptStatus = '受取済み';
+  const purchasedBefore = structuredClone(state);
+  assert.throws(() => run(state, { type: 'lottery-bulk', requestId: 'bulk-1', resultDates: ['2026-11-03'], status: '落選' }), /purchased or received/);
+  assert.deepEqual(state, purchasedBefore);
+});
+
 test('unknown command variants remain review-only and invalid payloads fail closed', () => {
   assert.throws(() => run(emptyV2(), { type: 'repair-receipt-sale', requestId: 'repair-1' }), /not implemented/);
   assert.throws(() => run(emptyV2(), { type: 'purchase', requestId: 'bad/../../id', product: 'x' }), /requestId/);
