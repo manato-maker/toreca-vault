@@ -13,6 +13,12 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 - The authenticated `/api/v2` `enqueueCommand` action is disabled by default (`TV2_ENABLE_COMMAND_QUEUE=false`). When enabled it returns only status metadata; it does not run the command or send email.
 - No Gmail reader, Apps Script/Sheets bridge, Cloud Scheduler, or production migration is enabled in this slice.
 
+## Command execution prototype
+
+`src/v2-command.js` contains pure state transitions for purchase, sale, pack opening, and lottery application. Purchases require the reported unit cost explicitly; a single reported as acquired by opening a box must have zero cost. Sales consume FIFO lots, require an unambiguous condition, and remove depleted lots. Pack opening keeps purchase transactions and removes sealed inventory. Screenshot lottery applications create lottery rows without purchases or inventory. All successful transitions increment one revision and append one mutation ID; the module performs no network or database I/O.
+
+`src/command-worker.js` claims one queued request, applies a pure transition, writes with revision CAS, checks the returned revision/mutation ID, and only then settles the lease. If the snapshot was saved but queue settlement was lost, retry observes the mutation ID and completes without another revision. Unknown command types and ambiguous/invalid data go to review. This worker is not attached to a scheduled runtime or the production queue. Exact result/receipt/bulk/spouse/repair handlers remain unimplemented and must not be enabled for automatic execution.
+
 ## Schedule plan
 
 `src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key. `src/job-ledger.js` claims that key in a Firestore transaction, fences off stale workers with a per-claim token, and limits retries. `src/worker-dispatcher.js` runs each handler independently and stores only a safe error code, never Gmail content or a raw error message.
