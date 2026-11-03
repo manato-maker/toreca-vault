@@ -1,0 +1,92 @@
+# Toreca Vault V2 — New System Design Handoff
+
+Updated: 2026-11-03 (JST)
+
+## Goal
+
+Use regular ChatGPT Chat as the daily entry point: the user reports purchases, receipt, opening, sales, lottery applications, and results in text or screenshots. The system turns confirmed reports into idempotent V2 updates. Use Work for code changes, review, and operational repair. Preserve the current V2 history and avoid duplicate purchases, sales, lottery records, or cost basis.
+
+## Proposed architecture
+
+```text
+Regular Chat / screenshot
+        ↓ structured command + stable requestId
+Existing Google Sheets command queue (transition bridge)
+        ↓ 15-minute worker
+Cloud Run Node.js service ── Firestore V2 canonical state
+        ↑ separate scheduled jobs
+Gmail lottery scanner / focused result checks / market refresh
+```
+
+The existing GitHub Pages UI remains available during migration. The Chat-to-queue connection is a transitional bridge; do not assume a direct Chat-to-Cloud API connector exists until verified.
+
+### Responsibilities
+
+1. **Chat intake**: interpret text and screenshots, derive a typed command, ask only when a key fact is ambiguous, and assign a stable `requestId`. A screenshot that clearly shows an application completion is evidence of an application; do not require a Gmail application email.
+2. **Command queue**: keep the existing Google Sheet as the only command queue during transition. Read and claim pending rows by `requestId`; never submit the same command to both Sheets and a new queue. Do not send `[Toreca Vault Command]` drafts.
+3. **Cloud Run API**: Node.js 22 service with V2 `schemaVersion: 2` compatibility. Validate commands, enforce expected revision and mutation ID, and read back the saved canonical state before reporting success.
+4. **Firestore**: initially store the whole V2 snapshot to preserve the existing client contract. Fail closed above 900,000 bytes. Measure the verified canonical export first; normalize into collections before migration if the size headroom is inadequate.
+5. **Workers**: separate the Sheets command worker from Gmail inbox scanning. The market job is independent of Gmail quota and failure.
+6. **Job execution**: one dispatcher runs every 15 minutes. Firestore job ledger claims stable job keys transactionally, uses lease tokens to fence stale workers, and limits attempts. Business-level `requestId`, Gmail message ID, and V2 `mutationId` remain mandatory because a crash after an external side effect cannot be made exactly-once by a lease alone.
+7. **Market data**: preserve source URL, checked time, freshness, and result state. Failed or ambiguous lookups keep the last confirmed price and mark it stale/review; never fill missing prices with guesses.
+
+## Planned schedule (not deployed)
+
+| Job | Planned schedule (JST) | Implementation rule |
+| --- | --- | --- |
+| V2 command queue | Every 15 minutes | Process only existing pending queue requests; bounded retry and idempotent mutation. |
+| Gmail lottery inbox scan | Hourly, 09:00–23:00 | Overlapping search/checkpoint for late mail; cap search range and results; deduplicate by message ID. |
+| Lottery-result focus | 12:30 and 19:00 | 12:30 is one focused scan. At 19:00 merge the focus flag into the hourly Gmail scan; do not schedule a second Gmail job. |
+| Market refresh | Once daily at 13:45 | First 15-minute tick after 13:30. Run once per JST date; preserve last good quote on failure. |
+
+These are desired target schedules, not current production triggers. The new schedule planner is unit-tested only; no Cloud Scheduler or worker is running.
+
+## Safety invariants
+
+- V2 canonical data remains authoritative. V1/local fallback is prohibited.
+- Never create a sale or purchase again to bypass a blocked worker. Existing queue rows are the only pending copy.
+- A purchase cost is counted once. Opened packs create singles at zero acquisition cost; retain the original pack purchase cost/history.
+- A sold item leaves available inventory. Opened packs/boxes do not remain sealed stock.
+- Lottery application evidence can come from user screenshots; purchase/inventory changes only after purchase/receipt.
+- Never send command drafts. Never delete a pending command before confirmed successful processing.
+- Keep Apps Script triggers and the old system intact during shadow comparison. Do not let old and new workers process the same queue simultaneously.
+- Report “queued”, “processed”, and “canonical readback verified” as separate states.
+
+## Implemented prototype in PR #105
+
+- Draft PR: [Start Cloud Run and Firestore migration foundation](https://github.com/manato-maker/toreca-vault/pull/105)
+- Branch: `build/cloudrun-firestore-foundation-20261103`
+- Latest PR head when this handoff was written: `a6db624413f096290d827cac7a2eff03426c2a12`
+- V2 snapshot HTTP adapter, Firestore compare-and-swap, revision validation, mutation ID duplicate guard, read-after-write verification, Bearer auth, exact-origin CORS.
+- Writes are disabled by default; missing Firestore state is not auto-created; snapshot writes fail closed above 900,000 bytes.
+- Read-only migration report emits aggregate counts, quantities, revision, hash, and size estimate without product names or transaction IDs.
+- Pure JST schedule planner, Firestore job ledger, and independent dispatcher are present. Ledger uses hashed job keys, per-claim lease tokens, bounded attempts, sanitized error codes, and a proposed `expireAt` field.
+- Local `npm test --prefix cloud`: 25 passed. `npm run check --prefix cloud`: passed. GitHub Actions [#41556918790](https://github.com/manato-maker/toreca-vault/actions/runs/41556918790): test and check passed.
+
+## Not implemented or verified
+
+- No Cloud Run or Firestore production resources were created or connected.
+- No live Gmail or Sheets worker, OAuth grant, Cloud Scheduler, or price-source refresh is connected.
+- The Firestore Emulator has not tested transaction races or lease expiry. The proposed 90-day TTL policy is not configured.
+- No canonical JSON migration, staging comparison, production cutover, or trigger change has occurred.
+- Apps Script API diagnosis previously returned `function_not_found`; this migration prototype does not fix that live issue.
+
+## Data and current blocker
+
+The latest previously readable V2 JSON is named `toreca-vault-v2-staging.json`, so its canonical identity is unconfirmed. A Drive search did not find another V2 JSON file. Do not import it as canonical until the configured production source is confirmed and a read-only backup/hash/count report is available.
+
+The existing Sheets queue still contains eight pending sales and the TCG193 lottery row. They have not been re-submitted or processed in this migration work. Do not replay them through a second worker.
+
+## Next implementation sequence
+
+1. Confirm the canonical source identity and read it without mutation. Record revision, hash, transaction/lottery counts, inventory quantities, purchase costs, asset totals, and size.
+2. Run lease, duplicate-key, concurrent-claim, retry, and TTL tests against an isolated Firestore Emulator/project.
+3. Verify the target Google Cloud project, billing/quota posture, service account access, and minimum OAuth scopes. Do not grant broad Gmail scopes merely to access Sheets.
+4. Implement a Sheets-only command worker and a Gmail read-only lottery worker as separate handlers. Gmail failures must not block the command queue or market refresh.
+5. Add tests for duplicate sales, insufficient inventory, opening, zero-cost singles, screenshot-backed lottery applications, late Gmail delivery, duplicate Gmail IDs, and failed/stale market quotes.
+6. Run a read-only migration dry run, then a staging shadow comparison. Keep existing Apps Script triggers unchanged until no duplicate processing is possible and owner acceptance is explicit.
+7. Only after explicit cutover acceptance, switch one input source at a time, verify V2 canonical readback and health logs, then decide whether legacy triggers can be retired.
+
+## Handoff rule
+
+After every work turn, append the actual result, verified tests/CI, next scheduled work, and blockers to Google Docs `Toreca Vault Handoff (CURRENT)` and GitHub `docs/HANDOVER.md`. Also provide a dated portable handoff file. Never copy planned schedule values as if production automation were live.
