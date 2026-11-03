@@ -500,3 +500,11 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - PR #104 merged (3b01168f66466adbf97234bb2ce0d66764c9ab1e). Its diagnostic hashes `TV2_SCRIPT_ID` and prints only a label. Actions #41462078443 classified it as the `Toreca Vault 抽選自動化` project (ID itself withheld); it did not target the separate V2 API project.
 - The follow-up read-only API probe still failed `function_not_found`; trigger restoration/read-back were skipped. The editor source contains `tv2AutomationStatus`, and an active API executable deployment exists (selected version 204), so target-ID mismatch is ruled out. GCP is still `Default`; project alignment/deployment configuration remains unresolved.
 - No triggers, sales queue rows, inventory, or V2 transactions were modified by the follow-up Action.
+
+
+### 2026-11-03 — Cloud Run / Firestore migration foundation (prototype)
+- Created branch `build/cloudrun-firestore-foundation-20261103` from main. Added an isolated Cloud Run V2 API adapter in `cloud/`, preserving schemaVersion 2, revision compare-and-swap, mutationId deduplication, bearer auth, strict CORS, and post-write canonical readback.
+- Writes default to disabled, empty Firestore is not auto-initialized, and a 900,000-byte document ceiling fails closed. The adapter is not deployed and contains no production credentials.
+- Added CI syntax checks and nine unit tests for read-only health, disabled writes, auth/CORS, revision conflicts, duplicate mutations, missing canonical state, and document-size safety. Local verification: `npm ci --prefix cloud`, `npm test --prefix cloud` (9 passed), `npm run check --prefix cloud` (passed).
+- No Cloud resources, Firestore documents, OAuth settings, Apps Script triggers, Sheets queue rows, Drive JSON, sales, or inventory were changed. The eight pending sales were not re-submitted or processed.
+- Next gates: verify the actual canonical data file (the latest read is explicitly named `toreca-vault-v2-staging.json`), add isolated migration/export and queue/Gmail workers, test with an emulator, and obtain Google auth/project access before any production cutover. No GCP integration or live-price runtime test has been performed yet.

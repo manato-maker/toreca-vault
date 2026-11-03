@@ -1,0 +1,172 @@
+import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import {
+  CanonicalNotInitialized,
+  RevisionConflict,
+  createFirestoreStore
+} from './firestore-store.js';
+
+const MAX_BODY_BYTES = 1_100_000;
+
+function parseOrigins(value) {
+  return new Set(String(value || '').split(',').map((origin) => origin.trim()).filter(Boolean));
+}
+
+function isAuthorized(request, expectedToken) {
+  const header = String(request.headers.authorization || '');
+  const provided = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!provided || !expectedToken) return false;
+  const left = Buffer.from(provided);
+  const right = Buffer.from(expectedToken);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function send(response, status, body, origin = '') {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    ...(origin ? {
+      'access-control-allow-origin': origin,
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'authorization, content-type',
+      'vary': 'Origin'
+    } : {})
+  });
+  response.end(JSON.stringify(body));
+}
+
+async function readBody(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw Object.assign(new Error('request body too large'), { statusCode: 413 });
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch {
+    throw Object.assign(new Error('invalid JSON body'), { statusCode: 400 });
+  }
+}
+
+function errorResponse(error) {
+  if (error instanceof RevisionConflict) {
+    return { status: 409, body: { ok: false, conflict: true, error: error.message, revision: error.currentRevision } };
+  }
+  if (error instanceof CanonicalNotInitialized) {
+    return { status: 503, body: { ok: false, error: 'canonical V2 state is not initialized' } };
+  }
+  if (error?.statusCode) return { status: error.statusCode, body: { ok: false, error: error.message } };
+  return { status: 400, body: { ok: false, error: error?.message || 'request failed' } };
+}
+
+export function createServer({ store, apiToken, allowedOrigins = new Set(), writesEnabled = false }) {
+  if (!store || typeof store.read !== 'function' || typeof store.save !== 'function') {
+    throw new TypeError('a V2 state store is required');
+  }
+  const origins = allowedOrigins instanceof Set ? allowedOrigins : parseOrigins(allowedOrigins);
+
+  return http.createServer(async (request, response) => {
+    const path = new URL(request.url || '/', 'http://localhost').pathname;
+    const requestOrigin = String(request.headers.origin || '');
+    const allowedOrigin = requestOrigin && origins.has(requestOrigin) ? requestOrigin : '';
+
+    if (request.method === 'OPTIONS') {
+      if (!allowedOrigin) return send(response, 403, { ok: false, error: 'origin not allowed' });
+      response.writeHead(204, {
+        'access-control-allow-origin': allowedOrigin,
+        'access-control-allow-methods': 'GET, POST, OPTIONS',
+        'access-control-allow-headers': 'authorization, content-type',
+        'access-control-max-age': '600',
+        'vary': 'Origin'
+      });
+      return response.end();
+    }
+
+    if (path === '/health' && request.method === 'GET') {
+      try {
+        const current = await store.read();
+        return send(response, 200, {
+          ok: true,
+          service: 'toreca-vault-v2-api',
+          canonicalInitialized: Boolean(current),
+          writesEnabled: Boolean(writesEnabled)
+        });
+      } catch {
+        return send(response, 503, {
+          ok: false,
+          service: 'toreca-vault-v2-api',
+          canonicalInitialized: false,
+          writesEnabled: Boolean(writesEnabled)
+        });
+      }
+    }
+
+    if (path !== '/api/v2' || !['GET', 'POST'].includes(request.method)) {
+      return send(response, 404, { ok: false, error: 'not found' }, allowedOrigin);
+    }
+    if (requestOrigin && !allowedOrigin) return send(response, 403, { ok: false, error: 'origin not allowed' });
+    if (!isAuthorized(request, apiToken)) return send(response, 401, { ok: false, error: 'unauthorized' }, allowedOrigin);
+
+    try {
+      if (request.method === 'GET') {
+        const current = await store.read();
+        if (!current) throw new CanonicalNotInitialized();
+        return send(response, 200, {
+          ok: true,
+          payload: current.payload,
+          revision: current.revision,
+          lastMutationId: current.lastMutationId
+        }, allowedOrigin);
+      }
+
+      const body = await readBody(request);
+      if (body.action === 'load') {
+        const current = await store.read();
+        if (!current) throw new CanonicalNotInitialized();
+        return send(response, 200, {
+          ok: true,
+          payload: current.payload,
+          revision: current.revision,
+          lastMutationId: current.lastMutationId
+        }, allowedOrigin);
+      }
+
+      if (!writesEnabled) {
+        return send(response, 423, { ok: false, error: 'writes are disabled until migration acceptance' }, allowedOrigin);
+      }
+
+      const saved = await store.save(body);
+      return send(response, 200, {
+        ok: true,
+        duplicate: saved.duplicate,
+        payload: saved.payload,
+        revision: saved.revision,
+        lastMutationId: saved.lastMutationId
+      }, allowedOrigin);
+    } catch (error) {
+      const result = errorResponse(error);
+      return send(response, result.status, result.body, allowedOrigin);
+    }
+  });
+}
+
+export async function start() {
+  const token = process.env.TV2_API_TOKEN || '';
+  if (token.length < 32) throw new Error('TV2_API_TOKEN must contain at least 32 characters');
+  const documentPath = process.env.TV2_FIRESTORE_DOCUMENT || 'torecaVaultV2/canonical';
+  const { Firestore } = await import('@google-cloud/firestore');
+  const firestore = new Firestore({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
+  const server = createServer({
+    store: createFirestoreStore(firestore, documentPath),
+    apiToken: token,
+    allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
+    writesEnabled: process.env.TV2_ENABLE_WRITES === 'true'
+  });
+  const port = Number(process.env.PORT) || 8080;
+  server.listen(port, '0.0.0.0', () => console.log(`Toreca Vault V2 API listening on ${port}`));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) start();

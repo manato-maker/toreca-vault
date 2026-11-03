@@ -58,3 +58,15 @@ Apps Script 側は薄いランナーで、GitHub の `automation/Code.gs` を取
 ## 安全な拡張方針
 
 外部入力は「取得 → 正規化 → 一致判定 → confidence/review → 保存」の順に分離します。新しいメール形式や価格ソースを追加しても、既存データを推測で上書きしない設計を優先します。商品画像認識を追加する場合は商品マスターへ公式名・カテゴリ・画像参照・識別情報を蓄積し、初見/低信頼だけ人間確認へ回します。
+
+
+## Cloud migration target (prototype, not production)
+
+2026-11-03から、Apps Scriptの版数上限を避けるためCloud Run＋Firestoreへの移行基盤を別ブランチで開発中。現行のApps Script / Drive JSON / Google Sheets Queueは稼働系として残し、現段階では置換・停止・データ移動を行わない。
+
+- `cloud/` はV2 `schemaVersion: 2` のスナップショット契約を保つCloud Run APIとFirestore compare-and-swap adapter。revision、mutationId、post-write再読込を維持する。
+- Firestoreの正本は明示的なread-only exportとdry-run照合が完了するまで初期化しない。書込みAPIも既定で無効。
+- 最新に取得できたデータファイルは `toreca-vault-v2-staging.json` と記載されているため、正本と確認できるまで移行対象にしない。
+- 初期移行では既存Google Sheets command queueを唯一の入力queueとして扱う。専用queueは15分ごと、抽選メール本文は9:00〜23:00 JSTに1時間ごと、追加結果確認は12:30/19:00、相場更新は毎日13:30以降に実行する設計。Gmail検索とSheets queue処理は別のworkerにする。
+- 本番切替は、canonical ID確認、データ件数/金額/在庫照合、重複防止、実データ外の受入試験、認証確認が通った後にのみ検討する。旧経路と新経路を同じqueueへ同時に書かせない。
+- 初期adapterは互換性のため全V2 snapshotを1 Firestore documentに保持し、900,000-byteの安全上限でfail-closedする。実際のcanonical snapshotサイズを測定し、上限まで十分な余裕がなければ移行前にコレクション分割へ変更する。

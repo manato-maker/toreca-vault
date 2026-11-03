@@ -1,0 +1,91 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from '../cloud/src/server.js';
+import { CanonicalNotInitialized, RevisionConflict } from '../cloud/src/firestore-store.js';
+import { emptyV2 } from '../v2/core.js';
+
+const TOKEN = 'test-secret-token-that-is-long-enough-0001';
+
+function createFakeStore(initial = null) {
+  let current = initial ? structuredClone(initial) : null;
+  return {
+    async read() { return current ? structuredClone(current) : null; },
+    async save(input) {
+      if (!current) {
+        throw new CanonicalNotInitialized();
+      }
+      if (current.payload.auditLog.some((entry) => entry.mutationId === input.mutationId)) {
+        return { ...structuredClone(current), duplicate: true };
+      }
+      if (current.revision !== input.expectedRevision) {
+        throw new RevisionConflict(current.revision);
+      }
+      current = {
+        payload: structuredClone(input.payload),
+        revision: input.payload.revision,
+        lastMutationId: input.mutationId,
+        duplicate: false
+      };
+      return structuredClone(current);
+    }
+  };
+}
+
+async function withServer(store, run) {
+  const server = createServer({ store, apiToken: TOKEN, allowedOrigins: new Set(['https://example.test']) });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  try { await run(`http://127.0.0.1:${address.port}`); }
+  finally { await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }
+}
+
+test('health is read-only and reports an uninitialized canonical store', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true, service: 'toreca-vault-v2-api', canonicalInitialized: false, writesEnabled: false
+    });
+  });
+});
+
+test('writes are disabled by default and rejected before reaching the store', async () => {
+  const store = createFakeStore({ payload: emptyV2(), revision: 0, lastMutationId: '' });
+  let writes = 0;
+  const originalSave = store.save;
+  store.save = async (...args) => { writes++; return originalSave(...args); };
+  await withServer(store, async (base) => {
+    const response = await fetch(`${base}/api/v2`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedRevision: 0, mutationId: 'm1', payload: emptyV2() })
+    });
+    assert.equal(response.status, 423);
+    assert.deepEqual(await response.json(), { ok: false, error: 'writes are disabled until migration acceptance' });
+    assert.equal(writes, 0);
+  });
+});
+
+test('V2 reads require bearer auth and do not expose tokens in query strings', async () => {
+  const initial = emptyV2();
+  const store = createFakeStore({ payload: initial, revision: 0, lastMutationId: '' });
+  await withServer(store, async (base) => {
+    const denied = await fetch(`${base}/api/v2?token=${TOKEN}`);
+    assert.equal(denied.status, 401);
+    const response = await fetch(`${base}/api/v2`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.revision, 0);
+    assert.equal(body.payload.schemaVersion, 2);
+  });
+});
+
+test('browser CORS rejects unknown origins and allows only configured origins', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const denied = await fetch(`${base}/api/v2`, { method: 'OPTIONS', headers: { origin: 'https://evil.test' } });
+    assert.equal(denied.status, 403);
+    const allowed = await fetch(`${base}/api/v2`, { method: 'OPTIONS', headers: { origin: 'https://example.test' } });
+    assert.equal(allowed.status, 204);
+    assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://example.test');
+  });
+});
