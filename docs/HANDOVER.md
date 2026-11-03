@@ -536,3 +536,12 @@ CI correction (2026-11-03): code commit 588f01b passed GitHub Actions v2-ci run 
 
 
 Environment blocker (2026-11-03): this local workspace has no gcloud or Firebase CLI, so Cloud Run/Firestore provisioning and Emulator startup could not be performed here. GitHub CI success covers code tests only, not deployed API auth/execution or canonical V2 readback.
+
+
+### 2026-11-03 — Initial V2 command transitions and worker prototype
+
+- Added pure V2 transitions for purchase, sale, pack opening, and lottery application. Requires explicit unit cost; opened-box singles are zero-cost; sales remove consumed stock using FIFO; ambiguous inventory matches stop for review.
+- Added queue worker orchestration: claim → transition → revision-CAS snapshot save/readback → queue settlement. The save-before-settlement retry path detects the prior mutation ID and does not duplicate the transaction.
+- Unsupported result/receipt/bulk/spouse/repair variants go to review. Worker is not connected to the runtime/API or existing Apps Script/Sheets queue.
+- Local verification: 44 tests and syntax checks pass. GitHub Actions for this latest code is pending. No Emulator/deployment/production data verification.
+- Existing system and pending sales/lottery rows remain unchanged.
