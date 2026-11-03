@@ -112,3 +112,8 @@ Added a disabled-by-default authenticated command intake slice to PR #105:
 5. Verify canonical JSON source, export/hash/totals, isolated import and readback before any production cutover.
 
 Current state: PR #105 draft, no merge/deploy; existing Apps Script and V2 data remain authoritative.
+
+
+### Follow-up — retry exhaustion and result-code safety (2026-11-03)
+
+Queue result metadata now stores only short safe codes; raw worker text is discarded. When the retry cap is reached, the command moves to `review`. Local tests: 32 passed; syntax check passed. No Firestore Emulator or deployed service test yet. The latest code commit still awaits its GitHub Actions result.
