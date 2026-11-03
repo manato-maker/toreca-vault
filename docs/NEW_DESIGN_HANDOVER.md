@@ -177,6 +177,6 @@ CI follow-up (2026-11-03): GitHub Actions v2-ci #41632298133 passed for the requ
 
 - Ported the current Apps Script lottery Gmail eligibility rules (result/application/card keyword filters) into a pure Node classifier. It emits only a classification/reason and does not persist mail fields or mutate V2.
 - Added tests for results, applications, focused result scans, and non-matching mail; registered the test and syntax check.
-- Local verification: cloud test suite 58 passed; syntax check passed. CI for the latest commit is pending confirmation.
+- Local verification: cloud test suite 58 passed; syntax check passed. Latest PR head `0eabd4071ba23dc169ebb0ad118d8e612369106f`: Actions v2-ci #41721123698 succeeded; both `npm test` and `npm run check` steps passed.
 - No Gmail provider/OAuth, runtime connection, production trigger, Apps Script deployment, or V2 mutation. Existing production data and triggers were left untouched; no queued sales were replayed.
 - Next: verify CI, implement a read-only Gmail adapter with least-privilege OAuth and durable bounded checkpoints, add quota/retry recovery coverage, and continue market adapter work. Canonical V2 identity and cloud permissions remain prerequisites to migration/runtime.
