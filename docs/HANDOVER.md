@@ -523,3 +523,10 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - Verification: npm test --prefix cloud — 31 passed; npm run check --prefix cloud — passed. This is local/unit-test verification only; no Firestore emulator or live cloud resources were used.
 - Production state: no deployment, trigger change, Sheets/Gmail connection, command execution, V2 mutation, or queue replay. Existing 8 pending sales and TCG193 remain untouched. PR #105 remains draft.
 - Next: run Firestore emulator tests, define payload retention and dead-letter review, implement command-to-V2 domain mutation with the existing invariants, build a one-way shadow adapter without dual execution, then test imported production snapshot in an isolated project before requesting cutover acceptance.
+
+
+### 2026-11-03 — Queue retry review verification
+
+- Follow-up safety refinement: result metadata is restricted to short alphanumeric codes; arbitrary worker text is replaced with a generic code. Exhausting the configured attempt count transitions the command to `review`.
+- Verification now: `npm test --prefix cloud` — 32 passed; `npm run check --prefix cloud` — passed. Latest GitHub Actions check pending for this refinement.
+- No deployment, queue processing, trigger changes, or V2 writes.
