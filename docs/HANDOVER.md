@@ -530,3 +530,6 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - Follow-up safety refinement: result metadata is restricted to short alphanumeric codes; arbitrary worker text is replaced with a generic code. Exhausting the configured attempt count transitions the command to `review`.
 - Verification now: `npm test --prefix cloud` — 32 passed; `npm run check --prefix cloud` — passed. Latest GitHub Actions check pending for this refinement.
 - No deployment, queue processing, trigger changes, or V2 writes.
+
+
+CI correction (2026-11-03): code commit 588f01b passed GitHub Actions v2-ci run #41578881857 (32 tests). Branch commits after it only changed handoff docs.
