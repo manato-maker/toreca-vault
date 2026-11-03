@@ -10,6 +10,9 @@ export async function processQueuedCommand({ queue, store, requestId, clock = ()
   let outcome = 'pending';
   let resultCode = 'retryable-error';
   try {
+    if (String(claim.command?.requestId || '').trim() !== String(requestId || '').trim()) {
+      throw new TypeError('queue request ID does not match command payload');
+    }
     const current = await store.read();
     if (!current) {
       outcome = 'pending';
