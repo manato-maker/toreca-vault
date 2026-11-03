@@ -579,3 +579,12 @@ CI follow-up (2026-11-03): GitHub Actions v2-ci #41632298133 passed for the requ
 - The query upper bound stays fixed across `nextPageToken` pages. A successful timestamp advances only after the final page is durably processed; invalid/oversized inputs fail closed. Combined with the message-ID ledger key planner, repeated messages are not applied again.
 - Local verification: 55 tests and syntax check pass. GitHub Actions v2-ci #41635098677 succeeded. Gmail API, OAuth, parsing, and persisted checkpoints remain unconnected.
 - Project progress estimate: about 25% to production cutover; breakdown in the portable handoff.
+
+
+## 2026-11-04 — Gmail classifier port
+
+- Ported the current Apps Script lottery Gmail eligibility rules (result/application/card keyword filters) into a pure Node classifier. It emits only a classification/reason and does not persist mail fields or mutate V2.
+- Added tests for results, applications, focused result scans, and non-matching mail; registered the test and syntax check.
+- Local verification: cloud test suite 58 passed; syntax check passed. CI for the latest commit is pending confirmation.
+- No Gmail provider/OAuth, runtime connection, production trigger, Apps Script deployment, or V2 mutation. Existing production data and triggers were left untouched; no queued sales were replayed.
+- Next: verify CI, implement a read-only Gmail adapter with least-privilege OAuth and durable bounded checkpoints, add quota/retry recovery coverage, and continue market adapter work. Canonical V2 identity and cloud permissions remain prerequisites to migration/runtime.
