@@ -7,6 +7,10 @@ const ALLOWED_TYPES = new Set([
 ]);
 const MAX_COMMAND_BYTES = 20_000;
 const clone = (value) => structuredClone(value);
+const safeResultCode = (value) => {
+  const code = String(value || '');
+  return /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(code) ? code : 'worker-result';
+};
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -120,7 +124,7 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
         transaction.set(ref, {
           ...current,
           status: outcome,
-          resultCode: String(resultCode).slice(0, 80),
+          resultCode: safeResultCode(resultCode),
           claimToken: '',
           leaseExpiresAtMs: 0,
           updatedAtMs: now
