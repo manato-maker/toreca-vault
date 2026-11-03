@@ -545,3 +545,6 @@ Environment blocker (2026-11-03): this local workspace has no gcloud or Firebase
 - Unsupported result/receipt/bulk/spouse/repair variants go to review. Worker is not connected to the runtime/API or existing Apps Script/Sheets queue.
 - Local verification: 44 tests and syntax checks pass. GitHub Actions for this latest code is pending. No Emulator/deployment/production data verification.
 - Existing system and pending sales/lottery rows remain unchanged.
+
+
+CI follow-up (2026-11-03): GitHub Actions v2-ci #41631701365 succeeded for the new V2 transition and command-worker code. The test and syntax-check steps passed. Later branch commits only updated handoff documentation. Emulator, deployed service, and production-state verification remain pending.
