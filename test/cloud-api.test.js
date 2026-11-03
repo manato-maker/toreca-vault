@@ -31,12 +31,26 @@ function createFakeStore(initial = null) {
   };
 }
 
-async function withServer(store, run) {
-  const server = createServer({ store, apiToken: TOKEN, allowedOrigins: new Set(['https://example.test']) });
+async function withServer(store, run, options = {}) {
+  const server = createServer({ store, apiToken: TOKEN, allowedOrigins: new Set(['https://example.test']), ...options });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   try { await run(`http://127.0.0.1:${address.port}`); }
   finally { await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }
+}
+
+function createFakeQueue() {
+  const rows = new Map();
+  return {
+    async enqueue({ requestId, command }) {
+      const prior = rows.get(requestId);
+      if (prior) return prior.command === JSON.stringify(command)
+        ? { accepted: true, duplicate: true, status: 'pending' }
+        : { accepted: false, status: 'collision' };
+      rows.set(requestId, { command: JSON.stringify(command) });
+      return { accepted: true, duplicate: false, status: 'pending' };
+    }
+  };
 }
 
 test('health is read-only and reports an uninitialized canonical store', async () => {
@@ -64,6 +78,38 @@ test('writes are disabled by default and rejected before reaching the store', as
     assert.deepEqual(await response.json(), { ok: false, error: 'writes are disabled until migration acceptance' });
     assert.equal(writes, 0);
   });
+});
+
+test('command queue is disabled by default and requires bearer auth when enabled', async () => {
+  const store = createFakeStore();
+  const body = { action: 'enqueueCommand', requestId: 'purchase-1', command: { requestId: 'purchase-1', type: 'purchase' } };
+  await withServer(store, async (base) => {
+    const response = await fetch(`${base}/api/v2`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 423);
+  });
+  await withServer(store, async (base) => {
+    const response = await fetch(`${base}/api/v2`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 401);
+  }, { commandQueue: createFakeQueue(), commandsEnabled: true });
+});
+
+test('command queue accepts once, treats an identical resend as duplicate, and rejects an ID collision', async () => {
+  const commandQueue = createFakeQueue();
+  const baseBody = { action: 'enqueueCommand', requestId: 'sale-1', command: { requestId: 'sale-1', type: 'sale', amount: 55300 } };
+  await withServer(createFakeStore(), async (base) => {
+    const post = async (body) => fetch(`${base}/api/v2`, {
+      method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const first = await post(baseBody);
+    assert.equal(first.status, 202);
+    assert.deepEqual(await first.json(), { ok: true, accepted: true, duplicate: false, status: 'pending' });
+    const duplicate = await post(baseBody);
+    assert.equal(duplicate.status, 200);
+    assert.equal((await duplicate.json()).duplicate, true);
+    const collision = await post({ ...baseBody, command: { ...baseBody.command, amount: 1 } });
+    assert.equal(collision.status, 409);
+    assert.deepEqual(await collision.json(), { ok: false, error: 'requestId collision' });
+  }, { commandQueue, commandsEnabled: true });
 });
 
 test('V2 reads require bearer auth and do not expose tokens in query strings', async () => {
