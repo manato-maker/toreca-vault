@@ -58,6 +58,15 @@ test('ambiguous or unsupported commands go to review without mutating V2', async
   assert.equal((await state.read()).revision, 0);
 });
 
+test('worker rejects a queue row whose request ID differs from the embedded command ID', async () => {
+  const queue = memoryQueue(purchase);
+  const store = memoryStore();
+  const result = await processQueuedCommand({ queue, store, requestId: 'different-id', clock: () => 100 });
+  assert.equal(result.status, 'review');
+  assert.equal(result.resultCode, 'command-invalid');
+  assert.equal((await store.read()).revision, 0);
+});
+
 test('revision conflict returns a command to bounded retry without double-application', async () => {
   const queue = memoryQueue(purchase);
   const store = memoryStore();
