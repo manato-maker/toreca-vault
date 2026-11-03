@@ -62,7 +62,7 @@ function errorResponse(error) {
   return { status: 400, body: { ok: false, error: error?.message || 'request failed' } };
 }
 
-export function createServer({ store, apiToken, allowedOrigins = new Set(), writesEnabled = false }) {
+export function createServer({ store, commandQueue = null, apiToken, allowedOrigins = new Set(), writesEnabled = false, commandsEnabled = false }) {
   if (!store || typeof store.read !== 'function' || typeof store.save !== 'function') {
     throw new TypeError('a V2 state store is required');
   }
@@ -134,6 +134,22 @@ export function createServer({ store, apiToken, allowedOrigins = new Set(), writ
         }, allowedOrigin);
       }
 
+      if (body.action === 'enqueueCommand') {
+        if (!commandsEnabled || !commandQueue) {
+          return send(response, 423, { ok: false, error: 'command queue is disabled' }, allowedOrigin);
+        }
+        const queued = await commandQueue.enqueue({ requestId: body.requestId, command: body.command });
+        if (!queued.accepted) {
+          return send(response, 409, { ok: false, error: 'requestId collision' }, allowedOrigin);
+        }
+        return send(response, queued.duplicate ? 200 : 202, {
+          ok: true,
+          accepted: true,
+          duplicate: Boolean(queued.duplicate),
+          status: queued.status
+        }, allowedOrigin);
+      }
+
       if (!writesEnabled) {
         return send(response, 423, { ok: false, error: 'writes are disabled until migration acceptance' }, allowedOrigin);
       }
@@ -159,11 +175,14 @@ export async function start() {
   const documentPath = process.env.TV2_FIRESTORE_DOCUMENT || 'torecaVaultV2/canonical';
   const { Firestore } = await import('@google-cloud/firestore');
   const firestore = new Firestore({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
+  const { createFirestoreCommandQueue } = await import('./firestore-command-queue.js');
   const server = createServer({
     store: createFirestoreStore(firestore, documentPath),
+    commandQueue: createFirestoreCommandQueue(firestore),
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
-    writesEnabled: process.env.TV2_ENABLE_WRITES === 'true'
+    writesEnabled: process.env.TV2_ENABLE_WRITES === 'true',
+    commandsEnabled: process.env.TV2_ENABLE_COMMAND_QUEUE === 'true'
   });
   const port = Number(process.env.PORT) || 8080;
   server.listen(port, '0.0.0.0', () => console.log(`Toreca Vault V2 API listening on ${port}`));
