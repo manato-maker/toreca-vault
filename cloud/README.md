@@ -13,7 +13,9 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 
 ## Schedule plan
 
-`src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key that a future durable job ledger must claim atomically before a worker runs. The planner itself does not claim jobs, call Gmail/Sheets, retry work, or change V2 state.
+`src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key. `src/job-ledger.js` claims that key in a Firestore transaction, fences off stale workers with a per-claim token, and limits retries. `src/worker-dispatcher.js` runs each handler independently and stores only a safe error code, never Gmail content or a raw error message.
+
+The lease ledger cannot make an external Gmail/Sheets side effect exactly-once if a process crashes after the side effect but before marking completion. Every worker must also use message/request IDs and the V2 mutation ID guard. The dispatcher and ledger are implemented but have no production Firestore connection yet.
 
 - Command queue: each 15-minute boundary.
 - Gmail lottery inbox scan: hourly from 09:00 through 23:00 JST.
@@ -21,6 +23,8 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 - Market refresh: first dispatcher tick after 13:30 JST (13:45), once per JST date after the durable ledger records completion.
 
 At 12:30 and 19:00, the inbox scan and result-focus job are separate entries. The future worker must use message-ID deduplication so the same Gmail message cannot create duplicate lottery records.
+
+Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL policy. Configure and verify that policy in an isolated project before production; expiration is not automatic until the policy exists.
 
 ## Planned operations
 
@@ -53,4 +57,4 @@ npm test --prefix cloud
 npm run check --prefix cloud
 ```
 
-Cloud Run deployment, Firestore creation, OAuth consent, Gmail access, and production cutover are intentionally outside this prototype.
+Cloud Run deployment, Firestore creation/TTL configuration, OAuth consent, Gmail/Sheets access, and production cutover are intentionally outside this prototype.
