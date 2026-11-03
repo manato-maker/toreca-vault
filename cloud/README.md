@@ -11,6 +11,17 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 - Writes default to disabled. The service rejects every non-read request before it reaches Firestore unless a later, separately reviewed migration step explicitly enables them.
 - No Gmail, Sheets queue, Cloud Scheduler, or production migration is enabled in this slice.
 
+## Schedule plan
+
+`src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key that a future durable job ledger must claim atomically before a worker runs. The planner itself does not claim jobs, call Gmail/Sheets, retry work, or change V2 state.
+
+- Command queue: each 15-minute boundary.
+- Gmail lottery inbox scan: hourly from 09:00 through 23:00 JST.
+- Focused lottery-result scan: 12:30 and 19:00 JST.
+- Market refresh: first dispatcher tick after 13:30 JST (13:45), once per JST date after the durable ledger records completion.
+
+At 12:30 and 19:00, the inbox scan and result-focus job are separate entries. The future worker must use message-ID deduplication so the same Gmail message cannot create duplicate lottery records.
+
 ## Planned operations
 
 - Keep ChatGPT's current Google Sheets command queue as the input bridge until the ChatGPT mobile write connector is confirmed. The worker will read only the dedicated queue sheet every 15 minutes, claim request IDs, and update each row to `done`, `review`, or bounded retry state.
