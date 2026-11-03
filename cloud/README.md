@@ -21,6 +21,8 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 
 `src/gmail-message-jobs.js` turns a bounded Gmail provider page into stable message-level job keys. It uses only the provider message ID, hashes that ID for the durable ledger key, deduplicates repeats within the page, and rejects an oversized page rather than silently dropping messages. The message body, subject, sender, and labels are not retained by this planner. The hourly Gmail API query, parser, OAuth scope, checkpoint, and production worker remain unimplemented.
 
+`src/gmail-scan-planner.js` creates fixed-bound Gmail search pages: a one-time seven-day backfill, then hourly queries with a 15-minute overlap, plus result-focused queries with a six-hour overlap. It caps pages at 100, preserves the same upper bound through `nextPageToken` pagination, and only returns a new successful checkpoint after the final page has been processed. This is a query/cursor planner only; it does not call Gmail or persist checkpoints.
+
 ## Schedule plan
 
 `src/schedule.js` is a pure, no-I/O planner for one dispatcher invoked every 15 minutes. It returns separate job kinds for the command queue, the hourly Gmail inbox scan, focused lottery-result checks, and the daily market refresh. Each job includes a deterministic key. `src/job-ledger.js` claims that key in a Firestore transaction, fences off stale workers with a per-claim token, and limits retries. `src/worker-dispatcher.js` runs each handler independently and stores only a safe error code, never Gmail content or a raw error message.
