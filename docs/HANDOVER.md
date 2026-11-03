@@ -513,3 +513,13 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - Continuity rule: after every work turn, update the Google Docs handoff, this `docs/HANDOVER.md`, and a dated portable Markdown handoff with completed work, verification, next steps, and blockers. Keep pending sales/lottery queue rows untouched during this prototype.
 - New architecture handoff: [`docs/NEW_DESIGN_HANDOVER.md`](./NEW_DESIGN_HANDOVER.md) captures the Chat-first design, component boundaries, planned JST schedule, migration gates, and current limitations. Treat this as a plan; no new workers or schedules are live.
 
+
+
+### 2026-11-03 — Idempotent Firestore command intake prototype
+
+- Audited the existing Apps Script queue contract: eight columns (requestId, payloadJson, status, attempts, createdAt, processedAt, result, error), nine allowed command types, duplicate ID/collision checks, and bounded processing.
+- Added an authenticated /api/v2 enqueueCommand action plus Firestore create-once queue storage. Exact request retries return the existing status; same ID with a different payload returns HTTP 409. Queue is disabled by default with TV2_ENABLE_COMMAND_QUEUE=false; accepting a command does not execute it.
+- Added fenced claim leases, a three-attempt default limit, review on exhausted attempts, and tests for resends, collisions, lease expiry, stale workers, API auth, and disabled-by-default behavior. Command payload is retained for retry/audit; no queue TTL/retention policy is configured.
+- Verification: npm test --prefix cloud — 31 passed; npm run check --prefix cloud — passed. This is local/unit-test verification only; no Firestore emulator or live cloud resources were used.
+- Production state: no deployment, trigger change, Sheets/Gmail connection, command execution, V2 mutation, or queue replay. Existing 8 pending sales and TCG193 remain untouched. PR #105 remains draft.
+- Next: run Firestore emulator tests, define payload retention and dead-letter review, implement command-to-V2 domain mutation with the existing invariants, build a one-way shadow adapter without dual execution, then test imported production snapshot in an isolated project before requesting cutover acceptance.
