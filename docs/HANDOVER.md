@@ -533,3 +533,6 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 
 
 CI correction (2026-11-03): code commit 588f01b passed GitHub Actions v2-ci run #41578881857 (32 tests). Branch commits after it only changed handoff docs.
+
+
+Environment blocker (2026-11-03): this local workspace has no gcloud or Firebase CLI, so Cloud Run/Firestore provisioning and Emulator startup could not be performed here. GitHub CI success covers code tests only, not deployed API auth/execution or canonical V2 readback.
