@@ -22,7 +22,7 @@ The lease ledger cannot make an external Gmail/Sheets side effect exactly-once i
 - Focused lottery-result scan: 12:30 and 19:00 JST.
 - Market refresh: first dispatcher tick after 13:30 JST (13:45), once per JST date after the durable ledger records completion.
 
-At 12:30 and 19:00, the inbox scan and result-focus job are separate entries. The future worker must use message-ID deduplication so the same Gmail message cannot create duplicate lottery records.
+At 12:30, schedule one result-focused Gmail scan. At 19:00, mark the existing hourly Gmail job as `hourly+results`; do not create a second Gmail job for that tick. The Gmail worker must use message-ID deduplication so the same message cannot create duplicate lottery records.
 
 Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL policy. Configure and verify that policy in an isolated project before production; expiration is not automatic until the policy exists.
 
