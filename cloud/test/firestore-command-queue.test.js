@@ -74,3 +74,16 @@ test('validates bounded lease and payload settings', async () => {
   await assert.rejects(queue.claim('sale-1', { maxAttempts: 0 }), /maxAttempts/);
   await assert.rejects(queue.enqueue({ requestId: 'large', command: { requestId: 'large', type: 'sale', memo: 'x'.repeat(20001) } }), /20000-byte/);
 });
+
+test('exhausted retry count moves an item to review and result metadata is sanitized', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  await queue.enqueue({ requestId: 'retry-1', command: sale('retry-1'), now: 1 });
+  const first = await queue.claim('retry-1', { now: 2, leaseMs: 1, maxAttempts: 1 });
+  await queue.finish('retry-1', first.claimToken, { outcome: 'pending', resultCode: 'private sale details', now: 3 });
+  const exhausted = await queue.claim('retry-1', { now: 4, maxAttempts: 1 });
+  assert.deepEqual(exhausted, { status: 'exhausted', claimed: false });
+  const saved = await queue.inspect('retry-1');
+  assert.equal(saved.status, 'review');
+  assert.equal(saved.resultCode, 'attempt-limit');
+  assert.notEqual(saved.resultCode, 'private sale details');
+});
