@@ -30,3 +30,10 @@ PR: [#105 — Start Cloud Run and Firestore migration foundation](https://github
 ## Follow-up verification
 - Added previous-success generation to the cursor CAS guard and a stale-scan regression case.
 - Focused local tests: 10 passed. GitHub Actions v2-ci #41831501955 passed the full test/check workflow.
+
+
+## Firestore Emulator test scaffold
+- Added an opt-in emulator integration test for concurrent cursor updates, stale-generation writes, and final checkpoint readback, plus an isolated demo-project config and dedicated npm command.
+- Local run: 10 passed; the integration test was skipped because this workspace has no Firebase CLI and no `FIRESTORE_EMULATOR_HOST`. No live emulator race test was executed.
+- GitHub Actions v2-ci #41832445196 passed full test/check steps; the opt-in integration remained skipped.
+- Next: run the test against an isolated emulator when available, then continue with least-privilege Gmail API wiring once Cloud credentials are authorized.
