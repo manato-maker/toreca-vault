@@ -60,17 +60,23 @@ export function createFirestoreGmailCheckpointStore(db, collectionPath = DEFAULT
       return { cursor, lastSuccessfulAtMs };
     },
 
-    async saveCursor(scanType, cursor, { expectedCursor = null } = {}) {
+    async saveCursor(scanType, cursor, { expectedCursor = null, expectedLastSuccessfulAtMs = null } = {}) {
       scanTypeValue(scanType);
       const nextCursor = normalizeCursor(cursor, scanType);
       const expected = normalizeCursor(expectedCursor, scanType);
+      const expectedLastSuccess = expectedLastSuccessfulAtMs == null
+        ? null
+        : timestamp(expectedLastSuccessfulAtMs, 'expectedLastSuccessfulAtMs');
       if (!nextCursor) throw new TypeError('saveCursor requires a cursor');
       const ref = refFor(scanType);
       return db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(ref);
         const current = snapshot.exists ? snapshot.data() : null;
         const currentCursor = normalizeCursor(current?.cursor ?? null, scanType);
-        if (!sameCursor(currentCursor, expected)) throw checkpointConflict();
+        const currentLastSuccess = current?.lastSuccessfulAtMs == null
+          ? null
+          : timestamp(current.lastSuccessfulAtMs, 'lastSuccessfulAtMs');
+        if (!sameCursor(currentCursor, expected) || currentLastSuccess !== expectedLastSuccess) throw checkpointConflict();
         const nowMs = timestamp(clock(), 'clock()');
         transaction.set(ref, {
           schemaVersion: 1,
@@ -85,10 +91,13 @@ export function createFirestoreGmailCheckpointStore(db, collectionPath = DEFAULT
       });
     },
 
-    async completeScan(scanType, lastSuccessfulAtMs, { expectedCursor } = {}) {
+    async completeScan(scanType, lastSuccessfulAtMs, { expectedCursor, expectedLastSuccessfulAtMs = null } = {}) {
       scanTypeValue(scanType);
       const completedAt = timestamp(lastSuccessfulAtMs, 'lastSuccessfulAtMs');
       const expected = normalizeCursor(expectedCursor, scanType);
+      const expectedLastSuccess = expectedLastSuccessfulAtMs == null
+        ? null
+        : timestamp(expectedLastSuccessfulAtMs, 'expectedLastSuccessfulAtMs');
       if (!expected) throw new TypeError('expectedCursor is required');
       const ref = refFor(scanType);
       return db.runTransaction(async (transaction) => {
@@ -98,7 +107,10 @@ export function createFirestoreGmailCheckpointStore(db, collectionPath = DEFAULT
         if (currentCursor == null && Number(current?.lastSuccessfulAtMs) === completedAt) {
           return { saved: true, duplicate: true };
         }
-        if (!sameCursor(currentCursor, expected)) throw checkpointConflict();
+        const currentLastSuccess = current?.lastSuccessfulAtMs == null
+          ? null
+          : timestamp(current.lastSuccessfulAtMs, 'lastSuccessfulAtMs');
+        if (!sameCursor(currentCursor, expected) || currentLastSuccess !== expectedLastSuccess) throw checkpointConflict();
         const nowMs = timestamp(clock(), 'clock()');
         transaction.set(ref, {
           schemaVersion: 1,
