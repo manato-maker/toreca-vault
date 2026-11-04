@@ -22,6 +22,7 @@ export async function runGmailScanPage({
   if (typeof processMessage !== 'function') throw new TypeError('a Gmail message processor is required');
 
   const saved = await checkpointStore.load(scanType) || {};
+  const expectedLastSuccessfulAtMs = saved.lastSuccessfulAtMs ?? null;
   const plan = planGmailScanPage({
     nowMs,
     lastSuccessfulAtMs: saved.lastSuccessfulAtMs ?? null,
@@ -33,7 +34,10 @@ export async function runGmailScanPage({
   // Persist the fixed scan window before the external request. A crash or quota
   // failure then resumes the same bounded window instead of silently moving it.
   if (saved.cursor == null) {
-    await checkpointStore.saveCursor(scanType, plan.cursor, { expectedCursor: null });
+    await checkpointStore.saveCursor(scanType, plan.cursor, {
+      expectedCursor: null,
+      expectedLastSuccessfulAtMs
+    });
   }
 
   const page = await provider.listMessages(plan.query, {
@@ -58,9 +62,15 @@ export async function runGmailScanPage({
 
   const advanced = advanceGmailScanPage(plan.cursor, { nextPageToken: page.nextPageToken ?? null });
   if (advanced.complete) {
-    await checkpointStore.completeScan(scanType, advanced.lastSuccessfulAtMs, { expectedCursor: plan.cursor });
+    await checkpointStore.completeScan(scanType, advanced.lastSuccessfulAtMs, {
+      expectedCursor: plan.cursor,
+      expectedLastSuccessfulAtMs
+    });
   } else {
-    await checkpointStore.saveCursor(scanType, advanced.cursor, { expectedCursor: plan.cursor });
+    await checkpointStore.saveCursor(scanType, advanced.cursor, {
+      expectedCursor: plan.cursor,
+      expectedLastSuccessfulAtMs
+    });
   }
   return { scanType, fetched: page.messages.length, planned: jobs.length, results, checkpoint: advanced };
 }
