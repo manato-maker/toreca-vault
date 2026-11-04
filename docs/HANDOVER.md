@@ -600,3 +600,11 @@ CI follow-up (2026-11-03): GitHub Actions v2-ci #41632298133 passed for the requ
 
 
 Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci #41721758957 succeeded, including `npm test` and `npm run check`.
+
+
+### 2026-11-04 — Firestore Gmail checkpoints and quota-aware provider
+- Added `cloud/src/firestore-gmail-checkpoints.js`: Firestore stores only the scan type, fixed-window page cursor, last-success timestamp, schema version, and update time. The worker writes the initial window before requesting Gmail, resumes that window after failure, uses expected-cursor compare-and-swap against stale workers, and atomically clears the cursor/updates last-success after the final page.
+- Added `cloud/src/quota-aware-gmail-provider.js`: injected Gmail list requests retry 429/5xx and recognized 403 quota responses with bounded exponential backoff, capped Retry-After, and attempt limits. Authentication errors are not retried. No message content is persisted by these modules.
+- Registered focused tests for checkpoint validation/CAS/atomic completion, scan-window resume, quota retries, Retry-After caps, non-retryable auth failures, and retry exhaustion. GitHub Actions v2-ci #41830898928 succeeded; both `npm test` and `npm run check` passed.
+- Runtime boundary: no Gmail API client, OAuth grant, Firestore Emulator, Cloud Run deployment, production checkpoint, or live message processing was added. Existing Apps Script, triggers, V2 data, and pending queue rows remain unchanged; no pending sales or lottery row was replayed.
+- Next: add isolated Firestore Emulator concurrency/race tests; implement the Gmail API adapter with least-privilege read-only scopes when the authorized Cloud project/credentials are available; then wire the adapter and checkpoint store only in staging. Canonical V2 identity is still unresolved, so no import/cutover.
