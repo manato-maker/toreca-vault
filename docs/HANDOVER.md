@@ -638,3 +638,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Added four mock transport tests for request shape/scope/ID-only output, quota retry/token refresh, auth failure sanitization, and malformed IDs. Local targeted tests: 4 passed. GitHub Actions v2-ci #41834363103 succeeded; standard test/check and Firestore Emulator jobs both passed.
 - No user Gmail account or credentials were used; no live mail, Firestore, production data, Apps Script, triggers, or pending queue rows were touched.
 - Next: implement/configure the least-privilege OAuth token source only when the authorized Cloud project and credentials are available; then test in staging. Canonical V2 identity is still a migration gate.
+
+
+### 2026-11-04 — Bounded Gmail detail reader and transient classification
+- Extended `cloud/src/google-gmail-api-provider.js` with read-only per-message detail retrieval using the existing injected `gmail.readonly` token source. It requests the subject header and bounded MIME text parts, returns only subject plus decoded `text/plain`, and rejects message content over 512 KiB, more than 128 MIME parts, or nesting deeper than 8. No sender/recipient fields are returned.
+- Added bounded quota retry for detail requests and a pure `createGmailClassifierProcessor` that returns only classification kind/reason. No subject/body or classification is persisted by this change.
+- Added mock tests for detail URL/field mask, content bounds, transient fields, and processor output. GitHub Actions run for commit `2d51567b49cc95f1becaee25a2005318f8feb24e` is queued; record the result after completion. No local repository checkout is available in this session.
+- Important wiring gap found during review: `dispatchJobs` discards handler return values and marks a job completed. Do not wire this classifier processor into the scanner until a durable result-code consumer exists, or a successful classification could be lost while its message ID is deduplicated.
+- No OAuth grant/token source, live Gmail, Cloud Run/production Firestore, Apps Script, trigger, canonical V2, or pending queue row was accessed or changed. The eight pending sales and TCG193 remain untouched.
+- Next: verify CI, add a durable classification outcome path that stores only hashed message ID and classification code/reason, and test unique/ambiguous matching before any V2 transition. Verify Google Cloud project and restricted-scope approval before staging. Canonical V2 identity remains unresolved.
