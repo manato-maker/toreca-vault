@@ -15,16 +15,32 @@ function fakeLedger() {
   };
 }
 
+function sameCursor(left, right) {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
 function checkpointStore(initial = {}) {
   const values = structuredClone(initial);
   return {
     values,
     async load(scanType) { return structuredClone(values[scanType] || null); },
-    async saveCursor(scanType, cursor) {
+    async saveCursor(scanType, cursor, { expectedCursor = null } = {}) {
+      const current = values[scanType]?.cursor ?? null;
+      if (!sameCursor(current, expectedCursor)) {
+        const error = new Error('stale checkpoint');
+        error.name = 'GmailCheckpointConflict';
+        throw error;
+      }
       values[scanType] = { ...(values[scanType] || {}), cursor };
     },
-    async saveLastSuccessfulAt(scanType, lastSuccessfulAtMs) {
-      values[scanType] = { ...(values[scanType] || {}), lastSuccessfulAtMs };
+    async completeScan(scanType, lastSuccessfulAtMs, { expectedCursor } = {}) {
+      const current = values[scanType]?.cursor ?? null;
+      if (!sameCursor(current, expectedCursor)) {
+        const error = new Error('stale checkpoint');
+        error.name = 'GmailCheckpointConflict';
+        throw error;
+      }
+      values[scanType] = { cursor: null, lastSuccessfulAtMs };
     }
   };
 }
@@ -48,7 +64,7 @@ test('Gmail scan worker checkpoints next page only after every message job compl
   assert.equal(checkpoints.values.hourly.lastSuccessfulAtMs, undefined);
 });
 
-test('Gmail scan worker does not advance a cursor after a failed or busy message job', async () => {
+test('Gmail scan worker preserves the fixed scan window after a failed message job', async () => {
   const checkpoints = checkpointStore();
   await assert.rejects(runGmailScanPage({
     provider: { async listMessages() { return { messages: [{ id: 'm1' }], nextPageToken: 'page-2' }; } },
@@ -58,7 +74,8 @@ test('Gmail scan worker does not advance a cursor after a failed or busy message
     nowMs: 1_800_000_000_000,
     clock: () => 100
   }), /uncompleted message jobs/);
-  assert.equal(checkpoints.values.hourly, undefined);
+  assert.equal(checkpoints.values.hourly.cursor.sinceMs, 1_800_000_000_000 - 7 * 24 * 60 * 60 * 1000);
+  assert.equal(checkpoints.values.hourly.cursor.pageToken, null);
 });
 
 test('Gmail scan worker stores the last-success time only after the final page', async () => {
