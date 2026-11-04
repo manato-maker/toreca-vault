@@ -234,3 +234,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Four mocked transport tests pass locally. Actions v2-ci #41834363103 passed the normal test/check job and the Firestore Emulator job.
 - OAuth grant/token source, live Gmail account, production wiring, and canonical V2 migration are still unimplemented/unauthorized. No production data was accessed.
 - Next: add the authorized least-privilege OAuth token source once Cloud project credentials are available, then test only in staging.
+
+
+### 2026-11-04 — Bounded Gmail detail reader and transient classification
+- Extended the read-only Gmail adapter with per-message detail reads using the same injected `gmail.readonly` token source. The API field mask selects the message payload, subject header, and bounded MIME text parts; the adapter returns only the subject and decoded `text/plain` to the immediate caller. It excludes sender/recipient fields from its returned value and fails closed beyond 512 KiB of decoded classifier text, 128 MIME parts, or 8 nesting levels.
+- Added a pure classifier processor that consumes these transient fields and returns only the classifier kind/reason. No body, subject, sender, or classification is written to Firestore or V2 by this slice.
+- Added mock coverage for the detail endpoint, field mask, transient output, oversized body rejection, and processor privacy boundary. The latest Actions run is queued; results will be recorded after completion. (No local repository checkout is available in this work session.)
+- Current implementation gap: the generic dispatcher ignores handler return values and only records job completion. Therefore the classifier processor is not yet wired into the Gmail scan worker; a safe durable classification outcome/consumer is required first so a message cannot be silently marked complete while its classification is lost.
+- No Gmail account/OAuth grant, live mail, Cloud Run/production Firestore, Apps Script, trigger, V2 data, or pending queue rows were accessed or changed. Existing Apps Script and V2 remain authoritative; the eight pending sales and TCG193 remain untouched.
+- Next: verify this CI run, implement a durable result-code path that stores only message ID hash plus classification code/reason, and then add conservative classification-to-V2 matching tests. Before live staging, verify the Cloud project/token source and restricted-scope approval path; canonical V2 identity remains a migration gate.
