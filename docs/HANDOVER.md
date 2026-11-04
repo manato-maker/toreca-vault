@@ -614,3 +614,11 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Tightened checkpoint compare-and-swap to include the previous `lastSuccessfulAtMs` as well as the cursor. This prevents a stale invocation from recreating an old cursor after a newer scan has completed and cleared it.
 - Added a regression test for stale-generation restart. Focused local verification: 10 tests passed; GitHub Actions v2-ci #41831501955 passed the full `npm test` and `npm run check` steps.
 - Still no emulator or live Firestore/Gmail validation; production and queue state unchanged.
+
+
+### 2026-11-04 — Firestore Emulator race-test scaffold
+- Added an opt-in Admin SDK integration test for concurrent checkpoint advances, stale-generation rejection, and final readback. It uses a unique demo-project namespace and cleans up its document. Added `cloud/firebase.json` and `npm run test:firestore-emulator --prefix cloud` instructions.
+- Local focused run: 10 passed, 1 Emulator integration test skipped because `FIRESTORE_EMULATOR_HOST` is unset. This workspace has Java but no Firebase CLI or gcloud, so no actual emulator transaction race was executed.
+- GitHub Actions v2-ci #41832445196 passed the full `npm test` and `npm run check` steps. The emulator-specific test remains opt-in and was not run against a live emulator.
+- No production credentials, Gmail, Firestore, Apps Script, triggers, queue rows, or V2 data were accessed or changed.
+- Next: execute the opt-in test against an isolated Firestore Emulator when Firebase CLI/emulator runtime is available; then implement/wire the least-privilege Gmail adapter only after authorized Cloud credentials are available.
