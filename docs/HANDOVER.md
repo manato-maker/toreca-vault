@@ -630,3 +630,11 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - GitHub Actions v2-ci #41833501945 succeeded: both normal `npm test`/`npm run check` and the separate Emulator job passed. Emulator log shows 1/1 race test passed, 0 failures, 0 skipped. It verified competing cursor CAS updates, rejection of a stale generation after completion, and final checkpoint readback.
 - This is isolated Emulator validation only. No production Firestore, Gmail, Apps Script, triggers, canonical V2, or pending queue rows were accessed or changed.
 - Next: implement the read-only Gmail API adapter using least-privilege OAuth only after authorized credentials/project are available; keep it staged until canonical V2 identity and migration readback gates are satisfied.
+
+
+### 2026-11-04 — Read-only Gmail API list adapter
+- Added `cloud/src/google-gmail-api-provider.js`. It calls only `users/me/messages` list, asks the injected access-token callback for the single `https://www.googleapis.com/auth/gmail.readonly` scope, and returns only message IDs/page tokens. It does not fetch bodies, subjects, senders, or labels; API error bodies are reduced to safe status/reason fields.
+- The adapter uses the bounded quota retry wrapper, refreshes the injected token for each attempt, caps request duration and pagination values, and fails closed on malformed IDs. No OAuth grant or refresh-token storage was added.
+- Added four mock transport tests for request shape/scope/ID-only output, quota retry/token refresh, auth failure sanitization, and malformed IDs. Local targeted tests: 4 passed. GitHub Actions v2-ci #41834363103 succeeded; standard test/check and Firestore Emulator jobs both passed.
+- No user Gmail account or credentials were used; no live mail, Firestore, production data, Apps Script, triggers, or pending queue rows were touched.
+- Next: implement/configure the least-privilege OAuth token source only when the authorized Cloud project and credentials are available; then test in staging. Canonical V2 identity is still a migration gate.
