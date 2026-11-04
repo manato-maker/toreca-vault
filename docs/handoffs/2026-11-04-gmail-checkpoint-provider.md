@@ -45,3 +45,11 @@ PR: [#105 — Start Cloud Run and Firestore migration foundation](https://github
 - GitHub Actions v2-ci #41833501945 passed both normal tests/checks and the Emulator job. Emulator result: 1 test passed, 0 failed, 0 skipped. Concurrent CAS winner, stale-generation rejection, and final readback all verified.
 - Production Firestore/Gmail/OAuth/V2/queue/triggers remain untouched.
 - Next: implement a least-privilege Gmail read-only API adapter when authorized Cloud project credentials are available; then wire only in staging.
+
+
+## Read-only Gmail API adapter
+- Added a REST list adapter for `users/me/messages`, with only the `gmail.readonly` scope requested from an injected token callback. It returns IDs/page tokens only and never fetches message content or sender metadata.
+- Quota retry wrapper is connected; it requests a fresh injected token per retry, caps request/page bounds, sanitizes API errors, and rejects malformed IDs.
+- Four adapter tests pass locally. GitHub Actions #41834363103 passed regular tests/checks and the Firestore Emulator job.
+- No OAuth grant, user Gmail access, live messages, production Firestore, or canonical V2 was used.
+- Next: authorize/configure the least-privilege token source in the correct Cloud project and test the adapter in staging only.
