@@ -216,3 +216,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Local focused tests: 10 passed; emulator test skipped because `FIRESTORE_EMULATOR_HOST` is not set. Firebase CLI/gcloud are not installed here, so no emulator race execution is claimed.
 - GitHub Actions v2-ci #41832445196 passed the full `npm test` and `npm run check` steps. The emulator integration test is opt-in and was not run by CI.
 - No production state or credentials were accessed. Next: run the opt-in test on an isolated emulator, then implement Gmail API OAuth adapter when authorized cloud credentials are available.
+
+
+### Firestore Emulator race tests passed — 2026-11-04
+
+- Added a dedicated CI Emulator job using Firebase CLI `emulators:exec` with the isolated `demo-toreca-vault` project. Emulator config specifies deny-all client rules; the integration test uses the Admin SDK and unique per-run document path.
+- The first run exposed a cleanup call using unsupported `db.close()`; fixed it to `db.terminate()` and reran.
+- Actions v2-ci #41833501945 succeeded. Both test/check job and emulator job passed; Emulator race test result was 1 passed, 0 failed, 0 skipped. The test confirmed one winner under concurrent CAS, stale generation rejection after finalization, and final checkpoint readback.
+- This does not verify production Firestore/Gmail/OAuth or canonical V2 migration. No production state was accessed or modified.
+- Next: build the read-only Gmail API adapter once authorized project credentials and least-privilege scope are available; maintain staging and migration gates.
