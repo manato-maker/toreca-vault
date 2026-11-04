@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
 import { createFirestoreGmailCheckpointStore } from '../src/firestore-gmail-checkpoints.js';
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
@@ -10,6 +9,7 @@ const skipReason = emulatorHost ? false : 'Set FIRESTORE_EMULATOR_HOST to run Fi
 test('Firestore Emulator fences concurrent and stale Gmail checkpoint generations', {
   skip: skipReason
 }, async () => {
+  const { Firestore } = await import('@google-cloud/firestore');
   const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
   const db = new Firestore({ projectId });
   const collectionPath = `gmailCheckpointTestRuns/${randomUUID()}/scans`;
