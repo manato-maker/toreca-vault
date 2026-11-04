@@ -608,3 +608,9 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Registered focused tests for checkpoint validation/CAS/atomic completion, scan-window resume, quota retries, Retry-After caps, non-retryable auth failures, and retry exhaustion. GitHub Actions v2-ci #41830898928 succeeded; both `npm test` and `npm run check` passed.
 - Runtime boundary: no Gmail API client, OAuth grant, Firestore Emulator, Cloud Run deployment, production checkpoint, or live message processing was added. Existing Apps Script, triggers, V2 data, and pending queue rows remain unchanged; no pending sales or lottery row was replayed.
 - Next: add isolated Firestore Emulator concurrency/race tests; implement the Gmail API adapter with least-privilege read-only scopes when the authorized Cloud project/credentials are available; then wire the adapter and checkpoint store only in staging. Canonical V2 identity is still unresolved, so no import/cutover.
+
+
+### 2026-11-04 — Gmail checkpoint generation fencing follow-up
+- Tightened checkpoint compare-and-swap to include the previous `lastSuccessfulAtMs` as well as the cursor. This prevents a stale invocation from recreating an old cursor after a newer scan has completed and cleared it.
+- Added a regression test for stale-generation restart. Focused local verification: 10 tests passed; GitHub Actions v2-ci #41831501955 passed the full `npm test` and `npm run check` steps.
+- Still no emulator or live Firestore/Gmail validation; production and queue state unchanged.
