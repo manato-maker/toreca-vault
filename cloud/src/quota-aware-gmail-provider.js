@@ -22,9 +22,7 @@ function retryAfterMs(error, nowMs) {
   const headers = error?.response?.headers ?? error?.headers;
   let value;
   if (typeof headers?.get === 'function') value = headers.get('retry-after');
-  else if (headers && typeof headers === 'object') {
-    value = headers['retry-after'] ?? headers['Retry-After'];
-  }
+  else if (headers && typeof headers === 'object') value = headers['retry-after'] ?? headers['Retry-After'];
   if (value == null) return null;
   const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
@@ -32,7 +30,7 @@ function retryAfterMs(error, nowMs) {
   return Number.isFinite(dateMs) ? Math.max(0, dateMs - nowMs) : null;
 }
 
-/** Wrap an injected Gmail list request with bounded quota/transient retries. */
+/** Wrap Gmail list/detail requests with bounded quota/transient retries. */
 export function createQuotaAwareGmailProvider({
   request,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -54,6 +52,20 @@ export function createQuotaAwareGmailProvider({
     throw new TypeError('retry delay bounds are invalid');
   }
 
+  async function withRetry(operation) {
+    for (let retry = 0; ; retry += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!retryable(error) || retry >= maxRetries) throw error;
+        const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** retry));
+        const serverDelay = retryAfterMs(error, now());
+        const delay = Math.min(maxDelayMs, serverDelay ?? Math.floor(exponential * (0.5 + random())));
+        await sleep(delay);
+      }
+    }
+  }
+
   return {
     async listMessages(query, { maxResults, pageToken = null } = {}) {
       if (typeof query !== 'string' || !query) throw new TypeError('query is required');
@@ -63,18 +75,15 @@ export function createQuotaAwareGmailProvider({
       if (pageToken != null && (typeof pageToken !== 'string' || pageToken.length > 2048)) {
         throw new TypeError('pageToken is invalid');
       }
+      return withRetry(() => request({ query, maxResults, pageToken }));
+    },
 
-      for (let retry = 0; ; retry += 1) {
-        try {
-          return await request({ query, maxResults, pageToken });
-        } catch (error) {
-          if (!retryable(error) || retry >= maxRetries) throw error;
-          const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** retry));
-          const serverDelay = retryAfterMs(error, now());
-          const delay = Math.min(maxDelayMs, serverDelay ?? Math.floor(exponential * (0.5 + random())));
-          await sleep(delay);
-        }
+    async getMessage(messageId) {
+      if (typeof messageId !== 'string' || !messageId.trim() || messageId.length > 512
+        || /[\u0000-\u001f\u007f]/.test(messageId)) {
+        throw new TypeError('messageId is invalid');
       }
+      return withRetry(() => request({ messageId }));
     }
   };
 }
