@@ -225,3 +225,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Actions v2-ci #41833501945 succeeded. Both test/check job and emulator job passed; Emulator race test result was 1 passed, 0 failed, 0 skipped. The test confirmed one winner under concurrent CAS, stale generation rejection after finalization, and final checkpoint readback.
 - This does not verify production Firestore/Gmail/OAuth or canonical V2 migration. No production state was accessed or modified.
 - Next: build the read-only Gmail API adapter once authorized project credentials and least-privilege scope are available; maintain staging and migration gates.
+
+
+### Read-only Gmail API list adapter — 2026-11-04
+
+- Added a Gmail REST `users/me/messages` list adapter. It requests the single `gmail.readonly` scope from an injected token source and returns only message IDs/page tokens; it never fetches email bodies, subjects, senders, or labels.
+- Integrated bounded quota retries and per-attempt token refresh. Request duration, max page size, page token size, and returned IDs are validated; error bodies are reduced to safe status/reason metadata.
+- Four mocked transport tests pass locally. Actions v2-ci #41834363103 passed the normal test/check job and the Firestore Emulator job.
+- OAuth grant/token source, live Gmail account, production wiring, and canonical V2 migration are still unimplemented/unauthorized. No production data was accessed.
+- Next: add the authorized least-privilege OAuth token source once Cloud project credentials are available, then test only in staging.
