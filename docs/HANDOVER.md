@@ -622,3 +622,11 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - GitHub Actions v2-ci #41832445196 passed the full `npm test` and `npm run check` steps. The emulator-specific test remains opt-in and was not run against a live emulator.
 - No production credentials, Gmail, Firestore, Apps Script, triggers, queue rows, or V2 data were accessed or changed.
 - Next: execute the opt-in test against an isolated Firestore Emulator when Firebase CLI/emulator runtime is available; then implement/wire the least-privilege Gmail adapter only after authorized Cloud credentials are available.
+
+
+### 2026-11-04 — Firestore Emulator race tests verified in CI
+- Added a dedicated GitHub Actions job that installs Firebase CLI 15.34.2 and runs the opt-in Firestore test inside `firebase emulators:exec` using the `demo-toreca-vault` project. The emulator config loads deny-all client rules; test writes use the Admin SDK only against the local emulator.
+- First emulator run exposed a test teardown typo (`db.close`); changed cleanup to the Admin SDK's `db.terminate()` and reran.
+- GitHub Actions v2-ci #41833501945 succeeded: both normal `npm test`/`npm run check` and the separate Emulator job passed. Emulator log shows 1/1 race test passed, 0 failures, 0 skipped. It verified competing cursor CAS updates, rejection of a stale generation after completion, and final checkpoint readback.
+- This is isolated Emulator validation only. No production Firestore, Gmail, Apps Script, triggers, canonical V2, or pending queue rows were accessed or changed.
+- Next: implement the read-only Gmail API adapter using least-privilege OAuth only after authorized credentials/project are available; keep it staged until canonical V2 identity and migration readback gates are satisfied.
