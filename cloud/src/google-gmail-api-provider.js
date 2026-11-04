@@ -69,7 +69,7 @@ function extractPlainText(payload) {
 
 function nestedPartFields(depth) {
   if (depth < 1) return '';
-  return ',parts(mimeType,body(data),parts(mimeType,body(data)' + nestedPartFields(depth - 1) + '))';
+  return ',parts(mimeType,body(data)' + nestedPartFields(depth - 1) + ')';
 }
 
 function validMessageId(messageId) {
