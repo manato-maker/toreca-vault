@@ -37,3 +37,11 @@ PR: [#105 — Start Cloud Run and Firestore migration foundation](https://github
 - Local run: 10 passed; the integration test was skipped because this workspace has no Firebase CLI and no `FIRESTORE_EMULATOR_HOST`. No live emulator race test was executed.
 - GitHub Actions v2-ci #41832445196 passed full test/check steps; the opt-in integration remained skipped.
 - Next: run the test against an isolated emulator when available, then continue with least-privilege Gmail API wiring once Cloud credentials are authorized.
+
+
+## Firestore Emulator race verification
+- Added a dedicated CI job using `firebase emulators:exec` and a demo project. Emulator client rules deny access; the test uses Admin SDK only against the local emulator.
+- First run caught `db.close()` in cleanup; fixed to `db.terminate()`.
+- GitHub Actions v2-ci #41833501945 passed both normal tests/checks and the Emulator job. Emulator result: 1 test passed, 0 failed, 0 skipped. Concurrent CAS winner, stale-generation rejection, and final readback all verified.
+- Production Firestore/Gmail/OAuth/V2/queue/triggers remain untouched.
+- Next: implement a least-privilege Gmail read-only API adapter when authorized Cloud project credentials are available; then wire only in staging.
