@@ -25,3 +25,8 @@ PR: [#105 — Start Cloud Run and Firestore migration foundation](https://github
 3. Wire only in staging; verify bounded checkpoint recovery and message-ID idempotency.
 4. Confirm canonical V2 identity and produce a read-only backup/hash/count report before any migration planning.
 5. Keep existing triggers and workers unchanged until shadow comparison and explicit cutover acceptance.
+
+
+## Follow-up verification
+- Added previous-success generation to the cursor CAS guard and a stale-scan regression case.
+- Focused local tests: 10 passed. GitHub Actions v2-ci #41831501955 passed the full test/check workflow.
