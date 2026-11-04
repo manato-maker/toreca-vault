@@ -24,23 +24,25 @@ function checkpointStore(initial = {}) {
   return {
     values,
     async load(scanType) { return structuredClone(values[scanType] || null); },
-    async saveCursor(scanType, cursor, { expectedCursor = null } = {}) {
-      const current = values[scanType]?.cursor ?? null;
-      if (!sameCursor(current, expectedCursor)) {
+    async saveCursor(scanType, cursor, { expectedCursor = null, expectedLastSuccessfulAtMs = null } = {}) {
+      const current = values[scanType] || {};
+      if (!sameCursor(current.cursor ?? null, expectedCursor)
+        || (current.lastSuccessfulAtMs ?? null) !== expectedLastSuccessfulAtMs) {
         const error = new Error('stale checkpoint');
         error.name = 'GmailCheckpointConflict';
         throw error;
       }
-      values[scanType] = { ...(values[scanType] || {}), cursor };
+      values[scanType] = { ...current, cursor };
     },
-    async completeScan(scanType, lastSuccessfulAtMs, { expectedCursor } = {}) {
-      const current = values[scanType]?.cursor ?? null;
-      if (!sameCursor(current, expectedCursor)) {
+    async completeScan(scanType, lastSuccessfulAtMs, { expectedCursor, expectedLastSuccessfulAtMs = null } = {}) {
+      const current = values[scanType] || {};
+      if (!sameCursor(current.cursor ?? null, expectedCursor)
+        || (current.lastSuccessfulAtMs ?? null) !== expectedLastSuccessfulAtMs) {
         const error = new Error('stale checkpoint');
         error.name = 'GmailCheckpointConflict';
         throw error;
       }
-      values[scanType] = { cursor: null, lastSuccessfulAtMs };
+      values[scanType] = { ...current, cursor: null, lastSuccessfulAtMs };
     }
   };
 }
