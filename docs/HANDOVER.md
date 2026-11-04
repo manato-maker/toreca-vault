@@ -647,3 +647,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Important wiring gap found during review: `dispatchJobs` discards handler return values and marks a job completed. Do not wire this classifier processor into the scanner until a durable result-code consumer exists, or a successful classification could be lost while its message ID is deduplicated.
 - No OAuth grant/token source, live Gmail, Cloud Run/production Firestore, Apps Script, trigger, canonical V2, or pending queue row was accessed or changed. The eight pending sales and TCG193 remain untouched.
 - Next: verify CI, add a durable classification outcome path that stores only hashed message ID and classification code/reason, and test unique/ambiguous matching before any V2 transition. Verify Google Cloud project and restricted-scope approval before staging. Canonical V2 identity remains unresolved.
+
+
+### 2026-11-04 — Redacted Gmail classification outcome store
+
+- Added a Firestore collection for compact classifier outcomes. Each document ID is SHA-256(messageId); stored fields are the hash, schema version, classification kind, optional allowlisted ignore reason, and timestamp. No raw message ID, headers, subject, or body is stored.
+- The classifier processor now writes its outcome before returning. If the durable write fails, the handler fails and the scan worker will not advance the cursor. If ledger completion later fails, retry sees the same classification record and returns an idempotent duplicate; a conflicting reclassification fails closed.
+- Added tests for write-once outcomes, hashed IDs, privacy bounds, conflict rejection, and processor ordering. GitHub Actions v2-ci #41838186341 is in progress; CI result remains pending.
+- The processor is still not wired into a live scanner/runtime. No OAuth grant, live Gmail, Cloud Run/production Firestore, Apps Script, triggers, V2 writes, or queue replay. Existing data and the eight pending sales plus TCG193 remain untouched.
+- Next: verify CI, compose the existing scan worker with the detail provider, Firestore checkpoint, message ledger, and classifier processor in isolated tests; then test unique/ambiguous V2 matching without writes. Cloud project/token source and canonical V2 identity remain staging/cutover gates.
