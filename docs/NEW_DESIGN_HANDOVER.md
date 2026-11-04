@@ -243,3 +243,12 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Current implementation gap: the generic dispatcher ignores handler return values and only records job completion. Therefore the classifier processor is not yet wired into the Gmail scan worker; a safe durable classification outcome/consumer is required first so a message cannot be silently marked complete while its classification is lost.
 - No Gmail account/OAuth grant, live mail, Cloud Run/production Firestore, Apps Script, trigger, V2 data, or pending queue rows were accessed or changed. Existing Apps Script and V2 remain authoritative; the eight pending sales and TCG193 remain untouched.
 - Next: verify this CI run, implement a durable result-code path that stores only message ID hash plus classification code/reason, and then add conservative classification-to-V2 matching tests. Before live staging, verify the Cloud project/token source and restricted-scope approval path; canonical V2 identity remains a migration gate.
+
+
+### 2026-11-04 — Redacted Gmail classification outcome store
+
+- Added a Firestore collection for compact classifier outcomes. Each document ID is SHA-256(messageId); stored fields are the hash, schema version, classification kind, optional allowlisted ignore reason, and timestamp. No raw message ID, headers, subject, or body is stored.
+- The classifier processor now writes its outcome before returning. If the durable write fails, the handler fails and the scan worker will not advance the cursor. If ledger completion later fails, retry sees the same classification record and returns an idempotent duplicate; a conflicting reclassification fails closed.
+- Added tests for write-once outcomes, hashed IDs, privacy bounds, conflict rejection, and processor ordering. GitHub Actions v2-ci #41838186341 is in progress; CI result remains pending.
+- The processor is still not wired into a live scanner/runtime. No OAuth grant, live Gmail, Cloud Run/production Firestore, Apps Script, triggers, V2 writes, or queue replay. Existing data and the eight pending sales plus TCG193 remain untouched.
+- Next: verify CI, compose the existing scan worker with the detail provider, Firestore checkpoint, message ledger, and classifier processor in isolated tests; then test unique/ambiguous V2 matching without writes. Cloud project/token source and canonical V2 identity remain staging/cutover gates.
