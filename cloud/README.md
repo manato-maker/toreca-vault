@@ -71,4 +71,17 @@ npm test --prefix cloud
 npm run check --prefix cloud
 ```
 
+## Firestore Emulator race tests
+
+The dedicated integration test uses a unique throwaway collection and deletes its document after the run. It covers two simultaneous cursor claims, a stale generation attempting to recreate a cleared cursor, and final checkpoint readback. The regular test suite skips this integration test when `FIRESTORE_EMULATOR_HOST` is unset.
+
+Start an isolated emulator with Firebase CLI, then run:
+
+```sh
+firebase emulators:start --only firestore --project demo-toreca-vault --config cloud/firebase.json
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-toreca-vault npm run test:firestore-emulator --prefix cloud
+```
+
+The emulator is local-only; this does not configure or access production Firestore.
+
 Cloud Run deployment, Firestore creation/TTL/retention configuration, OAuth consent, Gmail/Sheets access, legacy command execution, and production cutover are intentionally outside this prototype.
