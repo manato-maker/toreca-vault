@@ -192,3 +192,12 @@ CI follow-up (2026-11-03): GitHub Actions v2-ci #41632298133 passed for the requ
 
 
 Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci #41721758957 succeeded, including `npm test` and `npm run check`.
+
+
+## 2026-11-04 — Firestore Gmail checkpoints and quota-aware provider
+
+- Implemented a Firestore checkpoint store that records only bounded scan metadata. A scan window is persisted before the provider call; expected-cursor compare-and-swap rejects stale page writes; the final page clears the cursor and advances `lastSuccessfulAtMs` atomically.
+- Implemented an injected provider wrapper with bounded retry for HTTP 429/5xx and recognized rate/quota 403 errors. It honors `Retry-After` within the configured cap and does not retry authentication failures.
+- Added store, worker-resume, and provider retry tests. Actions v2-ci #41830898928 succeeded; `npm test` and `npm run check` both passed.
+- These are not live Gmail/Firestore integrations: no Gmail API client/OAuth, emulator, deployed service, production checkpoint, or V2 mutation. Existing Apps Script, triggers, and pending rows remain untouched.
+- Next: emulator concurrency tests, then a least-privilege Gmail API adapter and staging wiring after cloud authorization. Canonical source identity must be confirmed before any migration.
