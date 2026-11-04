@@ -69,3 +69,24 @@ test('Firestore checkpoint store scopes documents by scan type and validates cur
   await assert.rejects(store.load('unexpected'), /scanType must be hourly or results/);
   await assert.rejects(store.saveCursor('results', cursor, { expectedCursor: null }), /does not belong to this scan window/);
 });
+
+
+test('Firestore checkpoint store rejects a stale scan after a newer generation completes', async () => {
+  const db = fakeFirestore();
+  const store = createFirestoreGmailCheckpointStore(db);
+  await store.saveCursor('hourly', cursor, {
+    expectedCursor: null,
+    expectedLastSuccessfulAtMs: null
+  });
+  await store.completeScan('hourly', cursor.untilMs, {
+    expectedCursor: cursor,
+    expectedLastSuccessfulAtMs: null
+  });
+  await assert.rejects(
+    store.saveCursor('hourly', cursor, {
+      expectedCursor: null,
+      expectedLastSuccessfulAtMs: null
+    }),
+    { name: 'GmailCheckpointConflict' }
+  );
+});
