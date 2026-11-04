@@ -201,3 +201,10 @@ Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci
 - Added store, worker-resume, and provider retry tests. Actions v2-ci #41830898928 succeeded; `npm test` and `npm run check` both passed.
 - These are not live Gmail/Firestore integrations: no Gmail API client/OAuth, emulator, deployed service, production checkpoint, or V2 mutation. Existing Apps Script, triggers, and pending rows remain untouched.
 - Next: emulator concurrency tests, then a least-privilege Gmail API adapter and staging wiring after cloud authorization. Canonical source identity must be confirmed before any migration.
+
+
+### Checkpoint generation fencing follow-up — 2026-11-04
+
+- Checkpoint CAS now compares both the expected cursor and prior `lastSuccessfulAtMs`, so an older in-flight scan cannot restart a completed generation after the cursor is cleared.
+- Added a stale-generation regression test. Focused local run: 10 tests pass. GitHub Actions v2-ci #41831501955 passed `npm test` and `npm run check`.
+- Emulator/live Gmail and Firestore remain unverified; no production connection or data change.
