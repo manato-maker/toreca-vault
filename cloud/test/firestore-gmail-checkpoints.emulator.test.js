@@ -59,6 +59,6 @@ test('Firestore Emulator fences concurrent and stale Gmail checkpoint generation
     });
   } finally {
     await db.doc(`${collectionPath}/hourly`).delete();
-    await db.close();
+    await db.terminate();
   }
 });
