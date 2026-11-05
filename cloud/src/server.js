@@ -104,8 +104,11 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
       }
     }
 
-    const commandStatusPath = /^\\/api\\/v2\\/commands\\/([^/]+)$/.exec(path);
-    const commandRoute = path === '/api/v2/commands' || commandStatusPath;
+    const commandStatusSuffix = path.startsWith('/api/v2/commands/')
+      ? path.slice('/api/v2/commands/'.length) : '';
+    const commandStatusPath = commandStatusSuffix && !commandStatusSuffix.includes('/')
+      ? commandStatusSuffix : '';
+    const commandRoute = path === '/api/v2/commands' || Boolean(commandStatusPath);
     const knownApiRoute = path === '/api/v2' || commandRoute;
     const knownMethod = (path === '/api/v2' && ['GET', 'POST'].includes(request.method))
       || (path === '/api/v2/commands' && request.method === 'POST')
@@ -124,7 +127,7 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
         let requestId;
         try { requestId = decodeURIComponent(commandStatusPath[1]).trim(); }
         catch { return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin); }
-        if (!requestId || requestId.length > 200) {
+        if (!/^[A-Za-z0-9._:-]{1,120}$/.test(requestId)) {
           return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin);
         }
         const record = await commandQueue.inspect(requestId);
