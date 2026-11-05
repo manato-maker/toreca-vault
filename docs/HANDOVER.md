@@ -734,3 +734,29 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 実装済み: `cloud/src/schedule.js` のGmail due判定を上記時間に合わせ、`cloud/test/schedule.test.js` に07:00・各時刻・翌日00:00、01:00〜06:00の時間外、07:30の非実行境界を確認するテストを追加。関連コミット: `3d843c2`、`9bbd7d0`。
 - 検証済み: ローカルのscheduleテスト5件成功。GitHub Actions `v2-ci #42022058028` がcommit `9bbd7d050f8448263d00dbb9db8a3f636d6740cd` で成功。
 - 未実装/未検証: Cloud Scheduler等への本番設定、Gmail worker/OAuthの接続、実Gmailでの時刻・API利用量の運用確認は未完了。今回、旧V2やトリガーへの変更は行っていない。
+
+
+## 2026-11-05 — 新アプリ設計監査と予防的改善
+
+### 発見と判断
+
+- **A Firestore容量** — 現行adapterはV2全体を1ドキュメントに保持し、900,000 bytesで書込みをfail-closedする。Firestore Nativeの文書上限は1 MiB-4 bytes。V2正本のサイズと成長率をまだ取得できず、今コレクション分割すると複数文書の整合性・トランザクション・追加read/writeを増やすため、移行前の分割は保留。正本をread-only検査し、630,000 bytes超または90日実測成長から12か月以内に安全上限到達が見込まれる場合は移行を止め、分割案を再設計する。現状のfail-closedは維持。
+- **B 定期処理** — plannerが実起動時刻を予定時刻として使い、19:00の重点確認を別Gmail jobとして出していた。plannerに予定時刻入力を追加し、遅延起動でもjob keyを予定slotに固定。19:00は毎時Gmail job一つに重点フラグを付け、12:30重点確認は維持。保留コマンドとGmail固定window/checkpointは再開可能な状態を保持する。一方、Cloud Schedulerの予定時刻headerをruntimeで渡す接続、永続heartbeat、実行漏れアラートは未実装。
+- **C Gmail** — 各ページの上限を100件から50件へ下げ、plannerとproviderの両方で強制。Googleの現在の表ではmessages.listは5 units、完全形式messages.getは60 units、ユーザーごとの上限は6,000 units/分。50件の1ページは最大3,005 units（list 1回+full get 50回）で、短時間の上限到達余地を減らす。ページング/checkpointは継続する。19:00の二重実行は解消、12:30は保持。OAuth grant/token source、refresh失敗通知、実Gmail接続は未実装。認証エラーは自動再試行しない。
+- **D 通常Chat登録** — 認証済みAPIにPOST queue受付とstatus-only GETを追加し、pending/processing/done/reviewと正本readback確認を区別。status APIはコマンド本文を返さない。`cloud/openapi-chat-action.yaml` を追加した。API/queueは既定無効で、Cloud Run未配備のため通常Chatからのend-to-end投入は未検証。queueのrequestId+payload hashは完全再送を防ぐが、ChatとGmailの異なるIDを同じ抽選イベントとして認識する業務キーは未実装。Gmailはまだ分類のみでV2履歴を書かない。この照合ができるまではGmail結果をV2へ適用しない。
+- **E バックアップ/復旧** — 定期backup、restore drill、破損時の復元手順は未実装。Firestore backup/PITR/restoreとTTL削除に無料枠外の費用があり得るため、費用見積りとユーザー承認の前に有効化しない。隔離環境で復元検証と保存期間を設計する。
+- **F 監視** — 現在の`/health`は初期化と書込み設定のみ。Gmail最終成功、queue未処理・失敗、相場、backup、auth error、budgetの運用監視と通知は未実装。
+- **G 費用** — Cloud本番資源は未作成、利用量も実測なし。公式料金の確認ではCloud Schedulerはbilling account単位で3 jobs/月が無料、Firestore標準無料枠は1日50,000 read/20,000 write/20,000 deleteと1 GiB、Cloud Run request-basedは月200万requestなどの無料枠がある。一つの15分dispatcherはScheduler無料枠内に収まる見込みだが、既存billing accountの利用分とFirestore/Cloud Run/ネットワーク/backup/TTLを含む全体無料は未検証。Gmail quotaはusage limitであってCloud費用の保証ではない。課金設定は未変更。
+
+### 実装・検証結果
+
+- 実装済み: `cloud/src/schedule.js`予定時刻入力、19:00 Gmail job統合、Gmailページ上限50、command status API、`cloud/openapi-chat-action.yaml`。
+- テスト済み: schedule・API status・Gmail page/checkpoint・quota retry/providerの関連ローカルテスト29件成功、0失敗。OpenAPI YAML parseとserver/schedule構文確認も成功。GitHub Actions全体CIは今回の新commitについて確認待ち。
+- 関連commit: schedule/status/API/schema `ef7bf9c` / `ebec886` / `d7d4159`; Gmailページ上限 `7479b33`; quota/page tests `5671b68`。
+- 本番影響: Cloud Run/Firestore、Gmail、Apps Script、既存queue、V2正本は未変更。未処理売却queueの再投入なし。確定した時刻仕様の変更なし。
+
+### 次工程
+
+- GitHub CI全体結果を確認し、Schedule header接続・scheduler heartbeat/alertの実装範囲を決める。
+- V2正本取得後にsize/growth reportでsingle-documentか分割か判断し、バックアップとrestore drillを課金見積り付きで提案する。
+- requestIdとは別の業務event keyでChat/Gmail抽選を照合する設計を実装前にテストする。通常Chat Actionの実接続は認証・Cloud配備後に検証する。
