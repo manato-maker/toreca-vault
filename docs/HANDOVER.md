@@ -813,3 +813,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - V2正本の保存経路を特定し、有効な読み取り専用exportを得た後にだけvalidator・保存サイズ・件数・在庫/原価/資産集計を再検査する。候補JSONは使用しない。
 - chunked-v1の障害ケース、複数更新、segment cleanupと費用/読み書き数を検証し、Firestore実サイズの見積りに余裕を持たせる。
 - 通常Chat Actionからの受付実接続、業務event keyによるChat/Gmail重複防止、Scheduler欠落監視、バックアップ/復元、Cloud利用量を引き続き未解決事項として扱う。
+
+
+## 2026-11-06 — Firestore分割保存の整合性テスト
+
+- 分割保存の失敗時に破損状態を受け入れないことを確認する単体テストを追加: segment欠落、segment内容改変によるpayload hash不一致、異なるrevisionのsegmentを検出する。
+- 大きなスナップショットをrevision 1から2へ更新し、readback payloadと全segmentのrevisionが一致することを確認する。
+- 関連ローカルテスト16件が成功、失敗0件。GitHub Actions v2-ci #42110925076はtest、check、Firestore Emulatorを含め成功。新しい不整合テストはfake Firestore transactionで検証し、Emulatorは合成データのchunked save/readbackを検証した。
+- これは新アプリのコード検証であり、本番FirestormやV2データの検証ではない。PR #105はdraft・未merge・未配備。本番V2、Apps Script、trigger、queue、課金設定は変更なし。売却queue再投入なし。
+- 次工程: scheduler実行欠落のheartbeat/catch-up、読み書きコスト評価、backup/restore設計、通常Chatからの実接続を独立した安全な段階で進める。正本取得は依然として移行のblocker。全体進捗は約25%のまま。
