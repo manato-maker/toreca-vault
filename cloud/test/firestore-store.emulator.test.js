@@ -13,7 +13,7 @@ test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { s
   ]);
   const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
   const db = new Firestore({ projectId });
-  const documentPath = 'snapshotStoreTestRuns/' + randomUUID() + '/canonical';
+  const documentPath = 'snapshotStoreTestRuns/' + randomUUID() + '/snapshots/canonical';
   const root = db.doc(documentPath);
   const store = createFirestoreStore(db, documentPath);
   const initial = emptyV2();
