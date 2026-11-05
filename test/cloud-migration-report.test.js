@@ -27,6 +27,10 @@ test('migration report validates V2 and emits only safe aggregates and source ha
   assert.equal(report.sha256, createHash('sha256').update(raw).digest('hex'));
   assert.equal(report.firestoreStoragePlan, 'single');
   assert.equal(report.firestoreSnapshotFitsSafetyLimit, true);
+  assert.deepEqual(report.firestoreDocumentOperationsPerSuccessfulMutationEstimate, {
+    reads: 3, writes: 1, deletes: null,
+    basis: 'Baseline counts include the duplicate-check read, revision-CAS root read, and post-write readback; chunked reads include all segments. Writes include the root and new segments. Transaction retries and obsolete-segment cleanup deletes are excluded.'
+  });
   assert.equal(report.counts.transactionsByType.purchase, 1);
   assert.equal(report.counts.inventoryQuantityByCategoryCondition['BOX / あり'], 2);
   assert.equal(report.counts.lotteriesByStatus['応募済'], 1);
@@ -48,6 +52,14 @@ test('migration report identifies chunkable snapshots above the single-document 
   assert.equal(report.firestoreSingleDocumentFitsSafetyLimit, false);
   assert.equal(report.firestoreSnapshotFitsSafetyLimit, true);
   assert.ok(report.firestoreSegmentCountEstimate > 1);
+  assert.equal(
+    report.firestoreDocumentOperationsPerSuccessfulMutationEstimate.reads,
+    3 + (2 * report.firestoreSegmentCountEstimate)
+  );
+  assert.equal(
+    report.firestoreDocumentOperationsPerSuccessfulMutationEstimate.writes,
+    1 + report.firestoreSegmentCountEstimate
+  );
 });
 
 test('migration report fails closed when an atomic inline field cannot be chunked', () => {
