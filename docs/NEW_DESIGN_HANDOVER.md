@@ -322,3 +322,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 通常Chatからテキスト・スクリーンショットで報告して自動登録することを最終要件とする。
 - 旧V2の購入・売却・在庫・原価・抽選履歴を安全に移行する。未確認のstaging JSONは移行元にしない。正本検証前の書込みや切替は行わない。
 - 無料枠、API上限、長期保守性を考慮する。確定仕様の変更と本番切替はユーザー承認後。
+
+
+## 2026-11-05 — Gmail確認時刻の実装・検証状況
+
+- 決定済み: Gmail抽選メール確認は毎日07:00、08:00、…、23:00、24:00（翌暦日の00:00）の1時間ごと。通常Chat登録キューの15分間隔とは独立。
+- 実装済み: `cloud/src/schedule.js` のGmail due判定を上記時間に合わせ、`cloud/test/schedule.test.js` に07:00・各時刻・翌日00:00、01:00〜06:00の時間外、07:30の非実行境界を確認するテストを追加。関連コミット: `3d843c2`、`9bbd7d0`。
+- 検証済み: ローカルのscheduleテスト5件成功。GitHub Actions `v2-ci #42022058028` がcommit `9bbd7d050f8448263d00dbb9db8a3f636d6740cd` で成功。
+- 未実装/未検証: Cloud Scheduler等への本番設定、Gmail worker/OAuthの接続、実Gmailでの時刻・API利用量の運用確認は未完了。今回、旧V2やトリガーへの変更は行っていない。
