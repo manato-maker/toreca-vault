@@ -380,3 +380,32 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 正本と確認されていないため、移行データ・本番バックアップ・canonical snapshotとして扱わない。V1 JSONも使用しない。取得した候補JSONとSHA-256 sidecarは個人用Libraryに保存。ハッシュ値自体やファイルID、認証情報はこの公開リポジトリへ記録しない。
 - 取得は読み取り専用。Apps Script、Drive原本、V2、queue、トリガー、Cloud資源への書き込み・設定変更は行っていない。未処理売却queueの再投入なし。
 - 次: 本番正本として確認できるソースが判明したら別途取得し、候補と混同せず検証する。現在の候補を移行に使う判断は未確定。
+
+
+## 2026-11-05 — Firestore容量監査と分割保存の予防実装
+
+### 決定変更と理由
+
+- 旧設計の「900,000 bytesを超えたら保存を停止し、移行前に別途分割を再設計する」から、「900,000 bytes以下は従来どおり単一ドキュメント、超過時はFirestore内のchunked-v1へ切り替える」に変更。候補JSONのcompact payload-envelope見積りが1,009,515 bytesとなり、単一ドキュメントの内部安全予算を超えたため。変更日は2026-11-05。これは本番保存先・正本・移行元を変更するものではない。
+- 先の説明にあった「raw JSON 1.24 MBだからFirestoreの1 MiB上限を超える」という断定は誤りとして訂正する。raw JSONは1,242,326 bytes、JSON compact payload-envelope見積りは1,009,515 bytesで、Firestoreの公称1 MiB-4 bytesを下回る。Firestoreの実際の符号化サイズは未計測なので、上限超過とは断定できない。一方、900,000-byte内部安全予算は超える。
+- staging名の候補は未確認データであり、現行V2 validatorがBOX conditionを拒否する。正本・有効な移行スナップショットとして扱わず、件数・在庫・原価・資産集計も検証済みとは扱わない。
+
+### 実装
+
+- PR #105の cloud/src/firestore-store.js にlegacy単一ドキュメント読込互換を残し、保存時は900,000 bytes以下ならsingle、超過時はchunked-v1を使う。
+- chunked-v1は配列フィールドを最大650,000 bytesのsegmentへ分割し、revision・順序・件数・payload SHA-256をmanifestで照合する。rootとsegmentsを1トランザクションで保存し、余剰segmentの削除・保存後readbackも行う。7,000,000-byte payload等の安全上限を超えたらfail-closed。
+- API body上限を7,500,000 bytesへ整合。Firestore index設定に保存payload/manifest配列のindex exemptionを追加したが、本番へ適用していない。
+- migration reportはsingle/chunked/blockedを区別する。candidateの実移行・本番V2書込み・Firestore配備は行っていない。
+
+### 検証・状態
+
+- 保存方式とmigration reportのローカルテストは12件成功、0件失敗。
+- GitHub Actions v2-ci #42033589572 はtest/checkとFirestore Emulatorを含め成功。Emulatorでは合成データでchunked save・readback・manifest・segmentサイズを確認した。これは本番データ、OAuth、通常Chat接続の検証ではない。
+- PR #105はdraft・未merge・未配備。Cloud請求設定、旧Apps Script、queue、trigger、V2正本に変更なし。未処理売却queueの再投入なし。
+- 全体進捗は約25%のまま。コアコードの範囲は広がったが、正本確認、通常Chat実接続、Cloud実運用、バックアップ復元、監視と本番切替は未完了。無料枠内の継続運用も実測前で未保証。
+
+### 次工程
+
+- V2正本の保存経路を特定し、有効な読み取り専用exportを得た後にだけvalidator・保存サイズ・件数・在庫/原価/資産集計を再検査する。候補JSONは使用しない。
+- chunked-v1の障害ケース、複数更新、segment cleanupと費用/読み書き数を検証し、Firestore実サイズの見積りに余裕を持たせる。
+- 通常Chat Actionからの受付実接続、業務event keyによるChat/Gmail重複防止、Scheduler欠落監視、バックアップ/復元、Cloud利用量を引き続き未解決事項として扱う。
