@@ -433,3 +433,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 根拠は現行adapterのduplicate確認read、revision-CAS root read、保存後readback。chunkedの初回readとreadbackは全segmentを含む。SDK transaction retryおよび旧segment削除writes/deletesは見積りに含めない。これは基準値であり実測や課金額ではない。
 - 操作数見積りを含む保存方式/migration reportのローカル16件は成功。記録時点ではCI未確認だったが、その後のGitHub Actions v2-ci #42112277167（run #688）がbranch head 8ae3436でtest/check/Firestore Emulator全job成功。このheadはoperation estimate変更を含む。
 - 無料枠への適合は実際の保存回数、segment数、既存プロジェクトの他利用量を測るまで未保証。Cloud請求設定は変更していない。
+
+
+## 2026-11-06 — 12:30 lottery focus catch-up
+
+- A missed 12:30 Scheduler tick no longer loses the daily focused result check: 12:30–18:45 JST quarter-hour slots reuse the stable key `lottery-result-focus:YYYY-MM-DD`, keep `scheduledAt` fixed at 12:30, record actual `triggeredAt`, and mark later slots `catchUp: true`. A durable completed key suppresses repeats. At 19:00 the focus flag stays on the single hourly Gmail job.
+- Added schedule tests for normal/catch-up slots, completion suppression, delayed execution, and the 19:00 merge. GitHub Actions v2-ci #42114904105 (run #690) passed `npm test`, `npm run check`, and Firestore Emulator.
+- Runtime wiring, scheduler heartbeat/alerts, and live recovery remain unverified. PR #105 is still draft, branch head `36661d2b56d124d18a222a425590b96c890fcf06`. No production, V2, Apps Script, Gmail, queue, or billing changes; canonical V2 remains unconfirmed and no pending sale work was replayed.
