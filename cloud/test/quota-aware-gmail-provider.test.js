@@ -80,3 +80,10 @@ test('quota-aware provider does not retry auth failures or exceed retry limit', 
   await assert.rejects(exhausted.listMessages('query', { maxResults: 1 }), { status: 503 });
   assert.equal(calls, 3);
 });
+
+
+test('quota-aware provider rejects pages above the per-user safety cap', async () => {
+  const provider = createQuotaAwareGmailProvider({ request: async () => ({ messages: [] }) });
+  await assert.rejects(provider.listMessages('query', { maxResults: 51 }), /maxResults/);
+  assert.deepEqual(await provider.listMessages('query', { maxResults: 50 }), { messages: [] });
+});
