@@ -69,8 +69,8 @@ export function createQuotaAwareGmailProvider({
   return {
     async listMessages(query, { maxResults, pageToken = null } = {}) {
       if (typeof query !== 'string' || !query) throw new TypeError('query is required');
-      if (!Number.isSafeInteger(maxResults) || maxResults < 1 || maxResults > 100) {
-        throw new TypeError('maxResults must be from 1 to 100');
+      if (!Number.isSafeInteger(maxResults) || maxResults < 1 || maxResults > 50) {
+        throw new TypeError('maxResults must be from 1 to 50');
       }
       if (pageToken != null && (typeof pageToken !== 'string' || pageToken.length > 2048)) {
         throw new TypeError('pageToken is invalid');
