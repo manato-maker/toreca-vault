@@ -36,6 +36,8 @@ function fakeFirestore(initial) {
       for (const [path, value] of writes) docs.set(path, value);
       return result;
     },
+    remove(path) { docs.delete(path); },
+    mutate(path, mutator) { docs.set(path, mutator(clone(docs.get(path)))); },
     dump() { return new Map([...docs].map(([path, value]) => [path, clone(value)])); }
   };
 }
@@ -122,6 +124,54 @@ test('Firestore store chunks large snapshots and preserves transactional readbac
   for (const id of root.segmentIds) {
     const doc = docs.get('torecaVaultV2/canonical/segments/' + id);
     assert.ok(Buffer.byteLength(JSON.stringify(doc), 'utf8') < 900_000);
+  }
+});
+
+test('Firestore store rejects a chunked snapshot when a segment is missing', async () => {
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: emptyV2() });
+  const store = createFirestoreStore(db);
+  await store.save(largeMutation('large-missing'));
+  const root = db.dump().get('torecaVaultV2/canonical');
+  db.remove('torecaVaultV2/canonical/segments/' + root.segmentIds[0]);
+  await assert.rejects(store.read(), /missing a chunk/);
+});
+
+test('Firestore store rejects a chunked snapshot when segment content is altered', async () => {
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: emptyV2() });
+  const store = createFirestoreStore(db);
+  await store.save(largeMutation('large-corrupt'));
+  const root = db.dump().get('torecaVaultV2/canonical');
+  const path = 'torecaVaultV2/canonical/segments/' + root.segmentIds[0];
+  db.mutate(path, (segment) => ({
+    ...segment,
+    items: segment.items.map((item, index) => index === 0 ? { ...item, memo: item.memo + '-tampered' } : item)
+  }));
+  await assert.rejects(store.read(), /snapshot hash does not match/);
+});
+
+test('Firestore store rejects a segment from a different revision', async () => {
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: emptyV2() });
+  const store = createFirestoreStore(db);
+  await store.save(largeMutation('large-stale-segment'));
+  const root = db.dump().get('torecaVaultV2/canonical');
+  const path = 'torecaVaultV2/canonical/segments/' + root.segmentIds[0];
+  db.mutate(path, (segment) => ({ ...segment, revision: segment.revision - 1 }));
+  await assert.rejects(store.read(), /chunk is invalid/);
+});
+
+test('Firestore store atomically replaces all chunks when a large snapshot advances', async () => {
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: emptyV2() });
+  const store = createFirestoreStore(db);
+  await store.save(largeMutation('large-revision-one'));
+  const next = largeMutation('large-revision-two', 1);
+  const saved = await store.save(next);
+  assert.equal(saved.revision, 2);
+  assert.equal(saved.lastMutationId, 'large-revision-two');
+  assert.deepEqual(saved.payload, next.payload);
+  const docs = db.dump();
+  const root = docs.get('torecaVaultV2/canonical');
+  for (const id of root.segmentIds) {
+    assert.equal(docs.get('torecaVaultV2/canonical/segments/' + id).revision, 2);
   }
 });
 
