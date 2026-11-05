@@ -837,3 +837,8 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 根拠は現行adapterのduplicate確認read、revision-CAS root read、保存後readback。chunkedの初回readとreadbackは全segmentを含む。SDK transaction retryおよび旧segment削除writes/deletesは見積りに含めない。これは基準値であり実測や課金額ではない。
 - 操作数見積りを含む保存方式/migration reportのローカル16件は成功。記録時点ではCI未確認だったが、その後のGitHub Actions v2-ci #42112277167（run #688）がbranch head 8ae3436でtest/check/Firestore Emulator全job成功。このheadはoperation estimate変更を含む。
 - 無料枠への適合は実際の保存回数、segment数、既存プロジェクトの他利用量を測るまで未保証。Cloud請求設定は変更していない。
+
+
+## 2026-11-06 — Draft new-app schedule recovery
+
+PR #105 adds a stable daily 12:30 lottery-result focus job that is retried on 15-minute slots through 18:45 after a missed Scheduler tick. Retries retain the 12:30 `scheduledAt`, record `triggeredAt`, and stop when the durable ledger reports completion. The 19:00 focus remains merged into the regular hourly Gmail job. v2-ci #42114904105 (run #690) passed test, check, and Firestore Emulator. Live Scheduler wiring, heartbeat/alerts, Cloud deployment, and V2 source confirmation remain pending; no production or legacy queue changes were made.
