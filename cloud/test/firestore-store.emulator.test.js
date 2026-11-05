@@ -5,6 +5,40 @@ import { randomUUID } from 'node:crypto';
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 const skipReason = emulatorHost ? false : 'Set FIRESTORE_EMULATOR_HOST to run Firestore Emulator integration tests';
 
+test('Firestore Emulator persists scheduler heartbeat and counts skipped dispatcher slots', { skip: skipReason }, async () => {
+  const [{ Firestore }, { createFirestoreSchedulerHeartbeatStore, evaluateSchedulerHealth }] = await Promise.all([
+    import('@google-cloud/firestore'),
+    import('../src/scheduler-heartbeat.js')
+  ]);
+  const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
+  const db = new Firestore({ projectId });
+  const documentPath = 'schedulerHeartbeatTestRuns/' + randomUUID() + '/dispatchers/current';
+  const root = db.doc(documentPath);
+  const store = createFirestoreSchedulerHeartbeatStore(db, documentPath, { intervalMs: 15 * 60 * 1000 });
+
+  try {
+    assert.equal((await store.recordSuccess({ scheduledAtMs: 900_000, completedAtMs: 901_000 })).latestMissedSlots, 0);
+    assert.equal((await store.recordSuccess({ scheduledAtMs: 2_700_000, completedAtMs: 2_701_000, failedJobCount: 1 })).latestMissedSlots, 1);
+    const missed = await store.read();
+    assert.equal(missed.totalMissedSlots, 1);
+    assert.equal(missed.failedJobCount, 1);
+    assert.equal(evaluateSchedulerHealth(missed, { nowMs: 2_702_000 }).healthy, false);
+
+    const retry = await store.recordSuccess({ scheduledAtMs: 2_700_000, completedAtMs: 2_703_000, failedJobCount: 0 });
+    assert.deepEqual(retry, { recorded: true, duplicate: true, stale: false, refreshed: true });
+    const recovered = await store.read();
+    assert.equal(recovered.failedJobCount, 0);
+    assert.equal(recovered.lastCompletedAtMs, 2_703_000);
+
+    const next = await store.recordSuccess({ scheduledAtMs: 3_600_000, completedAtMs: 3_601_000 });
+    assert.equal(next.latestMissedSlots, 0);
+    assert.equal(evaluateSchedulerHealth(await store.read(), { nowMs: 3_602_000 }).healthy, true);
+  } finally {
+    await db.recursiveDelete(root);
+    await db.terminate();
+  }
+});
+
 test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { skip: skipReason }, async () => {
   const [{ Firestore }, { emptyV2 }, { createFirestoreStore }] = await Promise.all([
     import('@google-cloud/firestore'),
