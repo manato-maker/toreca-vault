@@ -69,6 +69,14 @@ export function createFirestoreSchedulerHeartbeatStore(db, documentPath = DEFAUL
       return db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(ref);
         const current = snapshot.exists ? snapshot.data() : null;
+        if (current) {
+          if (current.schemaVersion !== 1) throw new Error('scheduler heartbeat schema version is unsupported');
+          timestamp(current.lastScheduledAtMs, 'heartbeat.lastScheduledAtMs');
+          timestamp(current.lastCompletedAtMs, 'heartbeat.lastCompletedAtMs');
+          safeCount(current.latestMissedSlots, 'heartbeat.latestMissedSlots');
+          safeCount(current.totalMissedSlots, 'heartbeat.totalMissedSlots');
+          safeCount(current.failedJobCount, 'heartbeat.failedJobCount');
+        }
         const priorScheduled = current?.lastScheduledAtMs ?? null;
         if (priorScheduled != null && scheduled === priorScheduled) {
           const priorCompleted = timestamp(current.lastCompletedAtMs, 'heartbeat.lastCompletedAtMs');
