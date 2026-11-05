@@ -100,5 +100,6 @@ test('rejects malformed timestamps, counters, and unsupported stored heartbeat s
   assert.throws(() => createFirestoreSchedulerHeartbeatStore(fakeFirestore(), 'x/y', { intervalMs: 0 }), /intervalMs/);
   db.seed('torecaVaultV2/schedulerHeartbeat/dispatchers/current', { schemaVersion: 999 });
   await assert.rejects(store.read(), /schema version/);
+  await assert.rejects(store.recordSuccess({ scheduledAtMs: 20, completedAtMs: 21 }), /schema version/);
 });
 
