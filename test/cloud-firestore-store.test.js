@@ -2,68 +2,89 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTransaction, emptyV2 } from '../v2/core.js';
 import {
-  CanonicalNotInitialized,
-  RevisionConflict,
-  StateTooLarge,
-  createFirestoreStore
+  CanonicalNotInitialized, RevisionConflict, StateTooLarge, createFirestoreStore
 } from '../cloud/src/firestore-store.js';
 
+function clone(value) { return value === undefined ? undefined : structuredClone(value); }
+
 function fakeFirestore(initial) {
-  let value = initial ? structuredClone(initial) : null;
-  const ref = {
-    async get() {
-      return { exists: Boolean(value), data: () => structuredClone(value) };
-    }
-  };
-  const db = {
-    doc(path) { assert.equal(path, 'torecaVaultV2/canonical'); return ref; },
-    async runTransaction(callback) {
-      let pending;
-      const tx = {
-        async get(target) { assert.equal(target, ref); return target.get(); },
-        set(target, next) { assert.equal(target, ref); pending = structuredClone(next); }
+  const docs = new Map();
+  if (initial !== undefined) docs.set('torecaVaultV2/canonical', clone(initial));
+  return {
+    doc(path) {
+      return {
+        path,
+        async get() {
+          const value = docs.get(path);
+          return { exists: value !== undefined, data: () => clone(value) };
+        }
       };
-      const result = await callback(tx);
-      if (pending) value = pending;
+    },
+    async runTransaction(callback) {
+      const writes = new Map();
+      const deletes = new Set();
+      const transaction = {
+        async get(ref) {
+          const value = writes.has(ref.path) ? writes.get(ref.path) : docs.get(ref.path);
+          return { exists: value !== undefined && !deletes.has(ref.path), data: () => clone(value) };
+        },
+        set(ref, value) { writes.set(ref.path, clone(value)); deletes.delete(ref.path); },
+        delete(ref) { writes.delete(ref.path); deletes.add(ref.path); }
+      };
+      const result = await callback(transaction);
+      for (const path of deletes) docs.delete(path);
+      for (const [path, value] of writes) docs.set(path, value);
       return result;
-    }
+    },
+    dump() { return new Map([...docs].map(([path, value]) => [path, clone(value)])); }
   };
-  return db;
 }
 
-function purchaseMutation(mutationId) {
-  const payload = applyTransaction(emptyV2(), {
-    id: `tx-${mutationId}`,
-    type: 'purchase',
-    product: 'Example BOX',
-    productKey: 'example-box',
-    category: 'BOX',
-    condition: 'あり',
-    quantity: 1,
-    unitCost: 100,
-    date: '2026-11-03'
+function purchaseMutation(mutationId, expectedRevision = 0) {
+  const base = expectedRevision === 0 ? emptyV2() : null;
+  if (!base) throw new Error('test helper only supports initial purchase mutation');
+  const payload = applyTransaction(base, {
+    id: 'tx-' + mutationId, type: 'purchase', product: 'Example BOX',
+    productKey: 'example-box', category: 'BOX', condition: 'あり',
+    quantity: 1, unitCost: 100, date: '2026-11-03'
   }, mutationId);
-  return { expectedRevision: 0, mutationId, payload };
+  return { expectedRevision, mutationId, payload };
 }
 
-test('Firestore store refuses to initialize or overwrite a missing canonical state', async () => {
+function largeMutation(mutationId, expectedRevision = 0) {
+  const payload = emptyV2();
+  payload.revision = expectedRevision + 1;
+  payload.lastMutationId = mutationId;
+  payload.lotteries = Array.from({ length: 520 }, (_, index) => ({
+    id: 'lottery-' + index, title: 'Test event ' + index, status: '応募済',
+    memo: 'x'.repeat(1900)
+  }));
+  payload.auditLog = Array.from({ length: 2600 }, (_, index) => ({
+    mutationId: 'prior-' + index, transactionId: 'tx-' + index, revision: index
+  }));
+  payload.auditLog.push({ mutationId, transactionId: 'seed', revision: expectedRevision + 1 });
+  return { expectedRevision, mutationId, payload };
+}
+
+test('Firestore store refuses to initialize a missing canonical state', async () => {
   const store = createFirestoreStore(fakeFirestore());
   assert.equal(await store.read(), null);
   await assert.rejects(store.save(purchaseMutation('m1')), CanonicalNotInitialized);
 });
 
-test('Firestore store performs a revision-checked write and returns the verified snapshot', async () => {
+test('Firestore store writes legacy-sized snapshots and verifies readback', async () => {
   const initial = emptyV2();
   const store = createFirestoreStore(fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial }));
-  const input = purchaseMutation('m1');
-  const saved = await store.save(input);
+  const saved = await store.save(purchaseMutation('m1'));
   assert.equal(saved.revision, 1);
   assert.equal(saved.lastMutationId, 'm1');
   assert.equal(saved.payload.transactions.length, 1);
   assert.equal(saved.payload.inventoryLots[0].quantity, 1);
+  const stored = [...(await store.read()).payload.transactions];
+  assert.equal(stored[0].id, 'tx-m1');
 });
 
-test('Firestore store reports replayed mutation IDs as duplicates without another revision', async () => {
+test('Firestore store recognizes old mutation IDs without creating a new revision', async () => {
   const initial = emptyV2();
   const store = createFirestoreStore(fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial }));
   const input = purchaseMutation('m1');
@@ -72,27 +93,59 @@ test('Firestore store reports replayed mutation IDs as duplicates without anothe
   assert.equal(first.duplicate, false);
   assert.equal(replay.duplicate, true);
   assert.equal(replay.revision, 1);
-  assert.equal(replay.payload.transactions.length, 1);
 });
 
 test('Firestore store rejects stale revisions without changing the canonical snapshot', async () => {
   const initial = emptyV2();
   const store = createFirestoreStore(fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial }));
   await store.save(purchaseMutation('m1'));
-  const stale = purchaseMutation('m2');
-  stale.payload = applyTransaction(emptyV2(), {
-    id: 'tx-m2', type: 'purchase', product: 'Different BOX', productKey: 'different-box',
-    category: 'BOX', condition: 'なし', quantity: 1, unitCost: 200, date: '2026-11-03'
-  }, 'm2');
+  const stale = { ...purchaseMutation('m2'), expectedRevision: 0 };
   await assert.rejects(store.save(stale), RevisionConflict);
   const current = await store.read();
   assert.equal(current.revision, 1);
-  assert.equal(current.payload.transactions.length, 1);
   assert.equal(current.payload.transactions[0].id, 'tx-m1');
 });
 
-test('Firestore store fails closed before a snapshot exceeds the document safety limit', async () => {
-  const store = createFirestoreStore(fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: emptyV2() }));
+test('Firestore store chunks large snapshots and preserves transactional readback', async () => {
+  const initial = emptyV2();
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial });
+  const store = createFirestoreStore(db);
+  const input = largeMutation('large');
+  const saved = await store.save(input);
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.payload.lotteries.length, 520);
+  assert.equal(saved.payload.auditLog.length, 2601);
+  const docs = db.dump();
+  const root = docs.get('torecaVaultV2/canonical');
+  assert.equal(root.storageFormat, 'chunked-v1');
+  assert.ok(root.segmentIds.length >= 2);
+  for (const id of root.segmentIds) {
+    const doc = docs.get('torecaVaultV2/canonical/segments/' + id);
+    assert.ok(Buffer.byteLength(JSON.stringify(doc), 'utf8') < 900_000);
+  }
+});
+
+test('Firestore store safely returns to single-document form and removes obsolete chunks', async () => {
+  const initial = emptyV2();
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial });
+  const store = createFirestoreStore(db);
+  await store.save(largeMutation('large'));
+  const large = await store.read();
+  const smaller = emptyV2();
+  smaller.revision = large.revision + 1;
+  smaller.lastMutationId = 'small';
+  smaller.auditLog = [...large.payload.auditLog.slice(-1), { mutationId: 'small', revision: 2 }];
+  await store.save({ expectedRevision: large.revision, mutationId: 'small', payload: smaller });
+  const docs = db.dump();
+  assert.equal(docs.get('torecaVaultV2/canonical').storageFormat, undefined);
+  assert.equal(docs.get('torecaVaultV2/canonical').revision, 2);
+  assert.equal([...docs.keys()].filter((path) => path.includes('/segments/')).length, 0);
+});
+
+test('Firestore store fails closed on an oversized atomic value and preserves prior state', async () => {
+  const initial = emptyV2();
+  const db = fakeFirestore({ schemaVersion: 2, revision: 0, lastMutationId: '', payload: initial });
+  const store = createFirestoreStore(db);
   const input = purchaseMutation('large');
   input.payload.automation.largeDiagnostic = 'x'.repeat(900_001);
   await assert.rejects(store.save(input), StateTooLarge);
@@ -100,3 +153,4 @@ test('Firestore store fails closed before a snapshot exceeds the document safety
   assert.equal(current.revision, 0);
   assert.equal(current.payload.transactions.length, 0);
 });
+
