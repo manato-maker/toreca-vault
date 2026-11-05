@@ -7,7 +7,7 @@ import {
   createFirestoreStore
 } from './firestore-store.js';
 
-const MAX_BODY_BYTES = 1_100_000;
+const MAX_BODY_BYTES = 7_500_000;
 
 function parseOrigins(value) {
   return new Set(String(value || '').split(',').map((origin) => origin.trim()).filter(Boolean));
