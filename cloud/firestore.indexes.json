@@ -1,0 +1,40 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "inlinePayload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "payloadHash",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "segmentIds",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "payloadOrder",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "canonical",
+      "fieldPath": "arrayChunkCounts",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "segments",
+      "fieldPath": "items",
+      "indexes": []
+    }
+  ]
+}
