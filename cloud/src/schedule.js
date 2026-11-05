@@ -50,11 +50,26 @@ export function getDueJobs(now, { completedJobKeys = new Set(), scheduledAt = no
     });
   }
 
-  // Keep the established 12:30 focused check. At 19:00 the focus flag is
-  // folded into the hourly Gmail job above, avoiding a second Gmail execution.
-  if (hour === 12 && minute === 30) {
-    const at = scheduledStamp(date, hour, minute);
-    due.push({ kind: 'lottery-result-focus', jobKey: `lottery-result-focus:${at}`, scheduledAt: at });
+  // Preserve the daily 12:30 focus check if Scheduler misses that slot. Each
+  // 15-minute slot through 18:45 retries the same durable daily job key. The
+  // ledger suppresses work after success and fences concurrent/retried claims.
+  // At 19:00 the focus is merged into the hourly Gmail scan below.
+  const { date: actualDate, hour: actualHour, minute: actualMinute } = jstParts(now);
+  const focusRecoveryWindow = actualDate === date
+    && (hour > 12 || (hour === 12 && minute >= 30))
+    && hour < 19
+    && QUARTER_HOUR_MINUTES.has(minute)
+    && actualHour < 19;
+  const focusJobKey = `lottery-result-focus:${date}`;
+  if (focusRecoveryWindow && !completedJobKeys.has(focusJobKey)) {
+    const focusScheduledAt = `${date}T12:30+09:00`;
+    due.push({
+      kind: 'lottery-result-focus',
+      jobKey: focusJobKey,
+      scheduledAt: focusScheduledAt,
+      triggeredAt: now.toISOString(),
+      catchUp: hour !== 12 || minute !== 30 || actualHour > 12 || (actualHour === 12 && actualMinute > 30)
+    });
   }
 
   // First quarter-hour tick after 13:30. A durable success key keeps later
@@ -68,4 +83,3 @@ export function getDueJobs(now, { completedJobKeys = new Set(), scheduledAt = no
 
   return due;
 }
-
