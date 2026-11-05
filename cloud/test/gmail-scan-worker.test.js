@@ -98,3 +98,22 @@ test('Gmail scan worker stores the last-success time only after the final page',
   assert.equal(checkpoints.values.hourly.cursor, null);
   assert.equal(checkpoints.values.hourly.lastSuccessfulAtMs, nowMs);
 });
+
+
+test('Gmail worker defaults to a 50-message page and exposes pagination for later runs', async () => {
+  const checkpoints = checkpointStore();
+  let requestedLimit;
+  const out = await runGmailScanPage({
+    provider: { async listMessages(_query, options) {
+      requestedLimit = options.maxResults;
+      return { messages: [] };
+    } },
+    checkpointStore: checkpoints,
+    ledger: fakeLedger(),
+    processMessage: async () => {},
+    nowMs: 1_800_000_000_000,
+    clock: () => 100
+  });
+  assert.equal(requestedLimit, 50);
+  assert.equal(out.fetched, 0);
+});
