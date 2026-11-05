@@ -74,6 +74,52 @@ test('health is read-only and reports an uninitialized canonical store', async (
   });
 });
 
+test('scheduler health reports safe liveness fields and detects missed or stale ticks', async () => {
+  let heartbeat = {
+    lastScheduledAtMs: 10_000,
+    lastCompletedAtMs: 11_000,
+    latestMissedSlots: 0,
+    failedJobCount: 0
+  };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true, schedulerConfigured: true, healthy: true, stale: false,
+      lastScheduledAtMs: 10_000, lastCompletedAtMs: 11_000, ageMs: 1_000,
+      latestMissedSlots: 0, failedJobCount: 0
+    });
+  }, {
+    schedulerHeartbeatStore: { async read() { return heartbeat; } },
+    schedulerStaleAfterMs: 5_000,
+    healthClock: () => 12_000
+  });
+
+  heartbeat = { ...heartbeat, lastCompletedAtMs: 1_000, latestMissedSlots: 2, failedJobCount: 1 };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.healthy, false);
+    assert.equal(body.stale, true);
+    assert.equal(body.latestMissedSlots, 2);
+    assert.equal(body.failedJobCount, 1);
+    assert.equal(JSON.stringify(body).includes('secret'), false);
+  }, {
+    schedulerHeartbeatStore: { async read() { return heartbeat; } },
+    schedulerStaleAfterMs: 5_000,
+    healthClock: () => 12_000
+  });
+});
+
+test('scheduler health fails closed until heartbeat monitoring is configured', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, schedulerConfigured: false, healthy: false });
+  });
+});
+
 test('writes are disabled by default and rejected before reaching the store', async () => {
   const store = createFakeStore({ payload: emptyV2(), revision: 0, lastMutationId: '' });
   let writes = 0;
