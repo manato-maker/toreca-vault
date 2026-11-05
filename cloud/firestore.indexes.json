@@ -2,32 +2,32 @@
   "indexes": [],
   "fieldOverrides": [
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "payload",
       "indexes": []
     },
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "inlinePayload",
       "indexes": []
     },
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "payloadHash",
       "indexes": []
     },
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "segmentIds",
       "indexes": []
     },
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "payloadOrder",
       "indexes": []
     },
     {
-      "collectionGroup": "canonical",
+      "collectionGroup": "torecaVaultV2",
       "fieldPath": "arrayChunkCounts",
       "indexes": []
     },
