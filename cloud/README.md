@@ -56,9 +56,13 @@ Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL p
 5. Keep the current Apps Script, queue, and V2 API running during shadow comparison. Do not process the same queue in both systems.
 6. Cut over only after the Cloud API can read the imported V2 state, preserve all invariants, and pass explicit owner-side acceptance. No command replays, inventory edits, or trigger changes are part of this prototype.
 
-## Current limitation
+## Firestore snapshot storage
 
-The first prototype stores the complete V2 snapshot in one Firestore document to preserve current client compatibility. Firestore documents have a 1 MiB limit; the adapter enforces a conservative 900,000-byte ceiling and fails closed. Before production, measure the canonical snapshot and either confirm ample headroom or normalize records into collections before migration.
+Snapshots up to the conservative 900,000-byte document budget use the original single-document layout. Larger snapshots use the `chunked-v1` layout: array fields are split into bounded documents, while a manifest and all chunks are committed in one Firestore transaction. Reads validate chunk sequence, schema, revision, size, and SHA-256 before returning the unchanged V2 snapshot contract. A transaction payload above 7,000,000 bytes, an oversized atomic field/item, or an unsafe chunk count fails closed. A first write from the legacy single-document format can transition to chunked storage atomically.
+
+Large snapshots require more Firestore reads and writes: one root plus one read/write per chunk, including post-write verification. The 900,000-byte single-document path retains its one-document operation count. Large unqueried fields are exempted from single-field indexes in `firestore.indexes.json`. These settings are code only and have not been deployed.
+
+An unverified staging-named export measured 1,242,326 raw file bytes and 1,009,515 bytes for the compact `{payload: ...}` estimate. That result is a capacity stress example only; it is not a canonical source or migration input. It falls above the internal single-document safety budget, so the new adapter routes snapshots of this size through chunked storage.
 
 ## Read-only migration inspection
 
