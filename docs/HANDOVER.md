@@ -829,3 +829,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Emulator統合テストを拡張し、chunked-v1を2 revision連続で保存した際のroot/segment revision一致とreadbackを検証。segmentの内容を改変した後にhash不一致で読み込みが拒否されることも確認した。
 - GitHub Actions v2-ci #42111400132（run #685）は通常test、check、Firestore Emulatorの全jobが成功。前回追加のsegment欠落・改変・revision mismatch・連続更新単体テスト16件も成功済み。
 - すべて合成データを使った隔離検証。本番Firestore、V2正本、Apps Script、Gmail、queue、課金設定へのアクセスや変更なし。PR #105はdraftのまま。
+
+
+## 2026-11-06 — Firestore操作数の基準見積り
+
+- migration reportへ成功更新あたりのFirestore document read/write基準見積りを追加。single保存は3 reads・1 write。chunked保存は segment count=N のとき 3+2N reads・1+N writes。
+- 根拠は現行adapterのduplicate確認read、revision-CAS root read、保存後readback。chunkedの初回readとreadbackは全segmentを含む。SDK transaction retryおよび旧segment削除writes/deletesは見積りに含めない。これは基準値であり実測や課金額ではない。
+- 操作数見積りを含む保存方式/migration reportのローカル16件は成功。最新commit b20ce1f のGitHub Actions結果はまだ取得できていないためCI検証は未確認として記録する。直前のFirestore Emulator CI #42111400132は連続chunk更新と改変検知まで成功したが、この後のreport変更を検証するものではない。
+- 無料枠への適合は実際の保存回数、segment数、既存プロジェクトの他利用量を測るまで未保証。Cloud請求設定は変更していない。
