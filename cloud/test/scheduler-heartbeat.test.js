@@ -39,16 +39,16 @@ test('records one bounded heartbeat and treats scheduler retries as idempotent',
     recorded: true, duplicate: false, stale: false, latestMissedSlots: 0
   });
   assert.deepEqual(await store.recordSuccess({ scheduledAtMs: quarterHour, completedAtMs: quarterHour + 3000 }), {
-    recorded: false, duplicate: true, stale: false
+    recorded: true, duplicate: true, stale: false, refreshed: true
   });
   assert.deepEqual(await store.read(), {
     schemaVersion: 1,
     lastScheduledAtMs: quarterHour,
-    lastCompletedAtMs: quarterHour + 2000,
+    lastCompletedAtMs: quarterHour + 3000,
     latestMissedSlots: 0,
     totalMissedSlots: 0,
     failedJobCount: 0,
-    updatedAtMs: quarterHour + 2000
+    updatedAtMs: quarterHour + 3000
   });
 });
 
@@ -98,7 +98,7 @@ test('rejects malformed timestamps, counters, and unsupported stored heartbeat s
   await assert.rejects(store.recordSuccess({ scheduledAtMs: 10, completedAtMs: 9 }), /must not precede/);
   await assert.rejects(store.recordSuccess({ scheduledAtMs: 10, failedJobCount: -1 }), /failedJobCount/);
   assert.throws(() => createFirestoreSchedulerHeartbeatStore(fakeFirestore(), 'x/y', { intervalMs: 0 }), /intervalMs/);
-  db.seed('torecaVaultV2/schedulerHeartbeat/dispatcher', { schemaVersion: 999 });
+  db.seed('torecaVaultV2/schedulerHeartbeat/dispatchers/current', { schemaVersion: 999 });
   await assert.rejects(store.read(), /schema version/);
 });
 
