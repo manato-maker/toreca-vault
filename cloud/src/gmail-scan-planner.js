@@ -1,4 +1,5 @@
 const HOUR_MS = 60 * 60 * 1000;
+const MAX_RESULTS_PER_PAGE = 50;
 const DAY_MS = 24 * HOUR_MS;
 const RESULT_TERMS = '{当選 落選 抽選結果}';
 const LOTTERY_TERMS = '{from:info@pokemoncenter-online.com from:noreply@ml.yamada-denki.jp from:noreply@livepocket.jp 抽選 当選 落選 応募 申込}';
@@ -20,10 +21,10 @@ function checkedCursor(cursor) {
 }
 
 /** Plan one fixed-bound Gmail query page. Persist the cursor only after message jobs settle. */
-export function planGmailScanPage({ nowMs, lastSuccessfulAtMs = null, cursor = null, scanType = 'hourly', maxResults = 100, overlapMs = null, initialLookbackMs = 7 * DAY_MS } = {}) {
+export function planGmailScanPage({ nowMs, lastSuccessfulAtMs = null, cursor = null, scanType = 'hourly', maxResults = MAX_RESULTS_PER_PAGE, overlapMs = null, initialLookbackMs = 7 * DAY_MS } = {}) {
   const now = timestamp(nowMs, 'nowMs');
   if (!['hourly', 'results'].includes(scanType)) throw new TypeError('scanType must be hourly or results');
-  if (!Number.isSafeInteger(maxResults) || maxResults < 1 || maxResults > 100) throw new TypeError('maxResults must be from 1 to 100');
+  if (!Number.isSafeInteger(maxResults) || maxResults < 1 || maxResults > MAX_RESULTS_PER_PAGE) throw new TypeError('maxResults must be from 1 to 50');
   const overlap = overlapMs == null ? (scanType === 'results' ? 6 * HOUR_MS : 15 * 60 * 1000) : timestamp(overlapMs, 'overlapMs');
   const lookback = timestamp(initialLookbackMs, 'initialLookbackMs');
   let bounds;
