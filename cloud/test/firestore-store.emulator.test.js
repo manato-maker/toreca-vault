@@ -47,6 +47,27 @@ test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { s
     }
     const reread = await store.read();
     assert.deepEqual(reread.payload, payload);
+
+    const nextMutationId = 'emulator-update-' + randomUUID();
+    const nextPayload = structuredClone(payload);
+    nextPayload.revision = 2;
+    nextPayload.lastMutationId = nextMutationId;
+    nextPayload.auditLog.push({ mutationId: nextMutationId, transactionId: 'emulator-update', revision: 2 });
+    const updated = await store.save({ expectedRevision: 1, mutationId: nextMutationId, payload: nextPayload });
+    assert.equal(updated.revision, 2);
+    assert.deepEqual(updated.payload, nextPayload);
+
+    const updatedManifest = (await root.get()).data();
+    assert.equal(updatedManifest.revision, 2);
+    const updatedChunks = await db.collection(documentPath + '/segments').get();
+    assert.equal(updatedChunks.size, updatedManifest.segmentIds.length);
+    for (const chunk of updatedChunks.docs) assert.equal(chunk.data().revision, 2);
+
+    const damagedChunk = updatedChunks.docs[0];
+    const damagedData = damagedChunk.data();
+    damagedData.items[0].memo += '-tampered';
+    await damagedChunk.ref.set(damagedData);
+    await assert.rejects(store.read(), /snapshot hash does not match/);
   } finally {
     await db.recursiveDelete(root);
     await db.terminate();
