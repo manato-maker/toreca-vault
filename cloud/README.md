@@ -32,18 +32,18 @@ The lease ledger cannot make an external Gmail/Sheets side effect exactly-once i
 `src/firestore-command-queue.js` persists pending command payloads so accepted commands can survive restarts and exact retries. Queue documents are hashed by request ID, bounded to 20 KB, and retain their payload for retry/audit; no TTL is configured. Production needs an explicit retention policy that preserves enough request-ID deduplication history before queue writes are enabled. Claim leases are fenced; the attempt cap moves an item to review. The queue API is not a command executor and has no legacy Apps Script handler wired to it yet.
 
 - Command queue: each 15-minute boundary.
-- Gmail lottery inbox scan: hourly from 09:00 through 23:00 JST.
+- Gmail lottery inbox scan: hourly from 07:00 through 24:00 JST (24:00 means 00:00 on the next calendar day).
 - Focused lottery-result scan: 12:30 and 19:00 JST.
 - Market refresh: first dispatcher tick after 13:30 JST (13:45), once per JST date after the durable ledger records completion.
 
-At 12:30, schedule one result-focused Gmail scan. At 19:00, mark the existing hourly Gmail job as `hourly+results`; do not create a second Gmail job for that tick. The Gmail worker must use message-ID deduplication so the same message cannot create duplicate lottery records.
+At 12:30, schedule one result-focused Gmail scan. At 19:00, add the result-focus flag to the existing hourly Gmail job; do not create a second Gmail job for that tick. The Gmail worker must use message-ID deduplication so the same message cannot create duplicate lottery records.
 
 Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL policy. Configure and verify that policy in an isolated project before production; expiration is not automatic until the policy exists.
 
 ## Planned operations
 
 - Keep ChatGPT's current Google Sheets command queue as the input bridge until a secure Chat ingress is confirmed. The new API queue is only a tested receiving boundary; no dual processing or production bridge is enabled. Do not point the current Sheets producer at it until an audited one-way adapter and cutover/rollback procedure exist.
-- Scan Gmail lottery messages separately once per hour from 09:00 through 23:00 JST, with additional focused scans at 12:30 and 19:00 JST. Use Gmail message IDs and overlapping checkpoints for deduplication and late delivery.
+- Scan Gmail lottery messages hourly from 07:00 through 24:00 JST (24:00 is next-day 00:00). Keep the focused result check at 12:30. Merge the 19:00 focus into its hourly Gmail job. Use Gmail message IDs and durable overlapping checkpoints for deduplication and late delivery.
 - Run one Cloud Scheduler dispatcher every 15 minutes. It dispatches due queue, Gmail, result-check, and daily market jobs, so the schedule does not need separate Scheduler resources.
 - Keep price quotes with source, checked time, freshness, and outcome. Failed or ambiguous lookups preserve the last confirmed quote and record a stale/review state.
 
@@ -85,3 +85,12 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-toreca-vault npm run 
 The emulator is local-only; this does not configure or access production Firestore.
 
 Cloud Run deployment, Firestore creation/TTL/retention configuration, OAuth consent, Gmail/Sheets access, legacy command execution, and production cutover are intentionally outside this prototype.
+
+
+## 2026-11-05 design audit follow-up
+
+- The scheduler planner now accepts the original planned timestamp separately from actual handler start time. The live Cloud Scheduler adapter must parse and pass the documented scheduled-time header; this is not wired into a deployed dispatcher yet. Durable command rows and Gmail fixed-window checkpoints provide recovery data, but a monitoring alert for stale dispatch heartbeats remains unimplemented.
+- The 19:00 result focus is carried on the single hourly Gmail job; 12:30 remains a separate focused check. This prevents two scheduled Gmail executions at 19:00 without changing the confirmed 12:30 schedule.
+- Added an authenticated command status route and a GPT Action OpenAPI template. It distinguishes pending, processing, done/review and canonical readback verification; it never returns command payloads. The queue and API remain disabled in production, so regular Chat end-to-end operation is not verified.
+- The V2 snapshot remains one document with a 900,000-byte fail-closed limit. Because the confirmed canonical export and growth rate are unavailable, do not migrate until the read-only report confirms size and headroom. Reassess normalized collection sharding if the snapshot exceeds 630,000 bytes or 90-day measured growth projects the safety limit within 12 months; this threshold is a migration gate, not a live setting.
+- Backups, restore drills, worker-status monitoring, OAuth refresh-token storage and budget alerts remain unimplemented. Firestore scheduled backups/PITR, restore, TTL, and excess Cloud usage can incur charges. Do not enable paid resources until the owner approves a concrete estimate and project.
