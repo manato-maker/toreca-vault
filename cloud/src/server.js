@@ -104,13 +104,46 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
       }
     }
 
-    if (path !== '/api/v2' || !['GET', 'POST'].includes(request.method)) {
+    const commandStatusPath = /^\\/api\\/v2\\/commands\\/([^/]+)$/.exec(path);
+    const commandRoute = path === '/api/v2/commands' || commandStatusPath;
+    const knownApiRoute = path === '/api/v2' || commandRoute;
+    const knownMethod = (path === '/api/v2' && ['GET', 'POST'].includes(request.method))
+      || (path === '/api/v2/commands' && request.method === 'POST')
+      || (Boolean(commandStatusPath) && request.method === 'GET');
+    if (!knownApiRoute || !knownMethod) {
       return send(response, 404, { ok: false, error: 'not found' }, allowedOrigin);
     }
     if (requestOrigin && !allowedOrigin) return send(response, 403, { ok: false, error: 'origin not allowed' });
     if (!isAuthorized(request, apiToken)) return send(response, 401, { ok: false, error: 'unauthorized' }, allowedOrigin);
 
     try {
+      if (commandStatusPath && request.method === 'GET') {
+        if (!commandsEnabled || !commandQueue || typeof commandQueue.inspect !== 'function') {
+          return send(response, 423, { ok: false, error: 'command queue status is disabled' }, allowedOrigin);
+        }
+        let requestId;
+        try { requestId = decodeURIComponent(commandStatusPath[1]).trim(); }
+        catch { return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin); }
+        if (!requestId || requestId.length > 200) {
+          return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin);
+        }
+        const record = await commandQueue.inspect(requestId);
+        if (!record) return send(response, 200, { ok: true, found: false, status: 'not-found' }, allowedOrigin);
+        const canonicalReadbackVerified = record.status === 'done'
+          && ['v2-applied', 'duplicate-already-applied'].includes(record.resultCode);
+        return send(response, 200, {
+          ok: true,
+          found: true,
+          status: String(record.status || 'unknown'),
+          acceptedAtMs: Number.isFinite(record.createdAtMs) ? record.createdAtMs : null,
+          updatedAtMs: Number.isFinite(record.updatedAtMs) ? record.updatedAtMs : null,
+          resultCode: /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(String(record.resultCode || ''))
+            ? record.resultCode : null,
+          processed: ['done', 'review'].includes(record.status),
+          canonicalReadbackVerified
+        }, allowedOrigin);
+      }
+
       if (request.method === 'GET') {
         const current = await store.read();
         if (!current) throw new CanonicalNotInitialized();
@@ -134,7 +167,7 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
         }, allowedOrigin);
       }
 
-      if (body.action === 'enqueueCommand') {
+      if (path === '/api/v2/commands' || body.action === 'enqueueCommand') {
         if (!commandsEnabled || !commandQueue) {
           return send(response, 423, { ok: false, error: 'command queue is disabled' }, allowedOrigin);
         }
