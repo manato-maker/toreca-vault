@@ -125,7 +125,7 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
           return send(response, 423, { ok: false, error: 'command queue status is disabled' }, allowedOrigin);
         }
         let requestId;
-        try { requestId = decodeURIComponent(commandStatusPath[1]).trim(); }
+        try { requestId = decodeURIComponent(commandStatusPath).trim(); }
         catch { return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin); }
         if (!/^[A-Za-z0-9._:-]{1,120}$/.test(requestId)) {
           return send(response, 400, { ok: false, error: 'invalid requestId' }, allowedOrigin);
