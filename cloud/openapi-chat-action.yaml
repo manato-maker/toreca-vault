@@ -1,0 +1,136 @@
+openapi: 3.1.0
+info:
+  title: Toreca Vault command API
+  version: 0.1.0
+  description: >
+    Template for a ChatGPT GPT Action. Replace the server URL with the deployed
+    Cloud Run URL. The command queue must remain disabled until migration
+    acceptance and an explicit owner-approved connection.
+servers:
+  - url: https://REPLACE_WITH_CLOUD_RUN_HOST
+security:
+  - BearerAuth: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    CommandEnvelope:
+      type: object
+      additionalProperties: false
+      required: [requestId, command]
+      properties:
+        requestId:
+          type: string
+          pattern: '^[A-Za-z0-9._:-]{1,120}$'
+        command:
+          type: object
+          required: [requestId, type]
+          properties:
+            requestId:
+              type: string
+              pattern: '^[A-Za-z0-9._:-]{1,120}$'
+            type:
+              type: string
+              enum:
+                - purchase
+                - sale
+                - lottery
+                - lottery-bulk
+                - open-packs
+                - lottery-result-exact
+                - lottery-receipt
+                - pokemoncenter-spouse-result
+                - repair-receipt-sale
+          additionalProperties: true
+    QueueReceipt:
+      type: object
+      required: [ok, accepted, duplicate, status]
+      properties:
+        ok:
+          type: boolean
+        accepted:
+          type: boolean
+        duplicate:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, processing, done, review]
+    CommandStatus:
+      type: object
+      required: [ok, found, status]
+      properties:
+        ok:
+          type: boolean
+        found:
+          type: boolean
+        status:
+          type: string
+          enum: [not-found, pending, processing, done, review]
+        acceptedAtMs:
+          type: [integer, 'null']
+        updatedAtMs:
+          type: [integer, 'null']
+        resultCode:
+          type: [string, 'null']
+        processed:
+          type: boolean
+        canonicalReadbackVerified:
+          type: boolean
+paths:
+  /api/v2/commands:
+    post:
+      operationId: enqueueTorecaVaultCommand
+      summary: Submit one confirmed user report to the durable queue
+      description: >
+        Submit only facts confirmed from the user's text or screenshot. Use a
+        stable requestId and never retry with a different requestId for the
+        same event. A 202 response means accepted into the queue, not processed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandEnvelope'
+      responses:
+        '202':
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueReceipt'
+        '200':
+          description: Exact duplicate request accepted previously
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueReceipt'
+        '401':
+          description: Authentication required
+        '409':
+          description: Request ID reused with different command data
+        '423':
+          description: Command queue is disabled
+  /api/v2/commands/{requestId}:
+    get:
+      operationId: getTorecaVaultCommandStatus
+      summary: Check whether an accepted report was processed and verified
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9._:-]{1,120}$'
+      responses:
+        '200':
+          description: Current queue status; command contents are never returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandStatus'
+        '401':
+          description: Authentication required
+        '423':
+          description: Queue status is disabled
