@@ -10,7 +10,7 @@ test('first Gmail scan is bounded to a seven-day backfill with a fixed upper bou
   const page = planGmailScanPage({ nowMs });
   assert.equal(page.cursor.sinceMs, nowMs - 7 * DAY);
   assert.equal(page.cursor.untilMs, nowMs);
-  assert.equal(page.maxResults, 100);
+  assert.equal(page.maxResults, 50);
   assert.equal(page.pageToken, null);
   assert.match(page.query, /from:info@pokemoncenter-online\.com/);
   assert.match(page.query, /after:/);
@@ -46,7 +46,7 @@ test('pagination keeps identical query bounds and advances the checkpoint only a
 
 test('invalid cursors and oversized Gmail pages fail closed', () => {
   const nowMs = Date.parse('2026-11-03T12:00:00Z');
-  assert.throws(() => planGmailScanPage({ nowMs, maxResults: 101 }), /maxResults/);
+  assert.throws(() => planGmailScanPage({ nowMs, maxResults: 51 }), /maxResults/);
   assert.throws(() => planGmailScanPage({ nowMs, cursor: { sinceMs: 10, untilMs: 5, scanType: 'hourly' } }), /cursor bounds/);
   assert.throws(() => planGmailScanPage({ nowMs, scanType: 'other' }), /scanType/);
 });
