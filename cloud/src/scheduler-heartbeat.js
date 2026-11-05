@@ -1,4 +1,4 @@
-const DEFAULT_DOCUMENT = 'torecaVaultV2/schedulerHeartbeat/dispatcher';
+const DEFAULT_DOCUMENT = 'torecaVaultV2/schedulerHeartbeat/dispatchers/current';
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 
 function timestamp(value, name) {
@@ -71,7 +71,15 @@ export function createFirestoreSchedulerHeartbeatStore(db, documentPath = DEFAUL
         const current = snapshot.exists ? snapshot.data() : null;
         const priorScheduled = current?.lastScheduledAtMs ?? null;
         if (priorScheduled != null && scheduled === priorScheduled) {
-          return { recorded: false, duplicate: true, stale: false };
+          const priorCompleted = timestamp(current.lastCompletedAtMs, 'heartbeat.lastCompletedAtMs');
+          if (completed <= priorCompleted) return { recorded: false, duplicate: true, stale: false };
+          transaction.set(ref, {
+            ...current,
+            lastCompletedAtMs: completed,
+            failedJobCount: failures,
+            updatedAtMs: completed
+          });
+          return { recorded: true, duplicate: true, stale: false, refreshed: true };
         }
         if (priorScheduled != null && scheduled < priorScheduled) {
           return { recorded: false, duplicate: false, stale: true };
