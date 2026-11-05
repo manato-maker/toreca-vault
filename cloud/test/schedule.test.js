@@ -9,13 +9,19 @@ test('runs command queue on quarter-hour boundaries and nowhere else', () => {
   assert.deepEqual(getDueJobs(atJst('2026-11-03', '09:14')).map((job) => job.kind), []);
 });
 
-test('polls Gmail hourly from 09:00 through 23:00 JST', () => {
-  const morning = getDueJobs(atJst('2026-11-03', '09:00')).map((job) => job.kind);
-  const late = getDueJobs(atJst('2026-11-03', '23:00')).map((job) => job.kind);
-  const closed = getDueJobs(atJst('2026-11-03', '00:00')).map((job) => job.kind);
-  assert.ok(morning.includes('gmail-lottery-inbox'));
-  assert.ok(late.includes('gmail-lottery-inbox'));
-  assert.ok(!closed.includes('gmail-lottery-inbox'));
+test('polls Gmail hourly from 07:00 through 24:00 JST, including midnight', () => {
+  const targetHours = [...Array.from({ length: 17 }, (_, index) => index + 7), 0];
+  for (const hour of targetHours) {
+    const time = `${String(hour).padStart(2, '0')}:00`;
+    const jobs = getDueJobs(atJst('2026-11-03', time));
+    assert.ok(jobs.some((job) => job.kind === 'gmail-lottery-inbox'), `expected Gmail poll at ${time}`);
+  }
+  for (const hour of [1, 2, 3, 4, 5, 6]) {
+    const time = `${String(hour).padStart(2, '0')}:00`;
+    const jobs = getDueJobs(atJst('2026-11-03', time));
+    assert.ok(!jobs.some((job) => job.kind === 'gmail-lottery-inbox'), `unexpected Gmail poll at ${time}`);
+  }
+  assert.ok(!getDueJobs(atJst('2026-11-03', '07:30')).some((job) => job.kind === 'gmail-lottery-inbox'));
 });
 
 test('schedules focused lottery checks at 12:30 and 19:00 JST', () => {
