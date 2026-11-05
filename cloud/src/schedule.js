@@ -36,7 +36,8 @@ export function getDueJobs(now, { completedJobKeys = new Set() } = {}) {
     due.push({ kind: 'command-queue', jobKey: `command-queue:${at}`, scheduledAt: at });
   }
 
-  if (hour >= 9 && hour <= 23 && minute === 0) {
+  // 24:00 in the requested JST schedule is the next calendar day's 00:00 tick.
+  if ((hour === 0 || (hour >= 7 && hour <= 23)) && minute === 0) {
     const at = scheduledStamp(date, hour, minute);
     due.push({ kind: 'gmail-lottery-inbox', jobKey: `gmail-lottery-inbox:${at}`, scheduledAt: at });
   }
