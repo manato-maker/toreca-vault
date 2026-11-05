@@ -117,7 +117,13 @@ export function inspectV2Snapshot(snapshot, sourceBytes = null) {
     firestoreSegmentDocumentSafetyLimitBytes: MAX_SEGMENT_BYTES,
     firestoreMaximumTransactionPayloadBytes: MAX_TRANSACTION_PAYLOAD_BYTES,
     firestoreSingleDocumentFitsSafetyLimit: estimate <= MAX_DOCUMENT_BYTES,
-    firestoreSnapshotFitsSafetyLimit: plan.plan !== 'blocked'
+    firestoreSnapshotFitsSafetyLimit: plan.plan !== 'blocked',
+    firestoreDocumentOperationsPerSuccessfulMutationEstimate: plan.plan === 'blocked' ? null : {
+      reads: plan.plan === 'single' ? 3 : 3 + (2 * plan.segmentCount),
+      writes: 1 + plan.segmentCount,
+      deletes: null,
+      basis: 'Baseline counts include the duplicate-check read, revision-CAS root read, and post-write readback; chunked reads include all segments. Writes include the root and new segments. Transaction retries and obsolete-segment cleanup deletes are excluded.'
+    }
   };
 }
 
