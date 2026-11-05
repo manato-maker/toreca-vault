@@ -27,8 +27,11 @@ function scheduledStamp(date, hour, minute) {
  * The caller must use the jobKey as an idempotency key in a durable ledger before
  * invoking any external worker. This function performs no I/O.
  */
-export function getDueJobs(now, { completedJobKeys = new Set() } = {}) {
-  const { date, hour, minute } = jstParts(now);
+export function getDueJobs(now, { completedJobKeys = new Set(), scheduledAt = now } = {}) {
+  // Cloud Scheduler retries carry the original planned time. Use that slot even
+  // when the HTTP handler starts late, so job keys and business windows stay stable.
+  jstParts(now);
+  const { date, hour, minute } = jstParts(scheduledAt);
   const due = [];
 
   if (QUARTER_HOUR_MINUTES.has(minute)) {
@@ -39,10 +42,17 @@ export function getDueJobs(now, { completedJobKeys = new Set() } = {}) {
   // 24:00 in the requested JST schedule is the next calendar day's 00:00 tick.
   if ((hour === 0 || (hour >= 7 && hour <= 23)) && minute === 0) {
     const at = scheduledStamp(date, hour, minute);
-    due.push({ kind: 'gmail-lottery-inbox', jobKey: `gmail-lottery-inbox:${at}`, scheduledAt: at });
+    due.push({
+      kind: 'gmail-lottery-inbox',
+      jobKey: `gmail-lottery-inbox:${at}`,
+      scheduledAt: at,
+      ...(hour === 19 ? { focusResults: true } : {})
+    });
   }
 
-  if ((hour === 12 && minute === 30) || (hour === 19 && minute === 0)) {
+  // Keep the established 12:30 focused check. At 19:00 the focus flag is
+  // folded into the hourly Gmail job above, avoiding a second Gmail execution.
+  if (hour === 12 && minute === 30) {
     const at = scheduledStamp(date, hour, minute);
     due.push({ kind: 'lottery-result-focus', jobKey: `lottery-result-focus:${at}`, scheduledAt: at });
   }
