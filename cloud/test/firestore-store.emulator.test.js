@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
-import { emptyV2 } from '../../v2/core.js';
-import { createFirestoreStore } from '../cloud/src/firestore-store.js';
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 const skipReason = emulatorHost ? false : 'Set FIRESTORE_EMULATOR_HOST to run Firestore Emulator integration tests';
 
 test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { skip: skipReason }, async () => {
+  const [{ Firestore }, { emptyV2 }, { createFirestoreStore }] = await Promise.all([
+    import('@google-cloud/firestore'),
+    import('../../v2/core.js'),
+    import('../src/firestore-store.js')
+  ]);
   const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
   const db = new Firestore({ projectId });
   const documentPath = 'snapshotStoreTestRuns/' + randomUUID() + '/canonical';
@@ -50,4 +52,3 @@ test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { s
     await db.terminate();
   }
 });
-
