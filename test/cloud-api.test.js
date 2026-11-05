@@ -44,11 +44,22 @@ function createFakeQueue() {
   return {
     async enqueue({ requestId, command }) {
       const prior = rows.get(requestId);
-      if (prior) return prior.command === JSON.stringify(command)
-        ? { accepted: true, duplicate: true, status: 'pending' }
+      if (prior) return prior.commandJson === JSON.stringify(command)
+        ? { accepted: true, duplicate: true, status: prior.status }
         : { accepted: false, status: 'collision' };
-      rows.set(requestId, { command: JSON.stringify(command) });
+      rows.set(requestId, {
+        commandJson: JSON.stringify(command), status: 'pending',
+        createdAtMs: 100, updatedAtMs: 100, resultCode: ''
+      });
       return { accepted: true, duplicate: false, status: 'pending' };
+    },
+    async inspect(requestId) {
+      const row = rows.get(requestId);
+      return row ? structuredClone(row) : null;
+    },
+    setStatus(requestId, status, resultCode) {
+      const row = rows.get(requestId);
+      rows.set(requestId, { ...row, status, resultCode, updatedAtMs: 200 });
     }
   };
 }
@@ -109,6 +120,43 @@ test('command queue accepts once, treats an identical resend as duplicate, and r
     const collision = await post({ ...baseBody, command: { ...baseBody.command, amount: 1 } });
     assert.equal(collision.status, 409);
     assert.deepEqual(await collision.json(), { ok: false, error: 'requestId collision' });
+  }, { commandQueue, commandsEnabled: true });
+});
+
+test('Chat command status reports accepted, processed, and readback states without exposing the command', async () => {
+  const commandQueue = createFakeQueue();
+  const command = { requestId: 'chat-application-1', type: 'lottery', product: 'private product name' };
+  await withServer(createFakeStore(), async (base) => {
+    const post = await fetch(`${base}/api/v2/commands`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ requestId: command.requestId, command })
+    });
+    assert.equal(post.status, 202);
+    assert.equal((await post.json()).status, 'pending');
+
+    const pendingResponse = await fetch(`${base}/api/v2/commands/${encodeURIComponent(command.requestId)}`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    });
+    const pending = await pendingResponse.json();
+    assert.deepEqual(pending, {
+      ok: true, found: true, status: 'pending', acceptedAtMs: 100, updatedAtMs: 100,
+      resultCode: null, processed: false, canonicalReadbackVerified: false
+    });
+    assert.equal(JSON.stringify(pending).includes('private product name'), false);
+
+    commandQueue.setStatus(command.requestId, 'done', 'v2-applied');
+    const doneResponse = await fetch(`${base}/api/v2/commands/${encodeURIComponent(command.requestId)}`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    });
+    const done = await doneResponse.json();
+    assert.equal(done.processed, true);
+    assert.equal(done.canonicalReadbackVerified, true);
+
+    const missing = await fetch(`${base}/api/v2/commands/not-created`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    });
+    assert.deepEqual(await missing.json(), { ok: true, found: false, status: 'not-found' });
   }, { commandQueue, commandsEnabled: true });
 });
 
