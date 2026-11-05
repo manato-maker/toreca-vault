@@ -78,3 +78,12 @@ Apps Script 側は薄いランナーで、GitHub の `automation/Code.gs` を取
 The command API now provides a status-only read route and an OpenAPI template intended for a ChatGPT GPT Action. It reports queue state and whether the worker verified canonical readback without returning the queued command. This remains a disconnected prototype. The canonical V2 export, production Gmail OAuth, Cloud resources, normal-Chat action setup, backups, restore drill, dispatch heartbeat alerting, and budget alerts are unverified or unimplemented.
 
 The single-snapshot Firestore adapter continues to fail closed above 900,000 bytes. Keep it until a confirmed read-only canonical export provides size and growth measurements; do not migrate if the report indicates inadequate headroom. Evaluate domain-partitioned storage before migration if size exceeds 630,000 bytes or 90-day measured growth projects crossing the safety limit within 12 months. This is a proposed migration gate only. A storage split must retain snapshot compatibility and prove transactional readback before adoption.
+
+
+## Firestore bounded snapshot storage (2026-11-05)
+
+The snapshot adapter preserves the V2 API contract while using two storage modes. Up to 900,000 serialized bytes it uses one document. Above that budget it splits top-level array fields into bounded documents and updates those chunks plus the root manifest in one Firestore transaction. Readback checks the chunk manifest, contiguous indexes, revision, schema, payload size, and SHA-256. Snapshots above 7,000,000 bytes, a single unchunkable value, or configured transaction limits fail closed. The API request-size limit is raised to 7,500,000 bytes to match this bound.
+
+Small snapshots retain one-document read/write cost. Large snapshots use one root and a small number of array-chunk reads/writes; every write still rereads and verifies the full snapshot. The `items` chunk field and large inline payload fields are excluded from Firestore single-field indexes because workers load chunks by document ID and do not query their contents. Index and adapter configuration are code-only; no Cloud resources are deployed.
+
+A staging-named, unverified export was 1,242,326 raw file bytes and 1,009,515 bytes when serialized as the compact Firestore wrapper. It was used only as a capacity estimate and review candidate, never as migration input. The actual canonical source and its growth rate remain unconfirmed.
