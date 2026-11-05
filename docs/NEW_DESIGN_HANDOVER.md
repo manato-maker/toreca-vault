@@ -356,3 +356,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 - GitHub CI全体結果を確認し、Schedule header接続・scheduler heartbeat/alertの実装範囲を決める。
 - V2正本取得後にsize/growth reportでsingle-documentか分割か判断し、バックアップとrestore drillを課金見積り付きで提案する。
 - requestIdとは別の業務event keyでChat/Gmail抽選を照合する設計を実装前にテストする。通常Chat Actionの実接続は認証・Cloud配備後に検証する。
+
+
+## 2026-11-05 — 設計監査後のCI確認
+
+- GitHub Actions `v2-ci #42027010332` は成功。`test` job（`npm test` と `npm run check`）および `firestore-emulator` jobの両方が完了成功。
+- 変更したSchedule/API/Gmail quota guardの関連ローカルテスト29件は成功、失敗0件。OpenAPI YAML parseとserver/schedule構文確認も成功。
+- 変更はPR #105のdraft branchにあり、未マージ・未配備。CI/emulator成功は本番Cloud、OAuth、通常Chat Action、V2正本接続の検証ではない。
