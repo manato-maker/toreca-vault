@@ -40,9 +40,22 @@ test('schedules one daily market refresh after 13:30 with a stable idempotency k
     .some((job) => job.kind === 'market-refresh'), false);
 });
 
-test('separates queue, inbox, focus, and market jobs at shared dispatcher ticks', () => {
-  const kinds = getDueJobs(atJst('2026-11-03', '19:00')).map((job) => job.kind);
-  assert.deepEqual(kinds, ['command-queue', 'gmail-lottery-inbox', 'lottery-result-focus', 'market-refresh']);
-  assert.equal(new Set(getDueJobs(atJst('2026-11-03', '19:00')).map((job) => job.jobKey)).size, kinds.length);
+test('19:00 combines result focus with the hourly Gmail job instead of scheduling a second scan', () => {
+  const jobs = getDueJobs(atJst('2026-11-03', '19:00'));
+  const gmail = jobs.filter((job) => job.kind === 'gmail-lottery-inbox');
+  assert.equal(gmail.length, 1);
+  assert.equal(gmail[0].focusResults, true);
+  assert.equal(jobs.some((job) => job.kind === 'lottery-result-focus'), false);
+  assert.deepEqual(jobs.map((job) => job.kind), ['command-queue', 'gmail-lottery-inbox', 'market-refresh']);
+});
+
+test('delayed execution uses the original scheduled time for due decisions and idempotency keys', () => {
+  const actual = atJst('2026-11-03', '19:18');
+  const scheduledAt = atJst('2026-11-03', '19:00');
+  const jobs = getDueJobs(actual, { scheduledAt });
+  const gmail = jobs.find((job) => job.kind === 'gmail-lottery-inbox');
+  assert.equal(gmail.scheduledAt, '2026-11-03T19:00+09:00');
+  assert.equal(gmail.focusResults, true);
+  assert.ok(jobs.every((job) => !job.scheduledAt.endsWith('19:18+09:00')));
 });
 
