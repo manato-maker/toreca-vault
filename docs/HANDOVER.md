@@ -842,3 +842,8 @@ Status: user-approved requirements; implementation and production wiring remain 
 ## 2026-11-06 — Draft new-app schedule recovery
 
 PR #105 adds a stable daily 12:30 lottery-result focus job that is retried on 15-minute slots through 18:45 after a missed Scheduler tick. Retries retain the 12:30 `scheduledAt`, record `triggeredAt`, and stop when the durable ledger reports completion. The 19:00 focus remains merged into the regular hourly Gmail job. v2-ci #42114904105 (run #690) passed test, check, and Firestore Emulator. Live Scheduler wiring, heartbeat/alerts, Cloud deployment, and V2 source confirmation remain pending; no production or legacy queue changes were made.
+
+
+## 2026-11-06 — New-app scheduler heartbeat monitoring
+
+PR #105 adds a bounded Firestore heartbeat record and `GET /health/scheduler`. It reports scheduler tick age, missed 15-minute slots, and failed job count without storing command, email, or raw error content. CI #693 detected a response bug and the fix was verified by #694–#697; test, check, and Firestore Emulator succeeded, including heartbeat persistence/recovery. Scheduler runtime wiring and notifications remain pending; the endpoint will report unhealthy until the dispatcher records ticks. No production, legacy V2, Apps Script, Gmail, pending queue, or billing changes were made.
