@@ -24,8 +24,26 @@ test('polls Gmail hourly from 07:00 through 24:00 JST, including midnight', () =
   assert.ok(!getDueJobs(atJst('2026-11-03', '07:30')).some((job) => job.kind === 'gmail-lottery-inbox'));
 });
 
-test('keeps the 12:30 focused scan and merges 19:00 focus into the hourly scan', () => {
-  assert.ok(getDueJobs(atJst('2026-11-03', '12:30')).some((job) => job.kind === 'lottery-result-focus'));
+test('keeps the 12:30 focus slot and recovers it after a missed Scheduler tick', () => {
+  const original = getDueJobs(atJst('2026-11-03', '12:30'))
+    .find((job) => job.kind === 'lottery-result-focus');
+  assert.equal(original.jobKey, 'lottery-result-focus:2026-11-03');
+  assert.equal(original.scheduledAt, '2026-11-03T12:30+09:00');
+  assert.equal(original.catchUp, false);
+
+  const recovered = getDueJobs(atJst('2026-11-03', '12:45'))
+    .find((job) => job.kind === 'lottery-result-focus');
+  assert.equal(recovered.jobKey, original.jobKey);
+  assert.equal(recovered.scheduledAt, original.scheduledAt);
+  assert.equal(recovered.catchUp, true);
+  assert.equal(recovered.triggeredAt, atJst('2026-11-03', '12:45').toISOString());
+});
+
+test('stops retrying the daily focus after ledger success and merges 19:00 focus into Gmail', () => {
+  const completed = new Set(['lottery-result-focus:2026-11-03']);
+  assert.ok(!getDueJobs(atJst('2026-11-03', '13:00'), { completedJobKeys: completed })
+    .some((job) => job.kind === 'lottery-result-focus'));
+
   const at1900 = getDueJobs(atJst('2026-11-03', '19:00'));
   assert.ok(at1900.some((job) => job.kind === 'gmail-lottery-inbox' && job.focusResults));
   assert.ok(!at1900.some((job) => job.kind === 'lottery-result-focus'));
@@ -42,6 +60,16 @@ test('schedules one daily market refresh after 13:30 with a stable idempotency k
     .some((job) => job.kind === 'market-refresh'), false);
 });
 
+test('delayed execution uses the original scheduled slot for keys while recording actual time', () => {
+  const actual = atJst('2026-11-03', '12:46');
+  const scheduledAt = atJst('2026-11-03', '12:45');
+  const jobs = getDueJobs(actual, { scheduledAt });
+  const focus = jobs.find((job) => job.kind === 'lottery-result-focus');
+  assert.equal(focus.scheduledAt, '2026-11-03T12:30+09:00');
+  assert.equal(focus.catchUp, true);
+  assert.equal(focus.triggeredAt, actual.toISOString());
+});
+
 test('19:00 combines result focus with the hourly Gmail job instead of scheduling a second scan', () => {
   const jobs = getDueJobs(atJst('2026-11-03', '19:00'));
   const gmail = jobs.filter((job) => job.kind === 'gmail-lottery-inbox');
@@ -49,15 +77,5 @@ test('19:00 combines result focus with the hourly Gmail job instead of schedulin
   assert.equal(gmail[0].focusResults, true);
   assert.equal(jobs.some((job) => job.kind === 'lottery-result-focus'), false);
   assert.deepEqual(jobs.map((job) => job.kind), ['command-queue', 'gmail-lottery-inbox', 'market-refresh']);
-});
-
-test('delayed execution uses the original scheduled time for due decisions and idempotency keys', () => {
-  const actual = atJst('2026-11-03', '19:18');
-  const scheduledAt = atJst('2026-11-03', '19:00');
-  const jobs = getDueJobs(actual, { scheduledAt });
-  const gmail = jobs.find((job) => job.kind === 'gmail-lottery-inbox');
-  assert.equal(gmail.scheduledAt, '2026-11-03T19:00+09:00');
-  assert.equal(gmail.focusResults, true);
-  assert.ok(jobs.every((job) => !job.scheduledAt.endsWith('19:18+09:00')));
 });
 
