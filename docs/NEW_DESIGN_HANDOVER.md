@@ -431,5 +431,5 @@ Status: user-approved requirements; implementation and production wiring remain 
 
 - migration reportへ成功更新あたりのFirestore document read/write基準見積りを追加。single保存は3 reads・1 write。chunked保存は segment count=N のとき 3+2N reads・1+N writes。
 - 根拠は現行adapterのduplicate確認read、revision-CAS root read、保存後readback。chunkedの初回readとreadbackは全segmentを含む。SDK transaction retryおよび旧segment削除writes/deletesは見積りに含めない。これは基準値であり実測や課金額ではない。
-- 操作数見積りを含む保存方式/migration reportのローカル16件は成功。最新commit b20ce1f のGitHub Actions結果はまだ取得できていないためCI検証は未確認として記録する。直前のFirestore Emulator CI #42111400132は連続chunk更新と改変検知まで成功したが、この後のreport変更を検証するものではない。
+- 操作数見積りを含む保存方式/migration reportのローカル16件は成功。記録時点ではCI未確認だったが、その後のGitHub Actions v2-ci #42112277167（run #688）がbranch head 8ae3436でtest/check/Firestore Emulator全job成功。このheadはoperation estimate変更を含む。
 - 無料枠への適合は実際の保存回数、segment数、既存プロジェクトの他利用量を測るまで未保証。Cloud請求設定は変更していない。
