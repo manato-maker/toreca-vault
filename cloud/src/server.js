@@ -106,7 +106,7 @@ export function createServer({
           nowMs: healthClock(),
           staleAfterMs: schedulerStaleAfterMs
         });
-        return send(health.healthy ? 200 : 503, {
+        return send(response, health.healthy ? 200 : 503, {
           ok: health.healthy,
           schedulerConfigured: true,
           ...health
