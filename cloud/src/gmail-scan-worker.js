@@ -10,7 +10,7 @@ export async function runGmailScanPage({
   processMessage,
   scanType = 'hourly',
   nowMs = Date.now(),
-  maxResults = 100,
+  maxResults = 50,
   clock = () => Date.now()
 } = {}) {
   if (!provider || typeof provider.listMessages !== 'function') throw new TypeError('a Gmail provider adapter is required');
