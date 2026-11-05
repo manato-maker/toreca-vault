@@ -24,9 +24,11 @@ test('polls Gmail hourly from 07:00 through 24:00 JST, including midnight', () =
   assert.ok(!getDueJobs(atJst('2026-11-03', '07:30')).some((job) => job.kind === 'gmail-lottery-inbox'));
 });
 
-test('schedules focused lottery checks at 12:30 and 19:00 JST', () => {
+test('keeps the 12:30 focused scan and merges 19:00 focus into the hourly scan', () => {
   assert.ok(getDueJobs(atJst('2026-11-03', '12:30')).some((job) => job.kind === 'lottery-result-focus'));
-  assert.ok(getDueJobs(atJst('2026-11-03', '19:00')).some((job) => job.kind === 'lottery-result-focus'));
+  const at1900 = getDueJobs(atJst('2026-11-03', '19:00'));
+  assert.ok(at1900.some((job) => job.kind === 'gmail-lottery-inbox' && job.focusResults));
+  assert.ok(!at1900.some((job) => job.kind === 'lottery-result-focus'));
   assert.ok(!getDueJobs(atJst('2026-11-03', '12:15')).some((job) => job.kind === 'lottery-result-focus'));
 });
 
