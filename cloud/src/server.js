@@ -6,6 +6,7 @@ import {
   RevisionConflict,
   createFirestoreStore
 } from './firestore-store.js';
+import { createFirestoreSchedulerHeartbeatStore, evaluateSchedulerHealth } from './scheduler-heartbeat.js';
 
 const MAX_BODY_BYTES = 7_500_000;
 
@@ -62,7 +63,17 @@ function errorResponse(error) {
   return { status: 400, body: { ok: false, error: error?.message || 'request failed' } };
 }
 
-export function createServer({ store, commandQueue = null, apiToken, allowedOrigins = new Set(), writesEnabled = false, commandsEnabled = false }) {
+export function createServer({
+  store,
+  commandQueue = null,
+  schedulerHeartbeatStore = null,
+  schedulerStaleAfterMs = 45 * 60 * 1000,
+  healthClock = () => Date.now(),
+  apiToken,
+  allowedOrigins = new Set(),
+  writesEnabled = false,
+  commandsEnabled = false
+}) {
   if (!store || typeof store.read !== 'function' || typeof store.save !== 'function') {
     throw new TypeError('a V2 state store is required');
   }
@@ -83,6 +94,26 @@ export function createServer({ store, commandQueue = null, apiToken, allowedOrig
         'vary': 'Origin'
       });
       return response.end();
+    }
+
+    if (path === '/health/scheduler' && request.method === 'GET') {
+      if (!schedulerHeartbeatStore || typeof schedulerHeartbeatStore.read !== 'function') {
+        return send(response, 503, { ok: false, schedulerConfigured: false, healthy: false });
+      }
+      try {
+        const heartbeat = await schedulerHeartbeatStore.read();
+        const health = evaluateSchedulerHealth(heartbeat, {
+          nowMs: healthClock(),
+          staleAfterMs: schedulerStaleAfterMs
+        });
+        return send(health.healthy ? 200 : 503, {
+          ok: health.healthy,
+          schedulerConfigured: true,
+          ...health
+        });
+      } catch {
+        return send(response, 503, { ok: false, schedulerConfigured: true, healthy: false });
+      }
     }
 
     if (path === '/health' && request.method === 'GET') {
@@ -212,9 +243,11 @@ export async function start() {
   const { Firestore } = await import('@google-cloud/firestore');
   const firestore = new Firestore({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
   const { createFirestoreCommandQueue } = await import('./firestore-command-queue.js');
+  const schedulerHeartbeatStore = createFirestoreSchedulerHeartbeatStore(firestore);
   const server = createServer({
     store: createFirestoreStore(firestore, documentPath),
     commandQueue: createFirestoreCommandQueue(firestore),
+    schedulerHeartbeatStore,
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
     writesEnabled: process.env.TV2_ENABLE_WRITES === 'true',
