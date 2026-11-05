@@ -440,3 +440,13 @@ Status: user-approved requirements; implementation and production wiring remain 
 - A missed 12:30 Scheduler tick no longer loses the daily focused result check: 12:30–18:45 JST quarter-hour slots reuse the stable key `lottery-result-focus:YYYY-MM-DD`, keep `scheduledAt` fixed at 12:30, record actual `triggeredAt`, and mark later slots `catchUp: true`. A durable completed key suppresses repeats. At 19:00 the focus flag stays on the single hourly Gmail job.
 - Added schedule tests for normal/catch-up slots, completion suppression, delayed execution, and the 19:00 merge. GitHub Actions v2-ci #42114904105 (run #690) passed `npm test`, `npm run check`, and Firestore Emulator.
 - Runtime wiring, scheduler heartbeat/alerts, and live recovery remain unverified. PR #105 is still draft, branch head `36661d2b56d124d18a222a425590b96c890fcf06`. No production, V2, Apps Script, Gmail, queue, or billing changes; canonical V2 remains unconfirmed and no pending sale work was replayed.
+
+
+## 2026-11-06 — Scheduler heartbeat and liveness endpoint
+
+- Added a Firestore heartbeat store and health evaluator: it records only scheduled/completed timestamps, missed-slot count, and failed-job count. Duplicate scheduler retries are idempotent; a later success for the same slot refreshes completion/failure state; out-of-order slots are ignored; corrupt schemas fail closed. No command, email, or raw error text is stored.
+- Added `GET /health/scheduler`: returns 200 only when the latest tick is within 45 minutes and reports no missing slots or failed jobs; otherwise 503. The Firestore store is configured at service start. The live dispatcher still must call `recordSuccess` after each scheduled run, so this endpoint deliberately indicates not-yet-running until that wiring exists.
+- Cost estimate: at most one heartbeat document write per successful 15-minute tick (about 96/day); health endpoint reads and existing project usage are not measured.
+- Local schedule/heartbeat tests: 11 passed. CI #693 caught a health response bug, which was fixed; v2-ci #694–#697 passed test/check and Firestore Emulator. Run #697 also verified heartbeat persistence, missed-slot counts, same-slot retry refresh, and recovery in the Emulator.
+- Still pending: Scheduler time-header/runtime connection, heartbeat writer invocation from the dispatcher, Cloud Monitoring notifications, deployed operation, V2 canonical source, and cost validation. PR #105 remains draft; production Cloud/V2, Apps Script, Gmail, queues, and billing settings are unchanged. No sale queue was replayed.
+- Code commit: `15ab435b1787e7a74d7bc25fa77be5bc390eb3a1`.
