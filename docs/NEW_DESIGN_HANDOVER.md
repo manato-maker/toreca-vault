@@ -460,3 +460,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Estimated added Firestore operations at a full-day 15-minute schedule: at most 96 heartbeat writes/day and 67 daily focus/market ledger reads/day. Health polling and existing project traffic are excluded; free-tier fit remains unmeasured.
 - Runtime parsing/orchestration is implemented but not mounted on an authenticated Cloud Run Scheduler route, and production queue/Gmail/market handlers are not composed into it. No Scheduler, Monitoring, Cloud Run, V2, Apps Script, queue, or billing changes. PR #105 remains draft; canonical V2 remains unconfirmed and no sale queue was replayed.
 - Code commit: `5a5c1a65b87a5517d0df3f7cca29549e35d35929`.
+
+
+## 2026-11-07 JST — 認証済みApps Script画面の読み取り確認
+
+- WorkクラウドブラウザでApps Script dashboardを読み取り専用で開こうとしたが、公式のApps Script dashboardリンクを開いても公開Apps Scriptドキュメントページへリダイレクトされ、Apps Scriptプロジェクト一覧/エディタは表示されなかった。認証済みUI、旧V2のScript Properties、TV_V2_DATA_FILE_ID、保存経路は確認できていない。
+- Secret/tokenの入力や共有、Apps Script/Gmail/Driveの変更は行っていない。正本JSONの取得、SHA-256、revision、件数/在庫/原価/資産集計の検証は未実施。既知のV1 JSONとstaging候補は引き続き移行対象外。
+- ローカルの新アプリ関連テスト29件は28 passed、1 emulator test skipped（FIRESTORE_EMULATOR_HOSTなし）。GitHub Actions v2-ci #701はsuccess（PR head 72c714eb750e7ea7c4d1e5e1c5e38868218c95dd）。
+- PR #105はdraft・未merge・未配備、全体進捗は約25%。Cloud runtimeをScheduler route/production handlersに接続する実装、本番OAuth/Gmail、通常Chatの実送信、backup/restore実環境確認が次工程。Cloud課金や旧システムは変更していない。
