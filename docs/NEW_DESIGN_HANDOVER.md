@@ -450,3 +450,13 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Local schedule/heartbeat tests: 11 passed. CI #693 caught a health response bug, which was fixed; v2-ci #694–#697 passed test/check and Firestore Emulator. Run #697 also verified heartbeat persistence, missed-slot counts, same-slot retry refresh, and recovery in the Emulator.
 - Still pending: Scheduler time-header/runtime connection, heartbeat writer invocation from the dispatcher, Cloud Monitoring notifications, deployed operation, V2 canonical source, and cost validation. PR #105 remains draft; production Cloud/V2, Apps Script, Gmail, queues, and billing settings are unchanged. No sale queue was replayed.
 - Code commit: `15ab435b1787e7a74d7bc25fa77be5bc390eb3a1`.
+
+
+## 2026-11-07 — Scheduled dispatcher orchestration
+
+- Added `cloud/src/scheduled-runtime.js` to parse the Cloud Scheduler RFC3339 schedule-time value, plan due jobs, read the durable ledger to suppress completed daily focus/market work, dispatch jobs under existing leases, summarize safe failure states, and record a bounded heartbeat.
+- Missed work resumes through existing durable state: pending Chat commands at the next queue tick, Gmail from its checkpointed fixed window, market on the next 13:45-or-later tick until its daily key is complete, and the 12:30 focus key through 18:45. No bulk historical replay is introduced.
+- 14 related local tests passed. GitHub Actions v2-ci #699 passed `npm test`, `npm run check`, and Firestore Emulator.
+- Estimated added Firestore operations at a full-day 15-minute schedule: at most 96 heartbeat writes/day and 67 daily focus/market ledger reads/day. Health polling and existing project traffic are excluded; free-tier fit remains unmeasured.
+- Runtime parsing/orchestration is implemented but not mounted on an authenticated Cloud Run Scheduler route, and production queue/Gmail/market handlers are not composed into it. No Scheduler, Monitoring, Cloud Run, V2, Apps Script, queue, or billing changes. PR #105 remains draft; canonical V2 remains unconfirmed and no sale queue was replayed.
+- Code commit: `5a5c1a65b87a5517d0df3f7cca29549e35d35929`.
