@@ -468,3 +468,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Secret/tokenの入力や共有、Apps Script/Gmail/Driveの変更は行っていない。正本JSONの取得、SHA-256、revision、件数/在庫/原価/資産集計の検証は未実施。既知のV1 JSONとstaging候補は引き続き移行対象外。
 - ローカルの新アプリ関連テスト29件は28 passed、1 emulator test skipped（FIRESTORE_EMULATOR_HOSTなし）。GitHub Actions v2-ci #701はsuccess（PR head 72c714eb750e7ea7c4d1e5e1c5e38868218c95dd）。
 - PR #105はdraft・未merge・未配備、全体進捗は約25%。Cloud runtimeをScheduler route/production handlersに接続する実装、本番OAuth/Gmail、通常Chatの実送信、backup/restore実環境確認が次工程。Cloud課金や旧システムは変更していない。
+
+
+## 2026-11-07 JST — Scheduler HTTP入口の安全な土台
+
+- `cloud/src/server.js` に `/internal/scheduler/tick` を追加。明示的なschedulerAuthorizeとschedulerTickの両方が未注入なら503で無効、認証失敗は401、Scheduler marker/予定時刻ヘッダーを検査してから処理する。失敗件数がある場合は本文を露出せず503を返し、Cloud Schedulerの再試行につなぐ。
+- `test/cloud-api.test.js` にデフォルト無効、認証、時刻/marker検証、成功、失敗時503のテストを追加。関連ローカルテスト9件、audit-tests全25件が成功。GitHub Actions v2-ci #703はnpm test/checkとFirestore Emulatorの両jobがsuccess。
+- このendpointは新しい認証関数/runtimeの注入が必要で、`start()`からは未接続・未有効。Cloud Run IAM/OIDCの構成、本番handler、Cloud Scheduler/Cloud Run配備は未実施。PR #105はdraft、既存V2/Apps Script/queue/課金設定に変更なし。
+- code head: `de8e2fa560884bce60658da0cca89e3b648cbfc2`。
