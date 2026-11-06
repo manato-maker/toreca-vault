@@ -852,3 +852,10 @@ PR #105 adds a bounded Firestore heartbeat record and `GET /health/scheduler`. I
 ## 2026-11-07 — Scheduled dispatcher orchestration
 
 PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, checks durable completion for daily jobs, dispatches due work under leases, and records heartbeat/failure metadata. Existing pending queue and Gmail checkpoints are reused for catch-up; no bulk replay occurs. v2-ci #699 passed tests, checks, and Firestore Emulator. Runtime is not yet mounted behind an authenticated Cloud Run Scheduler route; production handlers and monitoring are pending. No legacy or production data was changed.
+
+
+### 2026-11-07 JST — 新アプリ引き継ぎとV2読取の現状
+
+- WorkクラウドブラウザでApps Script dashboardを読み取り専用で開こうとしたが、公開Apps Scriptドキュメントへリダイレクトされ、プロジェクト一覧/エディタやScript Propertiesは確認できなかった。canonical V2保存先とTV_V2_DATA_FILE_IDの値は未確認。
+- 旧V2、Drive、Gmail、Apps Scriptへの書込、secret/token入力、pending sale queue再処理はなし。V1/staging JSONは移行に使わない。正本export/hash/revision/資産集計も未取得。
+- 新アプリPR #105はdraft/未配備、進捗約25%。関連ローカルテスト28 passed、1 emulator test skipped。GitHub Actions v2-ci #701成功（head 72c714eb750e7ea7c4d1e5e1c5e38868218c95dd）。Scheduler routeと本番handler接続、通常Chat実接続、バックアップ復元、実課金計測は未完了。
