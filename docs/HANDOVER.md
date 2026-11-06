@@ -859,3 +859,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - WorkクラウドブラウザでApps Script dashboardを読み取り専用で開こうとしたが、公開Apps Scriptドキュメントへリダイレクトされ、プロジェクト一覧/エディタやScript Propertiesは確認できなかった。canonical V2保存先とTV_V2_DATA_FILE_IDの値は未確認。
 - 旧V2、Drive、Gmail、Apps Scriptへの書込、secret/token入力、pending sale queue再処理はなし。V1/staging JSONは移行に使わない。正本export/hash/revision/資産集計も未取得。
 - 新アプリPR #105はdraft/未配備、進捗約25%。関連ローカルテスト28 passed、1 emulator test skipped。GitHub Actions v2-ci #701成功（head 72c714eb750e7ea7c4d1e5e1c5e38868218c95dd）。Scheduler routeと本番handler接続、通常Chat実接続、バックアップ復元、実課金計測は未完了。
+
+
+### 2026-11-07 JST — Scheduler HTTP入口の安全な土台
+
+- `/internal/scheduler/tick` を追加。認証関数とtick handlerが明示的に未設定なら無効のままにし、Cloud Scheduler markerと予定時刻を検査してから実行。失敗時は情報を漏らさず503を返して再試行可能にした。
+- ローカル関連test 9件とaudit-tests 25件が成功。GitHub Actions v2-ci #703はtest/check、Firestore Emulator成功。PR head `de8e2fa560884bce60658da0cca89e3b648cbfc2`。
+- 実行routeはまだCloud Run runtime・IAM/OIDC・Schedulerと接続していない。PR #105 draft/未配備、V2・Apps Script・queue・課金変更なし。
