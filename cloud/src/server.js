@@ -7,6 +7,7 @@ import {
   createFirestoreStore
 } from './firestore-store.js';
 import { createFirestoreSchedulerHeartbeatStore, evaluateSchedulerHealth } from './scheduler-heartbeat.js';
+import { parseSchedulerScheduleTime } from './scheduled-runtime.js';
 
 const MAX_BODY_BYTES = 7_500_000;
 
@@ -67,6 +68,8 @@ export function createServer({
   store,
   commandQueue = null,
   schedulerHeartbeatStore = null,
+  schedulerTick = null,
+  schedulerAuthorize = null,
   schedulerStaleAfterMs = 45 * 60 * 1000,
   healthClock = () => Date.now(),
   apiToken,
@@ -96,6 +99,40 @@ export function createServer({
       return response.end();
     }
 
+    if (path === '/internal/scheduler/tick') {
+      if (request.method !== 'POST') return send(response, 405, { ok: false, error: 'method not allowed' });
+      if (typeof schedulerTick !== 'function' || typeof schedulerAuthorize !== 'function') {
+        return send(response, 503, { ok: false, error: 'scheduler route is disabled' });
+      }
+      try {
+        if (!await schedulerAuthorize(request)) return send(response, 401, { ok: false, error: 'unauthorized' });
+      } catch {
+        return send(response, 503, { ok: false, error: 'scheduler authorization unavailable' });
+      }
+      if (String(request.headers['x-cloudscheduler'] || '').toLowerCase() !== 'true') {
+        return send(response, 400, { ok: false, error: 'missing scheduler marker' });
+      }
+      let scheduledAt;
+      try {
+        scheduledAt = parseSchedulerScheduleTime(request.headers['x-cloudscheduler-scheduletime']);
+      } catch {
+        return send(response, 400, { ok: false, error: 'invalid scheduler time' });
+      }
+      try {
+        const result = await schedulerTick({ scheduledAt, triggeredAt: new Date() });
+        const failedJobCount = Number.isSafeInteger(result?.failedJobCount) && result.failedJobCount >= 0
+          ? result.failedJobCount : 0;
+        const ok = failedJobCount === 0;
+        return send(response, ok ? 200 : 503, {
+          ok,
+          scheduledAt: scheduledAt.toISOString(),
+          plannedCount: Number.isSafeInteger(result?.plannedCount) ? result.plannedCount : 0,
+          failedJobCount
+        });
+      } catch {
+        return send(response, 503, { ok: false, error: 'scheduled tick failed' });
+      }
+    }
     if (path === '/health/scheduler' && request.method === 'GET') {
       if (!schedulerHeartbeatStore || typeof schedulerHeartbeatStore.read !== 'function') {
         return send(response, 503, { ok: false, schedulerConfigured: false, healthy: false });
