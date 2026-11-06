@@ -847,3 +847,8 @@ PR #105 adds a stable daily 12:30 lottery-result focus job that is retried on 15
 ## 2026-11-06 — New-app scheduler heartbeat monitoring
 
 PR #105 adds a bounded Firestore heartbeat record and `GET /health/scheduler`. It reports scheduler tick age, missed 15-minute slots, and failed job count without storing command, email, or raw error content. CI #693 detected a response bug and the fix was verified by #694–#697; test, check, and Firestore Emulator succeeded, including heartbeat persistence/recovery. Scheduler runtime wiring and notifications remain pending; the endpoint will report unhealthy until the dispatcher records ticks. No production, legacy V2, Apps Script, Gmail, pending queue, or billing changes were made.
+
+
+## 2026-11-07 — Scheduled dispatcher orchestration
+
+PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, checks durable completion for daily jobs, dispatches due work under leases, and records heartbeat/failure metadata. Existing pending queue and Gmail checkpoints are reused for catch-up; no bulk replay occurs. v2-ci #699 passed tests, checks, and Firestore Emulator. Runtime is not yet mounted behind an authenticated Cloud Run Scheduler route; production handlers and monitoring are pending. No legacy or production data was changed.
