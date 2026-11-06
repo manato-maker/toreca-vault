@@ -64,6 +64,63 @@ function createFakeQueue() {
   };
 }
 
+test('scheduler route is disabled by default and requires injected authorization', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(new URL('/internal/scheduler/tick', base), { method: 'POST' });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: 'scheduler route is disabled' });
+  });
+
+  let tickCalls = 0;
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(new URL('/internal/scheduler/tick', base), {
+      method: 'POST',
+      headers: { 'x-cloudscheduler': 'true', 'x-cloudscheduler-scheduletime': '2026-11-06T09:00:00+09:00' }
+    });
+    assert.equal(response.status, 401);
+    assert.equal(tickCalls, 0);
+  }, {
+    schedulerAuthorize: async (request) => request.headers['x-scheduler-auth'] === 'trusted',
+    schedulerTick: async () => { tickCalls++; return { plannedCount: 1, failedJobCount: 0 }; }
+  });
+});
+
+test('scheduler route validates planned time, dispatches an authorized tick, and retries safe failures', async () => {
+  const calls = [];
+  await withServer(createFakeStore(), async (base) => {
+    const request = (headers) => fetch(new URL('/internal/scheduler/tick', base), { method: 'POST', headers });
+    const common = { 'x-scheduler-auth': 'trusted', 'x-cloudscheduler': 'true' };
+    const missingTime = await request(common);
+    assert.equal(missingTime.status, 400);
+    assert.equal((await missingTime.json()).error, 'invalid scheduler time');
+
+    const missingMarker = await request({ ...common, 'x-cloudscheduler-scheduletime': '2026-11-06T09:00:00+09:00', 'x-cloudscheduler': 'false' });
+    assert.equal(missingMarker.status, 400);
+    assert.equal(calls.length, 0);
+
+    const success = await request({ ...common, 'x-cloudscheduler-scheduletime': '2026-11-06T09:00:00+09:00' });
+    assert.equal(success.status, 200);
+    assert.deepEqual(await success.json(), {
+      ok: true, scheduledAt: '2026-11-06T00:00:00.000Z', plannedCount: 2, failedJobCount: 0
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].scheduledAt.toISOString(), '2026-11-06T00:00:00.000Z');
+    assert.ok(calls[0].triggeredAt instanceof Date);
+
+    const retry = await request({ ...common, 'x-cloudscheduler-scheduletime': '2026-11-06T09:15:00+09:00' });
+    assert.equal(retry.status, 503);
+    assert.deepEqual(await retry.json(), {
+      ok: false, scheduledAt: '2026-11-06T00:15:00.000Z', plannedCount: 2, failedJobCount: 1
+    });
+  }, {
+    schedulerAuthorize: async (request) => request.headers['x-scheduler-auth'] === 'trusted',
+    schedulerTick: async (input) => {
+      calls.push(input);
+      return { plannedCount: 2, failedJobCount: calls.length === 2 ? 1 : 0, results: ['not exposed'] };
+    }
+  });
+});
+
 test('health is read-only and reports an uninitialized canonical store', async () => {
   await withServer(createFakeStore(), async (base) => {
     const response = await fetch(`${base}/health`);
