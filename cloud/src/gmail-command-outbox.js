@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 
 const KIND_TO_COMMAND = new Map([['application', 'lottery'], ['result', 'lottery-result-exact'], ['receipt', 'lottery-receipt']]);
+const COMMAND_FIELDS = new Map([
+  ['application', new Set(['type', 'title', 'product', 'store', 'status', 'applicationDate', 'deadline', 'resultDate', 'receiveDeadline', 'owner', 'evidenceType'])],
+  ['result', new Set(['type', 'title', 'product', 'store', 'owner', 'status', 'resultDate'])],
+  ['receipt', new Set(['type', 'title', 'product', 'store', 'owner', 'receivedDate', 'date'])]
+]);
 const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
 const clone = (value) => structuredClone(value);
 
@@ -11,6 +16,9 @@ function messageHash(messageId) {
 }
 function validCommand(kind, draft) {
   if (!draft || typeof draft !== 'object' || Array.isArray(draft) || draft.type !== KIND_TO_COMMAND.get(kind)) return false;
+  const allowedFields = COMMAND_FIELDS.get(kind);
+  if (Object.keys(draft).some((field) => !allowedFields.has(field))) return false;
+  if (Object.entries(draft).some(([field, value]) => typeof value !== 'string' || value.length > (field === 'title' || field === 'product' ? 200 : 120) || /[\u0000-\u001f\u007f]/.test(value))) return false;
   if (!String(draft.title || draft.product || '').trim() || !String(draft.store || '').trim()) return false;
   if (kind === 'application') return ['応募済', '応募前'].includes(String(draft.status || '応募済')) && isDate(draft.applicationDate);
   if (kind === 'result') return ['当選', '落選'].includes(String(draft.status || '')) && isDate(draft.resultDate);
@@ -51,7 +59,8 @@ export function createGmailCommandOutbox({ store, commandQueue } = {}) {
         await store.recordOnce(review);
         return { status: 'review', submitted: false, reasonCode: review.reasonCode };
       }
-      const command = { ...clone(commandDraft), requestId };
+      const command = Object.fromEntries(Object.entries(clone(commandDraft)).map(([key, value]) => [key, value]));
+      command.requestId = requestId;
       const row = { messageIdHash: hash, requestId, kind: classification.kind, status: 'ready', command, businessEventKey: key, createdAtMs: nowMs };
       const saved = await store.recordOnce(row);
       if (saved.status === 'collision') {
