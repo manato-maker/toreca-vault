@@ -36,3 +36,23 @@ test('concurrent cross-source submissions create only one command for a business
     await db.terminate();
   }
 });
+
+test('pending queue pages return only pending command request IDs', { skip: skipReason }, async () => {
+  const { Firestore } = await import('@google-cloud/firestore');
+  const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
+  const db = new Firestore({ projectId });
+  const namespace = 'commandPendingPageTestRuns/' + randomUUID();
+  const collectionPath = namespace + '/commands';
+  const parent = db.doc(namespace);
+  try {
+    const queue = createFirestoreCommandQueue(db, collectionPath);
+    for (const requestId of ['pending-a', 'pending-b']) {
+      await queue.enqueue({ requestId, command: { requestId, type: 'purchase', title: 'Product', quantity: 1, unitPrice: 1000, purchaseDate: '2026-11-08' } });
+    }
+    const page = await queue.listPending({ limit: 2 });
+    assert.deepEqual(page.map((entry) => entry.requestId).sort(), ['pending-a', 'pending-b']);
+  } finally {
+    await db.recursiveDelete(parent);
+    await db.terminate();
+  }
+});
