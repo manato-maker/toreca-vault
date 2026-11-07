@@ -866,3 +866,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - `/internal/scheduler/tick` を追加。認証関数とtick handlerが明示的に未設定なら無効のままにし、Cloud Scheduler markerと予定時刻を検査してから実行。失敗時は情報を漏らさず503を返して再試行可能にした。
 - ローカル関連test 9件とaudit-tests 25件が成功。GitHub Actions v2-ci #703はtest/check、Firestore Emulator成功。PR head `de8e2fa560884bce60658da0cca89e3b648cbfc2`。
 - 実行routeはまだCloud Run runtime・IAM/OIDC・Schedulerと接続していない。PR #105 draft/未配備、V2・Apps Script・queue・課金変更なし。
+
+
+### 2026-11-07 JST — Scheduled job handler失敗の分離
+
+- 全jobのhandlerを事前検証する実装では、Gmail handler未設定が同一tickのqueue処理まで止め得ることを発見。job単位でdispatchし、未設定jobは安全な失敗状態/heartbeatに記録しつつ、他jobを継続するよう修正。
+- 関連test12件、全cloud test30件成功。ローカルではEmulator統合1件をskip。GitHub Actions v2-ci #706のtest/checkとFirestore Emulatorは成功。
+- PR #105 head `8f4d0f61faffa52af9775fa156d2657510da1f55`、draft/未配備。実handler接続、V2正本取得、通常Chatの実接続は未完了。実システムへの変更なし。
