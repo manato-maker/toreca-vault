@@ -12,7 +12,7 @@ test('Firestore Emulator restores a verified backup into an isolated canonical s
   const { Firestore } = await import('@google-cloud/firestore');
   const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
   const db = new Firestore({ projectId });
-  const documentPath = 'backupRestoreTestRuns/' + randomUUID() + '/canonical';
+  const documentPath = 'backupRestoreTestRuns/' + randomUUID();
   const root = db.doc(documentPath);
   const store = createFirestoreStore(db, documentPath);
   const mutationId = 'backup-restore-' + randomUUID();
