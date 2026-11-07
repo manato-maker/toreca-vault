@@ -650,5 +650,5 @@ Status: user-approved requirements; implementation and production wiring remain 
 
 - `TV2_WORKER_TOKEN` の共有Secret方式を取り除き、Google `OAuth2Client.verifyIdToken` で署名済みID tokenのaudienceを検証し、設定済みScheduler service account emailとemail_verifiedも照合する認証middlewareを追加。token欠落・署名不正・audience/identity不一致は拒否する。Cloud RunサービスURLと専用Scheduler service accountは識別情報で、Secretではない。
 - workerは引き続き既定無効。worker/queue/writeの3 flag、Scheduler marker/予定時刻、既存canonical stateと各IAM設定の確認が必要。`roles/run.invoker`付与、Scheduler作成、deploy、課金設定は実施していない。
-- 検証: ローカル `npm test --prefix cloud` 160 passed、0 failed、4 skipped（local Firestore Emulator未起動）。`npm run check --prefix cloud`成功。PR #105への反映後CIは確認待ち。
+- 検証: ローカル `npm test --prefix cloud` 160 passed、0 failed、4 skipped（local Firestore Emulator未起動）。`npm run check --prefix cloud`成功。PR #105への反映後、v2-ci #791のtest/checkとFirestore Emulator jobがsuccess。
 - 進捗概算は約94%の実装・テスト作業で据置。これは本番readinessではない。通常Chat書込統合、V2正本export/migration、Gmail OAuth/実接続、Cloud Run/Scheduler本番配備、backup保持/production restore、障害通知、利用量と費用の実測、ユーザー承認が必要な本番移行は未完了。V2正本JSONは未取得。無料枠適合と実費は未測定。既存V2/Apps Script/queue/売却保留/課金設定に変更なし。
