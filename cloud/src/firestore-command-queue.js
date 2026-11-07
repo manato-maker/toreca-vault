@@ -136,6 +136,22 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
     async inspect(requestId) {
       const snapshot = await refFor(requestId).get();
       return snapshot.exists ? clone(snapshot.data()) : null;
+    },
+
+    async summarize() {
+      if (typeof db.collection !== 'function') throw new TypeError('Firestore collection queries are required for queue summary');
+      const collection = db.collection(collectionPath);
+      const [unprocessedSnapshot, reviewSnapshot] = await Promise.all([
+        collection.where('status', 'in', ['pending', 'processing']).count().get(),
+        collection.where('status', '==', 'review').count().get()
+      ]);
+      const unprocessedCount = unprocessedSnapshot?.data?.().count;
+      const reviewCount = reviewSnapshot?.data?.().count;
+      if (!Number.isSafeInteger(unprocessedCount) || unprocessedCount < 0
+        || !Number.isSafeInteger(reviewCount) || reviewCount < 0) {
+        throw new Error('Firestore returned an invalid queue summary');
+      }
+      return { unprocessedCount, reviewCount };
     }
   };
 }
