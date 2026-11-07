@@ -92,6 +92,19 @@ test('unknown command fields such as email body are rejected before persistence'
   assert.equal(saved.includes('body'), false);
 });
 
+test('conflicting titles and malformed optional dates are routed to review', async () => {
+  const db = fakeFirestore();
+  const queueCalls = [];
+  const outbox = createGmailCommandOutbox({ store: createFirestoreGmailCommandOutbox(db), commandQueue: { async enqueue(input) { queueCalls.push(input); return { status: 'pending' }; } } });
+  const result = await outbox.record({
+    messageId: 'mail-ambiguous-command', classification: { kind: 'application' },
+    commandDraft: { ...draft, product: '別の商品', deadline: '2026-02-31' },
+    businessEventIdentity: identity, nowMs: 22
+  });
+  assert.equal(result.status, 'review');
+  assert.equal(queueCalls.length, 0);
+});
+
 test('classifier processor writes the durable outbox before returning and never persists mail text', async () => {
   const db = fakeFirestore();
   const outbox = createGmailCommandOutbox({
