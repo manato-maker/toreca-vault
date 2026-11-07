@@ -4,6 +4,8 @@ import { createGmailCommandOutbox } from '../src/gmail-command-outbox.js';
 import { createFirestoreGmailCommandOutbox } from '../src/firestore-gmail-command-outbox.js';
 import { createGmailClassifierProcessor } from '../src/gmail-classifier-processor.js';
 import { createLotteryBusinessEventKey } from '../src/business-event-identity.js';
+import { buildGmailLotteryCommandDraft } from '../src/gmail-lottery-command-builder.js';
+import { createServer } from '../src/server.js';
 
 function fakeFirestore() {
   const documents = new Map();
@@ -113,10 +115,15 @@ test('classifier processor writes the durable outbox before returning and never 
   });
   const events = [];
   const processor = createGmailClassifierProcessor({
-    provider: { async getMessageForClassification() { return { subject: 'ポケモンカード 抽選申込完了', text: 'email body with confidential text' }; } },
+    provider: { async getMessageForClassification() { return { subject: 'ポケモンカード 抽選申込完了', text: '応募ID: APP-123\n店舗名: トレカショップA\n商品名: 商品A\n応募日: 2026-11-08\nemail body with confidential text' }; } },
     classificationStore: { async record() { events.push('classification'); } },
     commandOutbox: outbox,
-    buildCommandDraft: async () => ({ command: draft, businessEventIdentity: identity })
+    buildCommandDraft: async ({ fields, classification }) => buildGmailLotteryCommandDraft({
+      kind: classification.kind,
+      subject: fields.subject,
+      text: fields.text,
+      retailerAliases: { 'トレカショップA': 'shop-a' }
+    })
   });
   const result = await processor({ messageId: 'mail-3' });
   events.push(result.queue.status);
@@ -124,6 +131,7 @@ test('classifier processor writes the durable outbox before returning and never 
   const stored = JSON.stringify([...db.documents.values()]);
   assert.equal(stored.includes('email body with confidential text'), false);
   assert.equal(stored.includes('mail-3'), false);
+  assert.equal([...db.documents.values()][0].command.title, '商品A');
 });
 
 test('same explicit identity uses the shared cross-source lottery key and conflicting queue payload goes to review', async () => {
@@ -158,4 +166,65 @@ test('a Gmail retry with a different requestId is suppressed by the Chat busines
   assert.notEqual(queueCalls[0].requestId, 'chat-report-123');
   assert.equal(queueCalls[0].businessEventKey, key);
   assert.equal(acceptedByChat.size, 1);
+});
+
+test('Chat Action HTTP submission and Gmail classification share one event and queue record', async () => {
+  const eventIndex = new Map();
+  const requestIndex = new Map();
+  const commandQueue = { async enqueue(input) {
+    const command = { ...input.command };
+    delete command.requestId;
+    const businessHash = JSON.stringify(Object.fromEntries(Object.entries(command).sort(([a], [b]) => a.localeCompare(b))));
+    const old = requestIndex.get(input.requestId);
+    if (old) return old.businessHash === businessHash && old.key === input.businessEventKey
+      ? { status: 'pending', accepted: true, duplicate: true } : { status: 'collision', accepted: false };
+    const event = eventIndex.get(input.businessEventKey);
+    if (event) return event.businessHash === businessHash
+      ? { status: 'duplicate', accepted: false, duplicate: true, businessDuplicate: true, existingRequestId: event.requestId }
+      : { status: 'business-event-collision', accepted: false };
+    const row = { requestId: input.requestId, key: input.businessEventKey, businessHash };
+    eventIndex.set(input.businessEventKey, row);
+    requestIndex.set(input.requestId, row);
+    return { status: 'pending', accepted: true, duplicate: false };
+  } };
+  const server = createServer({
+    store: { async read() { return { payload: {}, revision: 1, lastMutationId: '' }; }, async save() { throw new Error('unused'); } },
+    commandQueue, apiToken: 'test-api-token', commandsEnabled: true
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const chatCommand = { ...draft };
+    delete chatCommand.evidenceType;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/v2/commands`, {
+      method: 'POST', headers: { authorization: 'Bearer test-api-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        requestId: 'chat-report-123',
+        businessEventIdentity: { retailerKey: 'store-a', applicationId: 'APP-123' },
+        command: { ...chatCommand, requestId: 'chat-report-123' }
+      })
+    });
+    assert.equal(response.status, 202);
+    const chatReceipt = await response.json();
+    assert.equal(chatReceipt.accepted, true);
+
+    const db = fakeFirestore();
+    const outbox = createGmailCommandOutbox({ store: createFirestoreGmailCommandOutbox(db), commandQueue });
+    const processor = createGmailClassifierProcessor({
+      provider: { async getMessageForClassification() { return { subject: 'ポケモンカード 抽選申込完了', text: '応募ID: APP-123\n店舗名: 店舗A\n商品名: 商品A\n応募日: 2026-11-08' }; } },
+      classificationStore: { async record() {} },
+      commandOutbox: outbox,
+      buildCommandDraft: ({ fields, classification }) => buildGmailLotteryCommandDraft({
+        kind: classification.kind, subject: fields.subject, text: fields.text,
+        retailerAliases: { '店舗A': 'store-a' }
+      })
+    });
+    const mailResult = await processor({ messageId: 'distinct-gmail-id' });
+    assert.equal(mailResult.queue.status, 'submitted');
+    assert.equal(mailResult.queue.duplicate, true);
+    assert.equal(eventIndex.size, 1);
+    assert.equal(requestIndex.size, 1);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
