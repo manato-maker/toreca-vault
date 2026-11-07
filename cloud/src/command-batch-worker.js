@@ -16,7 +16,7 @@ export function createCommandBatchWorker({ queue, store, batchSize = 10, clock =
     for (const item of pending) {
       if (!item || typeof item.requestId !== 'string' || !item.requestId.trim()) throw new Error('command queue returned an invalid request ID');
       const result = await processQueuedCommand({ queue, store, requestId: item.requestId, clock });
-      results.push(result.status);
+      results.push(result.status === 'exhausted' ? 'review' : result.status === 'lease-lost' ? 'busy' : result.status);
     }
     const counts = Object.fromEntries(['done', 'pending', 'review', 'busy', 'missing'].map((status) => [status, results.filter((value) => value === status).length]));
     return { processedCount: results.length, ...counts };
