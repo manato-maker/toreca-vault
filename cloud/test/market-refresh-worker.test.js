@@ -12,6 +12,11 @@ function sampleState() {
     productKey: 'box-x', category: 'BOX', condition: 'あり', price: 1250,
     source: 'Previous source', quotedAt: '2026-11-06T04:00:00.000Z', fresh: true
   });
+  state.automation.health.marketRefresh = {
+    lastAttemptAt: '2026-11-06T04:00:00.000Z',
+    lastSuccessfulAt: '2026-11-06T04:00:00.000Z',
+    refreshedCount: 1, staleCount: 0, status: 'healthy'
+  };
   return state;
 }
 
@@ -58,6 +63,11 @@ test('market refresh records only sourced quotes and verifies revision readback'
   assert.equal(saved.payload.marketQuotes[0].fresh, true);
   assert.deepEqual(saved.payload.transactions, initial.transactions);
   assert.deepEqual(saved.payload.inventoryLots, initial.inventoryLots);
+  assert.deepEqual(saved.payload.automation.health.marketRefresh, {
+    lastAttemptAt: '2026-11-07T04:45:00.000Z',
+    lastSuccessfulAt: '2026-11-07T04:45:00.000Z',
+    refreshedCount: 1, staleCount: 0, status: 'healthy'
+  });
   assert.equal(store.writes, 1);
 });
 
@@ -85,6 +95,9 @@ test('missing, invalid, or duplicated provider results preserve the prior price 
     assert.equal(quote.lastCheckedAt, '2026-11-07T04:45:00.000Z');
     assert.equal(quote.fresh, false);
     assert.equal(quote.trend, 'stale');
+    const health = (await store.read()).payload.automation.health.marketRefresh;
+    assert.equal(health.status, 'degraded');
+    assert.equal(health.lastSuccessfulAt, '2026-11-06T04:00:00.000Z');
   }
 });
 
