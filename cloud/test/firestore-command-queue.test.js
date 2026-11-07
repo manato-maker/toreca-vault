@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFirestoreCommandQueue } from '../src/firestore-command-queue.js';
+import { resolveChatLotteryIdentity, resolveGmailLotteryIdentity } from '../src/lottery-event-intake.js';
 
 function fakeFirestore() {
   const docs = new Map();
@@ -11,6 +12,22 @@ function fakeFirestore() {
         const value = docs.get(path);
         return { exists: value !== undefined, data: () => structuredClone(value) };
       } };
+    },
+    collection(path) {
+      return {
+        where(field, operation, expected) {
+          let results = [...docs.entries()].filter(([documentPath, value]) => documentPath.startsWith(`${path}/`) && operation === '==' && value[field] === expected);
+          return {
+            limit(maximum) {
+              return {
+                async get() {
+                  return { docs: results.slice(0, maximum).map(([documentPath, value]) => ({ id: documentPath.slice(path.length + 1), data: () => structuredClone(value) })) };
+                }
+              };
+            }
+          };
+        }
+      };
     },
     async runTransaction(callback) {
       const writes = new Map();
@@ -50,6 +67,36 @@ test('a shared business event key prevents the same lottery from being queued tw
   assert.equal([...db.docs.values()].some((value) => value.businessEventKey === key), false);
 });
 
+test('different Chat and Gmail request IDs deduplicate after deriving the same key from evidence', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  const chatIdentity = resolveChatLotteryIdentity({
+    kind: 'application', retailer: 'カードボックス オーサカ店', reportText: '応募番号: CB-991'
+  });
+  const gmailIdentity = resolveGmailLotteryIdentity({
+    kind: 'application', subject: 'カードボックス オーサカ店 抽選申込完了', text: '受付番号: CB-991'
+  });
+  assert.equal(chatIdentity.status, 'ready');
+  assert.deepEqual(gmailIdentity, chatIdentity);
+
+  const chatRequestId = 'chat-report-55';
+  const gmailRequestId = 'gmail-message-82';
+  const first = await queue.enqueue({
+    requestId: chatRequestId,
+    command: lottery(chatRequestId),
+    businessEventKey: chatIdentity.businessEventKey
+  });
+  const second = await queue.enqueue({
+    requestId: gmailRequestId,
+    command: lottery(gmailRequestId),
+    businessEventKey: gmailIdentity.businessEventKey
+  });
+  assert.equal(first.accepted, true);
+  assert.deepEqual(second, {
+    status: 'duplicate', accepted: false, duplicate: true,
+    businessDuplicate: true, existingRequestId: chatRequestId
+  });
+});
+
 test('reusing a business key for conflicting business data fails closed', async () => {
   const queue = createFirestoreCommandQueue(fakeFirestore());
   const key = 'lottery:store-a:round-2026-11:application';
@@ -64,4 +111,13 @@ test('business event keys reject empty, oversized, and control-character values'
   await assert.rejects(queue.enqueue({ requestId: 'r1', command: lottery('r1'), businessEventKey: '  ' }), /businessEventKey/);
   await assert.rejects(queue.enqueue({ requestId: 'r2', command: lottery('r2'), businessEventKey: 'x'.repeat(257) }), /businessEventKey/);
   await assert.rejects(queue.enqueue({ requestId: 'r3', command: lottery('r3'), businessEventKey: 'bad\nkey' }), /businessEventKey/);
+});
+
+test('pending queue listing is bounded and excludes business-event index rows', async () => {
+  const db = fakeFirestore();
+  const queue = createFirestoreCommandQueue(db);
+  await queue.enqueue({ requestId: 'r1', command: lottery('r1'), now: 10 });
+  await queue.enqueue({ requestId: 'r2', command: lottery('r2'), now: 20 });
+  assert.deepEqual(await queue.listPending({ limit: 1 }), [{ requestId: 'r1' }]);
+  await assert.rejects(queue.listPending({ limit: 51 }), /limit must be from 1 to 50/);
 });
