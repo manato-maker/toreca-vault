@@ -118,9 +118,10 @@ A page is limited to 50 messages at both planner and provider boundaries. Google
 The API can process accepted commands through a bounded worker endpoint:
 
 - `POST /internal/worker/commands` is disabled unless the worker, command queue, and V2 writes are all explicitly enabled.
-- The worker requires a separate `TV2_WORKER_TOKEN` of at least 32 characters plus Cloud Scheduler's planned-time and marker headers. Store this token in Secret Manager; never put it in a chat or commit.
+- The worker validates a Google-signed OIDC ID token against the configured Scheduler audience and exact Scheduler service account email. No additional shared worker secret is needed. Grant that service account `roles/run.invoker` on this Cloud Run service only; keep all worker flags disabled until the canonical migration gate is passed.
+- Set `TV2_SCHEDULER_AUDIENCE` to the Cloud Run service URL used as the OIDC audience and `TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL` to the dedicated Scheduler service account. Configure Cloud Scheduler to attach an OIDC token for that account and call `POST /internal/worker/commands`; the route also checks the planned-time and Scheduler marker headers.
 - Each tick queries only pending command request IDs (maximum 50; default batch 10) and uses the existing queue claim, revision-CAS, readback, and settlement logic. Concurrent ticks are fenced by queue leases.
-- Configure Cloud Scheduler for every 15 minutes only after the canonical V2 snapshot has been imported and verified. This repository change does not create a Scheduler job or deploy the service.
+- Configure Cloud Scheduler for every 15 minutes only after the canonical V2 snapshot has been imported and verified. This repository change does not create a Scheduler job, grant IAM permissions, or deploy the service.
 - If the canonical snapshot is absent, processing leaves a bounded retry state; after the existing attempt limit, the queue moves the command to review. Do not enable the worker before the migration gate is passed.
 
 The worker API is implementation and Emulator-tested, not live. OAuth/Gmail workers, the complete dispatcher composition, Scheduler job, ChatGPT Action registration, and monitoring remain unconnected.
