@@ -1,0 +1,68 @@
+import { createHash } from 'node:crypto';
+import { createLotteryBusinessEventKey } from './business-event-identity.js';
+
+const KIND_TO_COMMAND = new Map([['application', 'lottery'], ['result', 'lottery-result-exact'], ['receipt', 'lottery-receipt']]);
+const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
+const clone = (value) => structuredClone(value);
+
+function messageHash(messageId) {
+  if (typeof messageId !== 'string' || !messageId.trim() || messageId.length > 512 || /[\u0000-\u001f\u007f]/.test(messageId)) throw new TypeError('messageId is invalid');
+  return createHash('sha256').update(messageId).digest('hex');
+}
+function validCommand(kind, draft) {
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft) || draft.type !== KIND_TO_COMMAND.get(kind)) return false;
+  if (!String(draft.title || draft.product || '').trim() || !String(draft.store || '').trim()) return false;
+  if (kind === 'application') return ['応募済', '応募前'].includes(String(draft.status || '応募済')) && isDate(draft.applicationDate);
+  if (kind === 'result') return ['当選', '落選'].includes(String(draft.status || '')) && isDate(draft.resultDate);
+  return isDate(draft.receivedDate || draft.date);
+}
+function eventKey(kind, identity) {
+  if (!identity || typeof identity !== 'object' || Array.isArray(identity) || Object.keys(identity).some((key) => !['retailerKey', 'applicationId'].includes(key))) return null;
+  const resolved = createLotteryBusinessEventKey({ ...identity, kind });
+  return resolved.status === 'ready' ? resolved.businessEventKey : null;
+}
+
+/** Outbox writes first, then sends to the idempotent command queue using a stable hashed-mail requestId. */
+export function createGmailCommandOutbox({ store, commandQueue } = {}) {
+  if (!store || !['recordOnce', 'get', 'markSubmitted', 'markReview'].every((m) => typeof store[m] === 'function')) throw new TypeError('a durable Gmail outbox store is required');
+  if (!commandQueue || typeof commandQueue.enqueue !== 'function') throw new TypeError('a durable command queue is required');
+
+  async function deliver(entry) {
+    if (entry.status !== 'ready') return { status: entry.status, submitted: entry.status === 'submitted' };
+    const queued = await commandQueue.enqueue({ requestId: entry.requestId, command: clone(entry.command), businessEventKey: entry.businessEventKey });
+    if (!queued || ['collision', 'business-event-collision'].includes(queued.status)) {
+      await store.markReview(entry.messageIdHash, 'queue-conflict');
+      return { status: 'review', submitted: false, reasonCode: 'queue-conflict' };
+    }
+    const code = queued.businessDuplicate ? 'cross-source-duplicate' : queued.duplicate ? 'request-replay' : 'queued';
+    await store.markSubmitted(entry.messageIdHash, code);
+    return { status: 'submitted', submitted: true, duplicate: Boolean(queued.duplicate || queued.businessDuplicate) };
+  }
+
+  return {
+    async record({ messageId, classification, commandDraft, businessEventIdentity, nowMs = Date.now() } = {}) {
+      const hash = messageHash(messageId);
+      if (!Number.isSafeInteger(nowMs) || nowMs < 0) throw new TypeError('nowMs is invalid');
+      if (!classification || !['application', 'result', 'receipt'].includes(classification.kind)) return { status: 'ignored', submitted: false };
+      const requestId = `gmail:${hash.slice(0, 32)}`;
+      const key = eventKey(classification.kind, businessEventIdentity);
+      if (!key || !validCommand(classification.kind, commandDraft)) {
+        const review = { messageIdHash: hash, requestId, kind: classification.kind, status: 'review', reasonCode: 'command-evidence-incomplete', createdAtMs: nowMs };
+        await store.recordOnce(review);
+        return { status: 'review', submitted: false, reasonCode: review.reasonCode };
+      }
+      const command = { ...clone(commandDraft), requestId };
+      const row = { messageIdHash: hash, requestId, kind: classification.kind, status: 'ready', command, businessEventKey: key, createdAtMs: nowMs };
+      const saved = await store.recordOnce(row);
+      if (saved.status === 'collision') {
+        await store.markReview(hash, 'outbox-conflict');
+        return { status: 'review', submitted: false, reasonCode: 'outbox-conflict' };
+      }
+      return deliver((await store.get(hash)) || row);
+    },
+    async retry(messageId) {
+      const entry = await store.get(messageHash(messageId));
+      return entry ? deliver(entry) : { status: 'missing', submitted: false };
+    }
+  };
+}
