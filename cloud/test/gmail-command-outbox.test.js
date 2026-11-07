@@ -78,6 +78,34 @@ test('incomplete identity or command fields are routed to review without queuein
   assert.equal([...db.documents.values()][0].reasonCode, 'command-evidence-incomplete');
 });
 
+test('review resolution requires explicit confirmation and the current review version', async () => {
+  const db = fakeFirestore();
+  const durable = createFirestoreGmailCommandOutbox(db);
+  const queueCalls = [];
+  const outbox = createGmailCommandOutbox({
+    store: durable,
+    commandQueue: { async enqueue(input) { queueCalls.push(input); return { status: 'pending', accepted: true }; } }
+  });
+  await outbox.record({ messageId: 'mail-review-confirm', classification: { kind: 'application' }, commandDraft: null, businessEventIdentity: null, nowMs: 100 });
+  const review = await durable.get([...db.documents.values()][0].messageIdHash);
+  const refused = await outbox.approveReview({ messageId: 'mail-review-confirm', expectedPayloadHash: review.payloadHash, confirmed: false, commandDraft: draft, businessEventIdentity: identity, nowMs: 101 });
+  assert.equal(refused.reasonCode, 'explicit-confirmation-required');
+  assert.equal(queueCalls.length, 0);
+
+  await durable.markReview(review.messageIdHash, 'review-reason-updated');
+  const stale = await outbox.approveReview({ messageId: 'mail-review-confirm', expectedPayloadHash: review.payloadHash, confirmed: true, commandDraft: draft, businessEventIdentity: identity, nowMs: 102 });
+  assert.equal(stale.status, 'stale');
+  assert.equal(queueCalls.length, 0);
+
+  const current = await durable.get(review.messageIdHash);
+  const approved = await outbox.approveReview({ messageId: 'mail-review-confirm', expectedPayloadHash: current.payloadHash, confirmed: true, commandDraft: draft, businessEventIdentity: identity, nowMs: 103 });
+  assert.equal(approved.status, 'submitted');
+  assert.equal(queueCalls.length, 1);
+  assert.equal(queueCalls[0].requestId, review.requestId);
+  assert.equal(queueCalls[0].businessEventKey, createLotteryBusinessEventKey({ kind: 'application', ...identity }).businessEventKey);
+  assert.equal((await durable.get(review.messageIdHash)).status, 'submitted');
+});
+
 test('unknown command fields such as email body are rejected before persistence', async () => {
   const db = fakeFirestore();
   const queueCalls = [];
