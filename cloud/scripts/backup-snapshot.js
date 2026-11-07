@@ -1,8 +1,10 @@
 import { open, readFile } from 'node:fs/promises';
 import { createBackupArtifact, parseBackupArtifact, previewBackupRestore, serializeBackupArtifact, verifyBackupArtifact } from '../src/backup-artifact.js';
+import { createBackupExportTask } from '../src/backup-export-task.js';
+import { createFileBackupRepository } from '../src/file-backup-repository.js';
 
 function usage() {
-  return 'Usage: backup-snapshot.js create <snapshot.json> <backup.json> | verify <backup.json> | preview <backup.json> <current.json> <expected-revision>';
+  return 'Usage: backup-snapshot.js export <snapshot.json> <backup-directory> | create <snapshot.json> <backup.json> | verify <backup.json> | preview <backup.json> <current.json> <expected-revision>';
 }
 
 async function readJson(path) {
@@ -24,6 +26,15 @@ function printableVerification(verification) {
 
 async function main(args) {
   const [command, ...values] = args;
+  if (command === 'export' && values.length === 2) {
+    const snapshot = await readJson(values[0]);
+    const task = createBackupExportTask({
+      store: { async read() { return { payload: snapshot, revision: snapshot.revision }; } },
+      repository: createFileBackupRepository(values[1])
+    });
+    process.stdout.write(JSON.stringify(await task()) + '\n');
+    return;
+  }
   if (command === 'create' && values.length === 2) {
     const snapshot = await readJson(values[0]);
     const artifact = createBackupArtifact(snapshot);
