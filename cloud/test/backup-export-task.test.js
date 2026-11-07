@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { applyTransaction, emptyV2 } from '../../v2/core.js';
 import { createBackupArtifact } from '../src/backup-artifact.js';
 import { createBackupExportTask } from '../src/backup-export-task.js';
+import { createFileBackupRepository } from '../src/file-backup-repository.js';
 
 function snapshot() {
   return applyTransaction(emptyV2(), {
@@ -78,6 +82,30 @@ test('backup export fails closed on absent canonical data, mismatched revision, 
     clock: () => new Date('2026-11-07T13:35:00.000Z')
   });
   await assert.rejects(corrupt(), /payload hash mismatch/);
+});
+
+test('local backup repository uses create-once private files and rejects unsafe keys', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'toreca-repository-'));
+  try {
+    const repository = createFileBackupRepository(directory);
+    const payload = snapshot();
+    const task = createBackupExportTask({
+      store: { async read() { return { payload, revision: payload.revision }; } },
+      repository,
+      clock: () => new Date('2026-11-07T13:35:00.000Z')
+    });
+    const first = await task();
+    const again = await task();
+    assert.equal(first.created, true);
+    assert.equal(again.created, false);
+    assert.equal(again.payloadHash, first.payloadHash);
+    const file = resolve(directory, first.key);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    assert.deepEqual(JSON.parse((await repository.get(first.key)).toString('utf8')).payload, payload);
+    await assert.rejects(repository.putIfAbsent('../../escape.json', '{}'), /key is invalid/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 function serializeBackupArtifactForTest(artifact) {
