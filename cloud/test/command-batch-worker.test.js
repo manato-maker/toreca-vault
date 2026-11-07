@@ -29,3 +29,17 @@ test('command batch validates the planned time and maximum page size', async () 
   const worker = createCommandBatchWorker(dependencies);
   await assert.rejects(worker({ scheduledAt: 'not-a-time' }), /scheduledAt/);
 });
+
+test('exhausted queue rows are reported as review items', async () => {
+  const worker = createCommandBatchWorker({
+    queue: {
+      async listPending() { return [{ requestId: 'exhausted-1' }]; },
+      async claim() { return { status: 'exhausted', claimed: false }; },
+      async finish() { throw new Error('an exhausted lease cannot be settled again'); }
+    },
+    store: { async read() { return null; }, async save() { throw new Error('unused'); } }
+  });
+  assert.deepEqual(await worker({ scheduledAt: '2026-11-08T01:00:00Z' }), {
+    processedCount: 1, done: 0, pending: 0, review: 1, busy: 0, missing: 0
+  });
+});
