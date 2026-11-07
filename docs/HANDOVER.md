@@ -1001,3 +1001,7 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - The path is not exposed as an HTTP endpoint and has no review UI or owner authentication integration. It is a library method exercised with a fake Firestore store. It is not safe to present as a user-facing approval flow yet.
 - Focused Gmail outbox tests: 9 passed. Full local cloud suite: 151 passed, 0 failed, 2 Firestore Emulator tests skipped without local Emulator; `npm run check --prefix cloud` passed.
 - Gmail OAuth/live retailer templates, Chat Action deployment, Cloud Run auth/runtime, review UI and authorization, canonical V2 export, deployed backup storage/restore, and measured operating cost remain unverified. No V2 data was read or changed; billing, production deployment, and cutover remain untouched. PR stays Draft, unmerged, undeployed.
+
+
+### CI follow-up
+- Hashed-reference version of the review resolver passed GitHub Actions v2-ci #774 on commit `43d40d3a5acacfc813e3a1a5318fff444b11e5b2`, including the Firestore Emulator job. This remains code/CI validation only; no live review authorization or runtime connection.
