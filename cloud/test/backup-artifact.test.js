@@ -108,6 +108,7 @@ test('offline CLI creates without overwriting, verifies, and previews without ex
     const inputPath = join(directory, 'snapshot.json');
     const backupPath = join(directory, 'backup.json');
     const currentPath = join(directory, 'current.json');
+    const backupDirectory = join(directory, 'private-backups');
     const snapshot = sampleSnapshot();
     const current = { ...sampleSnapshot(), revision: 2 };
     await writeFile(inputPath, JSON.stringify(snapshot));
@@ -129,6 +130,13 @@ test('offline CLI creates without overwriting, verifies, and previews without ex
     assert.equal(JSON.parse(preview.stdout).automaticApply, false);
     assert.equal(preview.stdout.includes('Private Product'), false);
     assert.equal(preview.stdout.includes('secret-transaction'), false);
+
+    const exportResult = spawnSync(process.execPath, [cliPath, 'export', inputPath, backupDirectory], { encoding: 'utf8' });
+    assert.equal(exportResult.status, 0, exportResult.stderr);
+    assert.equal(JSON.parse(exportResult.stdout).created, true);
+    const retryExport = spawnSync(process.execPath, [cliPath, 'export', inputPath, backupDirectory], { encoding: 'utf8' });
+    assert.equal(retryExport.status, 0, retryExport.stderr);
+    assert.equal(JSON.parse(retryExport.stdout).created, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
