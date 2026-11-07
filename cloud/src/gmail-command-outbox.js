@@ -20,8 +20,11 @@ function validCommand(kind, draft) {
   if (Object.keys(draft).some((field) => !allowedFields.has(field))) return false;
   if (Object.entries(draft).some(([field, value]) => typeof value !== 'string' || value.length > (field === 'title' || field === 'product' ? 200 : 120) || /[\u0000-\u001f\u007f]/.test(value))) return false;
   if (!String(draft.title || draft.product || '').trim() || !String(draft.store || '').trim()) return false;
-  if (kind === 'application') return ['応募済', '応募前'].includes(String(draft.status || '応募済')) && isDate(draft.applicationDate);
+  if (draft.title && draft.product && draft.title.normalize('NFKC').trim() !== draft.product.normalize('NFKC').trim()) return false;
+  if (kind === 'application') return ['応募済', '応募前'].includes(String(draft.status || '応募済'))
+    && isDate(draft.applicationDate) && ['deadline', 'resultDate', 'receiveDeadline'].every((field) => !draft[field] || isDate(draft[field]));
   if (kind === 'result') return ['当選', '落選'].includes(String(draft.status || '')) && isDate(draft.resultDate);
+  if (draft.receivedDate && draft.date && draft.receivedDate !== draft.date) return false;
   return isDate(draft.receivedDate || draft.date);
 }
 function eventKey(kind, identity) {
