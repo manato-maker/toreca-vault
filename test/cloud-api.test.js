@@ -123,6 +123,47 @@ test('scheduler route validates planned time, dispatches an authorized tick, and
   });
 });
 
+test('command worker route is disabled by default and requires authorization plus the planned Scheduler slot', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/internal/worker/commands`, { method: 'POST' });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: 'command worker is disabled' });
+  });
+
+  let disabledCalls = 0;
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/internal/worker/commands`, { method: 'POST', headers: { 'x-cloudscheduler': 'true', 'x-cloudscheduler-scheduletime': '2026-11-08T10:15:00+09:00' } });
+    assert.equal(response.status, 503);
+    assert.equal(disabledCalls, 0);
+  }, {
+    commandWorker: async () => { disabledCalls++; return { processedCount: 1 }; },
+    workerAuthorize: async () => true
+  });
+
+  let calls = 0;
+  await withServer(createFakeStore(), async (base) => {
+    const headers = { 'x-cloudscheduler': 'true', 'x-cloudscheduler-scheduletime': '2026-11-08T10:15:00+09:00' };
+    const denied = await fetch(`${base}/internal/worker/commands`, { method: 'POST', headers });
+    assert.equal(denied.status, 401);
+    const allowed = await fetch(`${base}/internal/worker/commands`, { method: 'POST', headers: { ...headers, 'x-worker-auth': 'trusted' } });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), {
+      ok: true, scheduledAt: '2026-11-08T01:15:00.000Z', processedCount: 2,
+      doneCount: 1, pendingCount: 1, reviewCount: 0, busyCount: 0
+    });
+    assert.equal(calls, 1);
+  }, {
+    writesEnabled: true,
+    commandsEnabled: true,
+    workerAuthorize: async (request) => request.headers['x-worker-auth'] === 'trusted',
+    commandWorker: async (input) => {
+      calls++;
+      assert.equal(input.scheduledAt.toISOString(), '2026-11-08T01:15:00.000Z');
+      return { processedCount: 2, done: 1, pending: 1, review: 0, busy: 0, secret: 'never returned' };
+    }
+  });
+});
+
 test('health is read-only and reports an uninitialized canonical store', async () => {
   await withServer(createFakeStore(), async (base) => {
     const response = await fetch(`${base}/health`);
