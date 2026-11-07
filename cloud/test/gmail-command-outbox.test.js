@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createGmailCommandOutbox } from '../src/gmail-command-outbox.js';
 import { createFirestoreGmailCommandOutbox } from '../src/firestore-gmail-command-outbox.js';
 import { createGmailClassifierProcessor } from '../src/gmail-classifier-processor.js';
+import { createLotteryBusinessEventKey } from '../src/business-event-identity.js';
 
 function fakeFirestore() {
   const documents = new Map();
@@ -75,6 +76,22 @@ test('incomplete identity or command fields are routed to review without queuein
   assert.equal([...db.documents.values()][0].reasonCode, 'command-evidence-incomplete');
 });
 
+test('unknown command fields such as email body are rejected before persistence', async () => {
+  const db = fakeFirestore();
+  const queueCalls = [];
+  const outbox = createGmailCommandOutbox({
+    store: createFirestoreGmailCommandOutbox(db),
+    commandQueue: { async enqueue(item) { queueCalls.push(item); return { status: 'pending' }; } }
+  });
+  const privateBody = 'private email body must never persist';
+  const result = await outbox.record({ messageId: 'mail-private-fields', classification: { kind: 'application' }, commandDraft: { ...draft, body: privateBody }, businessEventIdentity: identity, nowMs: 21 });
+  assert.equal(result.status, 'review');
+  assert.equal(queueCalls.length, 0);
+  const saved = JSON.stringify([...db.documents.values()]);
+  assert.equal(saved.includes(privateBody), false);
+  assert.equal(saved.includes('body'), false);
+});
+
 test('classifier processor writes the durable outbox before returning and never persists mail text', async () => {
   const db = fakeFirestore();
   const outbox = createGmailCommandOutbox({
@@ -111,7 +128,6 @@ test('same explicit identity uses the shared cross-source lottery key and confli
 
 test('a Gmail retry with a different requestId is suppressed by the Chat business-event key', async () => {
   const db = fakeFirestore();
-  const { createLotteryBusinessEventKey } = await import('../src/business-event-identity.js');
   const key = createLotteryBusinessEventKey({ kind: 'application', ...identity }).businessEventKey;
   const acceptedByChat = new Map([[key, 'chat-report-123']]);
   const queueCalls = [];
