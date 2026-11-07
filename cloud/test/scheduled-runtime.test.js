@@ -103,4 +103,27 @@ test('records partial handler failures and missed slots in the heartbeat', async
   assert.equal(recoveredTick.failedJobCount, 0);
   assert.equal(evaluateSchedulerHealth(recoveredTick, { nowMs: sevenThirty.getTime() + 2000 }).healthy, false);
 });
+test('an unconfigured job is recorded without blocking configured work or heartbeat', async () => {
+  const db = fakeFirestore();
+  const ledger = createFirestoreJobLedger(db);
+  const heartbeatStore = createFirestoreSchedulerHeartbeatStore(db);
+  const seven = atJst('07:00');
+  let queueRuns = 0;
+  const tick = await runScheduledTick({
+    now: seven,
+    scheduledAt: seven,
+    ledger,
+    heartbeatStore,
+    handlers: { 'command-queue': async () => { queueRuns += 1; } },
+    clock: () => seven.getTime() + 1000
+  });
 
+  assert.equal(queueRuns, 1);
+  assert.equal(tick.plannedCount, 2);
+  assert.equal(tick.failedJobCount, 1);
+  assert.deepEqual(tick.results.map(({ status }) => status), ['completed', 'unconfigured']);
+  assert.equal(tick.results[1].errorCode, 'HandlerUnavailable');
+  const heartbeat = await heartbeatStore.read();
+  assert.equal(heartbeat.failedJobCount, 1);
+  assert.equal(evaluateSchedulerHealth(heartbeat, { nowMs: seven.getTime() + 2000 }).healthy, false);
+});
