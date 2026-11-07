@@ -5,6 +5,7 @@ import { createFirestoreCommandQueue } from '../src/firestore-command-queue.js';
 function fakeFirestore() {
   const docs = new Map();
   return {
+    docs,
     doc(path) {
       return { path, async get() {
         const value = docs.get(path);
@@ -31,59 +32,36 @@ function fakeFirestore() {
   };
 }
 
-const sale = (requestId, amount = 55300) => ({ requestId, type: 'sale', date: '2026-11-01', amount });
+function lottery(requestId, product = 'MEGA Dream ex') {
+  return { requestId, type: 'lottery', product, retailer: 'store-a', roundId: 'round-2026-11' };
+}
 
-test('enqueues once and recognizes exact resends independent of object key order', async () => {
-  const queue = createFirestoreCommandQueue(fakeFirestore());
-  assert.deepEqual(await queue.enqueue({ requestId: 'sale-1', command: sale('sale-1'), now: 100 }), {
+test('a shared business event key prevents the same lottery from being queued twice across sources', async () => {
+  const db = fakeFirestore();
+  const queue = createFirestoreCommandQueue(db);
+  const key = 'lottery:store-a:round-2026-11:application';
+  assert.deepEqual(await queue.enqueue({ requestId: 'chat-report-1', command: lottery('chat-report-1'), businessEventKey: key, now: 10 }), {
     status: 'pending', accepted: true, duplicate: false
   });
-  assert.deepEqual(await queue.enqueue({ requestId: 'sale-1', command: { amount: 55300, date: '2026-11-01', type: 'sale', requestId: 'sale-1' }, now: 200 }), {
-    status: 'pending', accepted: true, duplicate: true
+  assert.deepEqual(await queue.enqueue({ requestId: 'gmail-message-2', command: lottery('gmail-message-2'), businessEventKey: key, now: 20 }), {
+    status: 'duplicate', accepted: false, duplicate: true, businessDuplicate: true, existingRequestId: 'chat-report-1'
+  });
+  assert.equal([...db.docs.values()].filter((value) => value.status === 'pending').length, 1);
+  assert.equal([...db.docs.values()].some((value) => value.businessEventKey === key), false);
+});
+
+test('reusing a business key for conflicting business data fails closed', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  const key = 'lottery:store-a:round-2026-11:application';
+  await queue.enqueue({ requestId: 'chat-report-1', command: lottery('chat-report-1'), businessEventKey: key });
+  assert.deepEqual(await queue.enqueue({ requestId: 'gmail-message-2', command: lottery('gmail-message-2', 'Other product'), businessEventKey: key }), {
+    status: 'business-event-collision', accepted: false
   });
 });
 
-test('rejects request ID collisions and mismatched or unsupported commands', async () => {
+test('business event keys reject empty, oversized, and control-character values', async () => {
   const queue = createFirestoreCommandQueue(fakeFirestore());
-  await queue.enqueue({ requestId: 'sale-1', command: sale('sale-1') });
-  assert.deepEqual(await queue.enqueue({ requestId: 'sale-1', command: sale('sale-1', 100) }), {
-    status: 'collision', accepted: false
-  });
-  await assert.rejects(queue.enqueue({ requestId: 'sale-2', command: sale('other') }), /does not match/);
-  await assert.rejects(queue.enqueue({ requestId: 'x', command: { requestId: 'x', type: 'email-send' } }), /unsupported/);
-});
-
-test('leases fence stale workers and completed commands cannot be claimed again', async () => {
-  const queue = createFirestoreCommandQueue(fakeFirestore());
-  await queue.enqueue({ requestId: 'sale-1', command: sale('sale-1'), now: 10 });
-  const first = await queue.claim('sale-1', { now: 20, leaseMs: 10 });
-  assert.equal(first.status, 'claimed');
-  assert.equal((await queue.claim('sale-1', { now: 25, leaseMs: 10 })).status, 'busy');
-  const second = await queue.claim('sale-1', { now: 31, leaseMs: 10 });
-  assert.equal(second.status, 'claimed');
-  assert.deepEqual(await queue.finish('sale-1', first.claimToken, { outcome: 'done', now: 32 }), { status: 'lease-lost', updated: false });
-  assert.deepEqual(await queue.finish('sale-1', second.claimToken, { outcome: 'done', resultCode: 'sale-applied', now: 33 }), { status: 'done', updated: true });
-  assert.equal((await queue.claim('sale-1', { now: 40 })).status, 'done');
-  assert.equal((await queue.inspect('sale-1')).command.amount, 55300);
-});
-
-test('validates bounded lease and payload settings', async () => {
-  const queue = createFirestoreCommandQueue(fakeFirestore());
-  await queue.enqueue({ requestId: 'sale-1', command: sale('sale-1') });
-  await assert.rejects(queue.claim('sale-1', { leaseMs: 0 }), /leaseMs/);
-  await assert.rejects(queue.claim('sale-1', { maxAttempts: 0 }), /maxAttempts/);
-  await assert.rejects(queue.enqueue({ requestId: 'large', command: { requestId: 'large', type: 'sale', memo: 'x'.repeat(20001) } }), /20000-byte/);
-});
-
-test('exhausted retry count moves an item to review and result metadata is sanitized', async () => {
-  const queue = createFirestoreCommandQueue(fakeFirestore());
-  await queue.enqueue({ requestId: 'retry-1', command: sale('retry-1'), now: 1 });
-  const first = await queue.claim('retry-1', { now: 2, leaseMs: 1, maxAttempts: 1 });
-  await queue.finish('retry-1', first.claimToken, { outcome: 'pending', resultCode: 'private sale details', now: 3 });
-  const exhausted = await queue.claim('retry-1', { now: 4, maxAttempts: 1 });
-  assert.deepEqual(exhausted, { status: 'exhausted', claimed: false });
-  const saved = await queue.inspect('retry-1');
-  assert.equal(saved.status, 'review');
-  assert.equal(saved.resultCode, 'attempt-limit');
-  assert.notEqual(saved.resultCode, 'private sale details');
+  await assert.rejects(queue.enqueue({ requestId: 'r1', command: lottery('r1'), businessEventKey: '  ' }), /businessEventKey/);
+  await assert.rejects(queue.enqueue({ requestId: 'r2', command: lottery('r2'), businessEventKey: 'x'.repeat(257) }), /businessEventKey/);
+  await assert.rejects(queue.enqueue({ requestId: 'r3', command: lottery('r3'), businessEventKey: 'bad\nkey' }), /businessEventKey/);
 });

@@ -20,6 +20,22 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
+function businessFingerprint(command) {
+  const businessCommand = { ...command };
+  delete businessCommand.requestId;
+  return createHash('sha256').update(canonicalJson(businessCommand)).digest('hex');
+}
+
+function normalizeBusinessEventKey(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string') throw new TypeError('businessEventKey must be a string');
+  const key = value.trim();
+  if (!key || key.length > 256 || /[\u0000-\u001f\u007f]/.test(key)) {
+    throw new TypeError('businessEventKey must be 1 to 256 printable characters');
+  }
+  return key;
+}
+
 function validateCommand(requestId, command) {
   if (typeof requestId !== 'string' || !requestId.trim() || requestId.length > 200) {
     throw new TypeError('requestId must be a non-empty string of at most 200 characters');
@@ -48,26 +64,60 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
     const id = createHash('sha256').update(requestId.trim()).digest('hex');
     return db.doc(`${collectionPath}/${id}`);
   };
+  const refForBusinessEvent = (businessEventKeyHash) => db.doc(`${collectionPath}/_event_${businessEventKeyHash}`);
 
   return {
-    async enqueue({ requestId, command, now = Date.now() }) {
+    async enqueue({ requestId, command, businessEventKey, now = Date.now() }) {
       safeNow(now);
       validateCommand(requestId, command);
       const ref = refFor(requestId);
       const payloadHash = createHash('sha256').update(canonicalJson(command)).digest('hex');
+      const normalizedEventKey = normalizeBusinessEventKey(businessEventKey);
+      const businessEventKeyHash = normalizedEventKey
+        ? createHash('sha256').update(normalizedEventKey).digest('hex') : '';
+      const businessPayloadHash = normalizedEventKey ? businessFingerprint(command) : '';
+      const eventRef = businessEventKeyHash ? refForBusinessEvent(businessEventKeyHash) : null;
       return db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(ref);
+        const eventSnapshot = eventRef ? await transaction.get(eventRef) : null;
         if (snapshot.exists) {
           const current = snapshot.data();
-          if (current.requestId !== requestId.trim() || current.payloadHash !== payloadHash) {
+          if (current.requestId !== requestId.trim() || current.payloadHash !== payloadHash
+            || (current.businessEventKeyHash || '') !== businessEventKeyHash) {
             return { status: 'collision', accepted: false };
           }
+          if (eventSnapshot?.exists) {
+            const event = eventSnapshot.data();
+            if (event.requestId !== requestId.trim() || event.businessPayloadHash !== businessPayloadHash) {
+              return { status: 'business-event-collision', accepted: false };
+            }
+          } else if (eventRef) {
+            transaction.create(eventRef, {
+              recordType: 'business-event-index',
+              businessEventKeyHash,
+              businessPayloadHash,
+              requestId: requestId.trim(),
+              createdAtMs: current.createdAtMs
+            });
+          }
           return { status: current.status, accepted: true, duplicate: true };
+        }
+        if (eventSnapshot?.exists) {
+          const event = eventSnapshot.data();
+          if (event.businessEventKeyHash !== businessEventKeyHash
+            || event.businessPayloadHash !== businessPayloadHash) {
+            return { status: 'business-event-collision', accepted: false };
+          }
+          return {
+            status: 'duplicate', accepted: false, duplicate: true,
+            businessDuplicate: true, existingRequestId: event.requestId
+          };
         }
         transaction.create(ref, {
           requestId: requestId.trim(),
           command: clone(command),
           payloadHash,
+          ...(businessEventKeyHash ? { businessEventKeyHash } : {}),
           status: 'pending',
           attempts: 0,
           createdAtMs: now,
@@ -75,6 +125,15 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
           leaseExpiresAtMs: 0,
           claimToken: ''
         });
+        if (eventRef) {
+          transaction.create(eventRef, {
+            recordType: 'business-event-index',
+            businessEventKeyHash,
+            businessPayloadHash,
+            requestId: requestId.trim(),
+            createdAtMs: now
+          });
+        }
         return { status: 'pending', accepted: true, duplicate: false };
       });
     },
@@ -155,3 +214,4 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
     }
   };
 }
+

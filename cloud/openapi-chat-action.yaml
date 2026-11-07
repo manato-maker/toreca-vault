@@ -24,6 +24,14 @@ components:
         requestId:
           type: string
           pattern: '^[A-Za-z0-9._:-]{1,120}$'
+        businessEventKey:
+          type: string
+          maxLength: 256
+          description: >
+            Optional source-independent key for a uniquely identified business
+            event. Reuse the same key across Chat and Gmail only when the
+            normalized business payload is identical. Do not guess a key from
+            ambiguous evidence; ask for clarification or route for review.
         command:
           type: object
           required: [requestId, type]
@@ -56,7 +64,10 @@ components:
           type: boolean
         status:
           type: string
-          enum: [pending, processing, done, review]
+          enum: [pending, processing, done, review, duplicate]
+        existingRequestId:
+          type: string
+          description: Original queue request when this report matched a business event already accepted.
     CommandStatus:
       type: object
       required: [ok, found, status]
@@ -86,7 +97,8 @@ paths:
       description: >
         Submit only facts confirmed from the user's text or screenshot. Use a
         stable requestId and never retry with a different requestId for the
-        same event. A 202 response means accepted into the queue, not processed.
+        same event. When available, send the same reliable businessEventKey
+        from Chat and Gmail. A 202 response means accepted into the queue, not processed.
       requestBody:
         required: true
         content:
@@ -101,7 +113,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/QueueReceipt'
         '200':
-          description: Exact duplicate request accepted previously
+          description: Exact request retry or cross-source business duplicate. For a business duplicate, accepted is false and existingRequestId identifies the queued record.
           content:
             application/json:
               schema:
@@ -109,7 +121,7 @@ paths:
         '401':
           description: Authentication required
         '409':
-          description: Request ID reused with different command data
+          description: Request ID reused with different command data, or a business event key reused with conflicting command data
         '423':
           description: Command queue is disabled
   /api/v2/commands/{requestId}:

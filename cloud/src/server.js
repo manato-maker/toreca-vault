@@ -6,10 +6,9 @@ import {
   RevisionConflict,
   createFirestoreStore
 } from './firestore-store.js';
-import { createFirestoreSchedulerHeartbeatStore, evaluateSchedulerHealth } from './scheduler-heartbeat.js';
 import { parseSchedulerScheduleTime } from './scheduled-runtime.js';
 
-const MAX_BODY_BYTES = 7_500_000;
+const MAX_BODY_BYTES = 1_100_000;
 
 function parseOrigins(value) {
   return new Set(String(value || '').split(',').map((origin) => origin.trim()).filter(Boolean));
@@ -67,11 +66,8 @@ function errorResponse(error) {
 export function createServer({
   store,
   commandQueue = null,
-  schedulerHeartbeatStore = null,
   schedulerTick = null,
   schedulerAuthorize = null,
-  schedulerStaleAfterMs = 45 * 60 * 1000,
-  healthClock = () => Date.now(),
   apiToken,
   allowedOrigins = new Set(),
   writesEnabled = false,
@@ -131,25 +127,6 @@ export function createServer({
         });
       } catch {
         return send(response, 503, { ok: false, error: 'scheduled tick failed' });
-      }
-    }
-    if (path === '/health/scheduler' && request.method === 'GET') {
-      if (!schedulerHeartbeatStore || typeof schedulerHeartbeatStore.read !== 'function') {
-        return send(response, 503, { ok: false, schedulerConfigured: false, healthy: false });
-      }
-      try {
-        const heartbeat = await schedulerHeartbeatStore.read();
-        const health = evaluateSchedulerHealth(heartbeat, {
-          nowMs: healthClock(),
-          staleAfterMs: schedulerStaleAfterMs
-        });
-        return send(response, health.healthy ? 200 : 503, {
-          ok: health.healthy,
-          schedulerConfigured: true,
-          ...health
-        });
-      } catch {
-        return send(response, 503, { ok: false, schedulerConfigured: true, healthy: false });
       }
     }
 
@@ -242,9 +219,25 @@ export function createServer({
         if (!commandsEnabled || !commandQueue) {
           return send(response, 423, { ok: false, error: 'command queue is disabled' }, allowedOrigin);
         }
-        const queued = await commandQueue.enqueue({ requestId: body.requestId, command: body.command });
+        const queued = await commandQueue.enqueue({
+          requestId: body.requestId,
+          command: body.command,
+          businessEventKey: body.businessEventKey
+        });
+        if (queued.businessDuplicate) {
+          return send(response, 200, {
+            ok: true,
+            accepted: false,
+            duplicate: true,
+            status: 'duplicate',
+            existingRequestId: queued.existingRequestId
+          }, allowedOrigin);
+        }
         if (!queued.accepted) {
-          return send(response, 409, { ok: false, error: 'requestId collision' }, allowedOrigin);
+          const error = queued.status === 'business-event-collision'
+            ? 'business event identity conflicts with an existing command'
+            : 'requestId collision';
+          return send(response, 409, { ok: false, error }, allowedOrigin);
         }
         return send(response, queued.duplicate ? 200 : 202, {
           ok: true,
@@ -280,11 +273,9 @@ export async function start() {
   const { Firestore } = await import('@google-cloud/firestore');
   const firestore = new Firestore({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
   const { createFirestoreCommandQueue } = await import('./firestore-command-queue.js');
-  const schedulerHeartbeatStore = createFirestoreSchedulerHeartbeatStore(firestore);
   const server = createServer({
     store: createFirestoreStore(firestore, documentPath),
     commandQueue: createFirestoreCommandQueue(firestore),
-    schedulerHeartbeatStore,
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
     writesEnabled: process.env.TV2_ENABLE_WRITES === 'true',

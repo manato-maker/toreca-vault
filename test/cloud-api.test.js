@@ -66,14 +66,14 @@ function createFakeQueue() {
 
 test('scheduler route is disabled by default and requires injected authorization', async () => {
   await withServer(createFakeStore(), async (base) => {
-    const response = await fetch(new URL('/internal/scheduler/tick', base), { method: 'POST' });
+    const response = await fetch(`${base}/internal/scheduler/tick`, { method: 'POST' });
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { ok: false, error: 'scheduler route is disabled' });
   });
 
   let tickCalls = 0;
   await withServer(createFakeStore(), async (base) => {
-    const response = await fetch(new URL('/internal/scheduler/tick', base), {
+    const response = await fetch(`${base}/internal/scheduler/tick`, {
       method: 'POST',
       headers: { 'x-cloudscheduler': 'true', 'x-cloudscheduler-scheduletime': '2026-11-06T09:00:00+09:00' }
     });
@@ -88,7 +88,7 @@ test('scheduler route is disabled by default and requires injected authorization
 test('scheduler route validates planned time, dispatches an authorized tick, and retries safe failures', async () => {
   const calls = [];
   await withServer(createFakeStore(), async (base) => {
-    const request = (headers) => fetch(new URL('/internal/scheduler/tick', base), { method: 'POST', headers });
+    const request = (headers) => fetch(`${base}/internal/scheduler/tick`, { method: 'POST', headers });
     const common = { 'x-scheduler-auth': 'trusted', 'x-cloudscheduler': 'true' };
     const missingTime = await request(common);
     assert.equal(missingTime.status, 400);
@@ -100,7 +100,8 @@ test('scheduler route validates planned time, dispatches an authorized tick, and
 
     const success = await request({ ...common, 'x-cloudscheduler-scheduletime': '2026-11-06T09:00:00+09:00' });
     assert.equal(success.status, 200);
-    assert.deepEqual(await success.json(), {
+    const body = await success.json();
+    assert.deepEqual(body, {
       ok: true, scheduledAt: '2026-11-06T00:00:00.000Z', plannedCount: 2, failedJobCount: 0
     });
     assert.equal(calls.length, 1);
@@ -128,52 +129,6 @@ test('health is read-only and reports an uninitialized canonical store', async (
     assert.deepEqual(await response.json(), {
       ok: true, service: 'toreca-vault-v2-api', canonicalInitialized: false, writesEnabled: false
     });
-  });
-});
-
-test('scheduler health reports safe liveness fields and detects missed or stale ticks', async () => {
-  let heartbeat = {
-    lastScheduledAtMs: 10_000,
-    lastCompletedAtMs: 11_000,
-    latestMissedSlots: 0,
-    failedJobCount: 0
-  };
-  await withServer(createFakeStore(), async (base) => {
-    const response = await fetch(`${base}/health/scheduler`);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      ok: true, schedulerConfigured: true, healthy: true, stale: false,
-      lastScheduledAtMs: 10_000, lastCompletedAtMs: 11_000, ageMs: 1_000,
-      latestMissedSlots: 0, failedJobCount: 0
-    });
-  }, {
-    schedulerHeartbeatStore: { async read() { return heartbeat; } },
-    schedulerStaleAfterMs: 5_000,
-    healthClock: () => 12_000
-  });
-
-  heartbeat = { ...heartbeat, lastCompletedAtMs: 1_000, latestMissedSlots: 2, failedJobCount: 1 };
-  await withServer(createFakeStore(), async (base) => {
-    const response = await fetch(`${base}/health/scheduler`);
-    assert.equal(response.status, 503);
-    const body = await response.json();
-    assert.equal(body.healthy, false);
-    assert.equal(body.stale, true);
-    assert.equal(body.latestMissedSlots, 2);
-    assert.equal(body.failedJobCount, 1);
-    assert.equal(JSON.stringify(body).includes('secret'), false);
-  }, {
-    schedulerHeartbeatStore: { async read() { return heartbeat; } },
-    schedulerStaleAfterMs: 5_000,
-    healthClock: () => 12_000
-  });
-});
-
-test('scheduler health fails closed until heartbeat monitoring is configured', async () => {
-  await withServer(createFakeStore(), async (base) => {
-    const response = await fetch(`${base}/health/scheduler`);
-    assert.equal(response.status, 503);
-    assert.deepEqual(await response.json(), { ok: false, schedulerConfigured: false, healthy: false });
   });
 });
 
@@ -223,6 +178,37 @@ test('command queue accepts once, treats an identical resend as duplicate, and r
     const collision = await post({ ...baseBody, command: { ...baseBody.command, amount: 1 } });
     assert.equal(collision.status, 409);
     assert.deepEqual(await collision.json(), { ok: false, error: 'requestId collision' });
+  }, { commandQueue, commandsEnabled: true });
+});
+
+test('Chat intake forwards a stable business event key and reports cross-source duplicates as not newly accepted', async () => {
+  let received;
+  const commandQueue = {
+    async enqueue(input) {
+      received = input;
+      return {
+        status: 'duplicate', accepted: false, duplicate: true,
+        businessDuplicate: true, existingRequestId: 'gmail-request-1'
+      };
+    }
+  };
+  const body = {
+    action: 'enqueueCommand', requestId: 'chat-request-2',
+    businessEventKey: 'lottery:store-a:round-1:application',
+    command: { requestId: 'chat-request-2', type: 'lottery', product: 'MEGA Dream ex' }
+  };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/api/v2/commands`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true, accepted: false, duplicate: true, status: 'duplicate', existingRequestId: 'gmail-request-1'
+    });
+    assert.equal(received.businessEventKey, body.businessEventKey);
+    assert.equal(received.requestId, body.requestId);
   }, { commandQueue, commandsEnabled: true });
 });
 
