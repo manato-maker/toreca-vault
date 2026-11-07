@@ -2,6 +2,7 @@ import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
+import { createCommandBatchWorker } from './command-batch-worker.js';
 import {
   CanonicalNotInitialized,
   RevisionConflict,
@@ -67,6 +68,8 @@ function errorResponse(error) {
 export function createServer({
   store,
   commandQueue = null,
+  commandWorker = null,
+  workerAuthorize = null,
   schedulerTick = null,
   schedulerAuthorize = null,
   apiToken,
@@ -128,6 +131,42 @@ export function createServer({
         });
       } catch {
         return send(response, 503, { ok: false, error: 'scheduled tick failed' });
+      }
+    }
+
+    if (path === '/internal/worker/commands') {
+      if (request.method !== 'POST') return send(response, 405, { ok: false, error: 'method not allowed' });
+      if (!writesEnabled || !commandsEnabled || typeof commandWorker !== 'function' || typeof workerAuthorize !== 'function') {
+        return send(response, 503, { ok: false, error: 'command worker is disabled' });
+      }
+      try {
+        if (!await workerAuthorize(request)) return send(response, 401, { ok: false, error: 'unauthorized' });
+      } catch {
+        return send(response, 503, { ok: false, error: 'worker authorization unavailable' });
+      }
+      if (String(request.headers['x-cloudscheduler'] || '').toLowerCase() !== 'true') {
+        return send(response, 400, { ok: false, error: 'missing scheduler marker' });
+      }
+      let scheduledAt;
+      try {
+        scheduledAt = parseSchedulerScheduleTime(request.headers['x-cloudscheduler-scheduletime']);
+      } catch {
+        return send(response, 400, { ok: false, error: 'invalid scheduler time' });
+      }
+      try {
+        const result = await commandWorker({ scheduledAt, triggeredAt: new Date() });
+        const processedCount = Number.isSafeInteger(result?.processedCount) && result.processedCount >= 0 ? result.processedCount : 0;
+        return send(response, 200, {
+          ok: true,
+          scheduledAt: scheduledAt.toISOString(),
+          processedCount,
+          doneCount: Number.isSafeInteger(result?.done) ? result.done : 0,
+          pendingCount: Number.isSafeInteger(result?.pending) ? result.pending : 0,
+          reviewCount: Number.isSafeInteger(result?.review) ? result.review : 0,
+          busyCount: Number.isSafeInteger(result?.busy) ? result.busy : 0
+        });
+      } catch {
+        return send(response, 503, { ok: false, error: 'command batch failed' });
       }
     }
 
@@ -297,13 +336,28 @@ export async function start() {
   const { Firestore } = await import('@google-cloud/firestore');
   const firestore = new Firestore({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
   const { createFirestoreCommandQueue } = await import('./firestore-command-queue.js');
+  const commandQueue = createFirestoreCommandQueue(firestore);
+  const store = createFirestoreStore(firestore, documentPath);
+  const writesEnabled = process.env.TV2_ENABLE_WRITES === 'true';
+  const commandsEnabled = process.env.TV2_ENABLE_COMMAND_QUEUE === 'true';
+  const commandWorkerEnabled = process.env.TV2_ENABLE_COMMAND_WORKER === 'true';
+  if (commandWorkerEnabled && (!writesEnabled || !commandsEnabled)) {
+    throw new Error('command worker requires both writes and command queue to be explicitly enabled');
+  }
+  const workerToken = process.env.TV2_WORKER_TOKEN || '';
+  if (commandWorkerEnabled && workerToken.length < 32) throw new Error('TV2_WORKER_TOKEN must contain at least 32 characters');
+  const commandWorker = commandWorkerEnabled
+    ? createCommandBatchWorker({ queue: commandQueue, store })
+    : null;
   const server = createServer({
-    store: createFirestoreStore(firestore, documentPath),
-    commandQueue: createFirestoreCommandQueue(firestore),
+    store,
+    commandQueue,
+    commandWorker,
+    workerAuthorize: commandWorkerEnabled ? (request) => isAuthorized(request, workerToken) : null,
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
-    writesEnabled: process.env.TV2_ENABLE_WRITES === 'true',
-    commandsEnabled: process.env.TV2_ENABLE_COMMAND_QUEUE === 'true'
+    writesEnabled,
+    commandsEnabled
   });
   const port = Number(process.env.PORT) || 8080;
   server.listen(port, '0.0.0.0', () => console.log(`Toreca Vault V2 API listening on ${port}`));
