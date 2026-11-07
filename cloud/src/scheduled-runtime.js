@@ -2,7 +2,7 @@ import { getDueJobs } from './schedule.js';
 import { dispatchJobs } from './worker-dispatcher.js';
 
 const LEDGER_COMPLETION_JOBS = new Set(['lottery-result-focus', 'market-refresh']);
-const FAILURE_STATUSES = new Set(['retry', 'dead', 'exhausted', 'lease-lost']);
+const FAILURE_STATUSES = new Set(['retry', 'dead', 'exhausted', 'lease-lost', 'unconfigured']);
 
 function dateValue(value, name) {
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
@@ -47,7 +47,22 @@ export async function runScheduledTick({
     if (existing?.status === 'completed') completedJobKeys.add(job.jobKey);
   }
   const jobs = getDueJobs(actualTime, { scheduledAt: plannedTime, completedJobKeys });
-  const results = await dispatchJobs(jobs, { ledger, handlers, clock, leaseMs, maxAttempts });
+  const results = [];
+  for (const job of jobs) {
+    const handler = handlers?.[job.kind];
+    if (typeof handler !== 'function') {
+      results.push({ jobKey: job.jobKey, status: 'unconfigured', errorCode: 'HandlerUnavailable' });
+      continue;
+    }
+    const [result] = await dispatchJobs([job], {
+      ledger,
+      handlers: { [job.kind]: handler },
+      clock,
+      leaseMs,
+      maxAttempts
+    });
+    results.push(result);
+  }
   const failedJobCount = results.filter((result) => FAILURE_STATUSES.has(result.status)).length;
   const completedAtMs = clock();
   await heartbeatStore.recordSuccess({
