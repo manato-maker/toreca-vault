@@ -51,7 +51,9 @@ function inventorySummary(snapshot) {
   let unknownCostLots = 0;
   for (const lot of snapshot.inventoryLots) {
     const qty = Number(lot.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('Inventory quantity is invalid');
     quantity += qty;
+    if (!Number.isFinite(quantity)) throw new Error('Inventory quantity total is not finite');
     if (lot.unitCost === null || lot.unitCost === undefined || lot.unitCost === '') {
       unknownCostLots += 1;
       continue;
@@ -59,6 +61,7 @@ function inventorySummary(snapshot) {
     const unitCost = Number(lot.unitCost);
     if (!Number.isFinite(unitCost)) throw new Error('Inventory cost is not finite');
     knownCost += qty * unitCost;
+    if (!Number.isFinite(knownCost)) throw new Error('Inventory cost total is not finite');
   }
   return { totalQuantity: quantity, knownAcquisitionCost: knownCost, unknownCostLots };
 }
@@ -75,6 +78,7 @@ function countsSummary(snapshot) {
 
 export function createBackupArtifact(snapshot, { createdAt = new Date() } = {}) {
   const payload = asJsonSnapshot(snapshot);
+  inventorySummary(payload);
   const timestamp = createdAt instanceof Date ? createdAt.toISOString() : String(createdAt);
   if (!Number.isFinite(Date.parse(timestamp)) || new Date(timestamp).toISOString() !== timestamp) {
     throw new Error('createdAt must be an ISO-8601 timestamp');
