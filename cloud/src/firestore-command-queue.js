@@ -197,6 +197,17 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
       return snapshot.exists ? clone(snapshot.data()) : null;
     },
 
+    async listPending({ limit = 10 } = {}) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new RangeError('pending command limit must be from 1 to 50');
+      if (typeof db.collection !== 'function') throw new TypeError('Firestore collection queries are required');
+      const snapshot = await db.collection(collectionPath).where('status', '==', 'pending').limit(limit).get();
+      return snapshot.docs.map((document) => {
+        const row = document.data();
+        if (typeof row.requestId !== 'string' || !row.requestId.trim()) throw new Error('pending command row has an invalid request ID');
+        return { requestId: row.requestId };
+      });
+    },
+
     async summarize() {
       if (typeof db.collection !== 'function') throw new TypeError('Firestore collection queries are required for queue summary');
       const collection = db.collection(collectionPath);
