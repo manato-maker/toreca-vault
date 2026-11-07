@@ -81,5 +81,14 @@ export function getDueJobs(now, { completedJobKeys = new Set(), scheduledAt = no
     }
   }
 
+  // Daily create-once canonical backup. Any later quarter-hour tick catches
+  // up a missed 02:00 slot using the same daily key until the ledger completes.
+  if (hour >= 2 && QUARTER_HOUR_MINUTES.has(minute)) {
+    const jobKey = `canonical-backup:${date}`;
+    if (!completedJobKeys.has(jobKey)) {
+      due.push({ kind: 'canonical-backup', jobKey, scheduledAt: `${date}T02:00+09:00` });
+    }
+  }
+
   return due;
 }

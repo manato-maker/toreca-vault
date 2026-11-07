@@ -28,10 +28,29 @@ components:
           type: string
           maxLength: 256
           description: >
-            Optional source-independent key for a uniquely identified business
-            event. Reuse the same key across Chat and Gmail only when the
-            normalized business payload is identical. Do not guess a key from
-            ambiguous evidence; ask for clarification or route for review.
+            Optional precomputed source-independent event key. Prefer
+            businessEventIdentity when a stable application identifier exists.
+            Never guess a key from ambiguous evidence.
+        businessEventIdentity:
+          type: object
+          additionalProperties: false
+          required: [retailerKey, applicationId]
+          description: >
+            Explicit identity fields used to derive the same hashed key in
+            Chat and Gmail. applicationId must be an external lottery entry
+            identifier visible in the confirmed evidence; missing identity is
+            routed to review without queueing.
+          properties:
+            retailerKey:
+              type: string
+              minLength: 1
+              maxLength: 120
+              description: Canonical retailer key shared by both sources.
+            applicationId:
+              type: string
+              minLength: 1
+              maxLength: 200
+              description: Explicit external application or entry identifier; not a guessed product/date combination.
         command:
           type: object
           required: [requestId, type]
@@ -97,8 +116,9 @@ paths:
       description: >
         Submit only facts confirmed from the user's text or screenshot. Use a
         stable requestId and never retry with a different requestId for the
-        same event. When available, send the same reliable businessEventKey
-        from Chat and Gmail. A 202 response means accepted into the queue, not processed.
+        same event. When available, send the same explicit businessEventIdentity
+        from Chat and Gmail; the API hashes it before queue storage. Do not
+        infer missing application IDs. A 202 response means accepted into the queue, not processed.
       requestBody:
         required: true
         content:
@@ -122,6 +142,8 @@ paths:
           description: Authentication required
         '409':
           description: Request ID reused with different command data, or a business event key reused with conflicting command data
+        '422':
+          description: Business event identity is incomplete or invalid and was not queued
         '423':
           description: Command queue is disabled
   /api/v2/commands/{requestId}:

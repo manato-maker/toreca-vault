@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import {
   CanonicalNotInitialized,
   RevisionConflict,
@@ -219,10 +220,33 @@ export function createServer({
         if (!commandsEnabled || !commandQueue) {
           return send(response, 423, { ok: false, error: 'command queue is disabled' }, allowedOrigin);
         }
+        let businessEventKey = body.businessEventKey;
+        if (body.businessEventIdentity !== undefined) {
+          if (businessEventKey !== undefined) {
+            return send(response, 400, { ok: false, error: 'provide businessEventIdentity or businessEventKey, not both' }, allowedOrigin);
+          }
+          const identity = body.businessEventIdentity;
+          if (!identity || typeof identity !== 'object' || Array.isArray(identity)
+            || Object.keys(identity).some((key) => !['retailerKey', 'applicationId'].includes(key))) {
+            return send(response, 400, { ok: false, error: 'business event identity is invalid' }, allowedOrigin);
+          }
+          const eventKinds = {
+            lottery: 'application',
+            'lottery-result-exact': 'result',
+            'lottery-receipt': 'receipt'
+          };
+          const kind = eventKinds[String(body.command?.type || '')];
+          if (!kind) return send(response, 400, { ok: false, error: 'business event identity is unsupported for this command' }, allowedOrigin);
+          const resolved = createLotteryBusinessEventKey({ ...identity, kind });
+          if (resolved.status === 'review') {
+            return send(response, 422, { ok: false, accepted: false, status: 'review', reasonCode: resolved.reasonCode }, allowedOrigin);
+          }
+          businessEventKey = resolved.businessEventKey;
+        }
         const queued = await commandQueue.enqueue({
           requestId: body.requestId,
           command: body.command,
-          businessEventKey: body.businessEventKey
+          businessEventKey
         });
         if (queued.businessDuplicate) {
           return send(response, 200, {

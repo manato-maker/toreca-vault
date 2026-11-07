@@ -5,7 +5,7 @@ import { getDueJobs } from '../src/schedule.js';
 const atJst = (date, time) => new Date(`${date}T${time}:00+09:00`);
 
 test('runs command queue on quarter-hour boundaries and nowhere else', () => {
-  assert.deepEqual(getDueJobs(atJst('2026-11-03', '09:15')).map((job) => job.kind), ['command-queue']);
+  assert.deepEqual(getDueJobs(atJst('2026-11-03', '09:15')).map((job) => job.kind), ['command-queue', 'canonical-backup']);
   assert.deepEqual(getDueJobs(atJst('2026-11-03', '09:14')).map((job) => job.kind), []);
 });
 
@@ -60,6 +60,17 @@ test('schedules one daily market refresh after 13:30 with a stable idempotency k
     .some((job) => job.kind === 'market-refresh'), false);
 });
 
+test('runs one daily backup after 02:00 and catches up missed slots with a stable key', () => {
+  assert.equal(getDueJobs(atJst('2026-11-03', '01:45')).some((job) => job.kind === 'canonical-backup'), false);
+  const firstCatchUp = getDueJobs(atJst('2026-11-03', '02:15')).find((job) => job.kind === 'canonical-backup');
+  assert.equal(firstCatchUp.jobKey, 'canonical-backup:2026-11-03');
+  assert.equal(firstCatchUp.scheduledAt, '2026-11-03T02:00+09:00');
+  assert.equal(getDueJobs(atJst('2026-11-03', '03:00')).find((job) => job.kind === 'canonical-backup').jobKey, firstCatchUp.jobKey);
+  assert.equal(getDueJobs(atJst('2026-11-03', '03:00'), {
+    completedJobKeys: new Set(['canonical-backup:2026-11-03'])
+  }).some((job) => job.kind === 'canonical-backup'), false);
+});
+
 test('delayed execution uses the original scheduled slot for keys while recording actual time', () => {
   const actual = atJst('2026-11-03', '12:46');
   const scheduledAt = atJst('2026-11-03', '12:45');
@@ -76,6 +87,6 @@ test('19:00 combines result focus with the hourly Gmail job instead of schedulin
   assert.equal(gmail.length, 1);
   assert.equal(gmail[0].focusResults, true);
   assert.equal(jobs.some((job) => job.kind === 'lottery-result-focus'), false);
-  assert.deepEqual(jobs.map((job) => job.kind), ['command-queue', 'gmail-lottery-inbox', 'market-refresh']);
+  assert.deepEqual(jobs.map((job) => job.kind), ['command-queue', 'gmail-lottery-inbox', 'market-refresh', 'canonical-backup']);
 });
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from '../cloud/src/server.js';
+import { createLotteryBusinessEventKey } from '../cloud/src/business-event-identity.js';
 import { CanonicalNotInitialized, RevisionConflict } from '../cloud/src/firestore-store.js';
 import { emptyV2 } from '../v2/core.js';
 
@@ -209,6 +210,51 @@ test('Chat intake forwards a stable business event key and reports cross-source 
     });
     assert.equal(received.businessEventKey, body.businessEventKey);
     assert.equal(received.requestId, body.requestId);
+  }, { commandQueue, commandsEnabled: true });
+});
+
+test('Chat intake derives a source-independent key from an explicit lottery application ID', async () => {
+  let received;
+  const commandQueue = {
+    async enqueue(input) { received = input; return { status: 'pending', accepted: true, duplicate: false }; }
+  };
+  const body = {
+    action: 'enqueueCommand', requestId: 'chat-lottery-3',
+    businessEventIdentity: { retailerKey: ' Store A ', applicationId: 'ENTRY-123' },
+    command: { requestId: 'chat-lottery-3', type: 'lottery', title: 'MEGA Dream ex', store: 'Store A' }
+  };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/api/v2/commands`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    assert.equal(response.status, 202);
+    assert.equal(received.businessEventKey, createLotteryBusinessEventKey({
+      kind: 'application', retailerKey: ' Store A ', applicationId: 'ENTRY-123'
+    }).businessEventKey);
+    assert.equal(received.businessEventKey.includes('ENTRY-123'), false);
+  }, { commandQueue, commandsEnabled: true });
+});
+
+test('Chat intake routes lottery identity without an external application ID to review and does not queue it', async () => {
+  let enqueueCalls = 0;
+  const commandQueue = { async enqueue() { enqueueCalls++; return { status: 'pending', accepted: true }; } };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/api/v2/commands`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'enqueueCommand', requestId: 'chat-lottery-4',
+        businessEventIdentity: { retailerKey: 'store-a' },
+        command: { requestId: 'chat-lottery-4', type: 'lottery', title: 'MEGA Dream ex', store: 'Store A' }
+      })
+    });
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), {
+      ok: false, accepted: false, status: 'review', reasonCode: 'lottery-identity-incomplete'
+    });
+    assert.equal(enqueueCalls, 0);
   }, { commandQueue, commandsEnabled: true });
 });
 

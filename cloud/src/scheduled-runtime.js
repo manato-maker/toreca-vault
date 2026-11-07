@@ -1,7 +1,7 @@
 import { getDueJobs } from './schedule.js';
 import { dispatchJobs } from './worker-dispatcher.js';
 
-const LEDGER_COMPLETION_JOBS = new Set(['lottery-result-focus', 'market-refresh']);
+const LEDGER_COMPLETION_JOBS = new Set(['lottery-result-focus', 'market-refresh', 'canonical-backup']);
 const FAILURE_STATUSES = new Set(['retry', 'dead', 'exhausted', 'lease-lost', 'unconfigured']);
 
 function dateValue(value, name) {
