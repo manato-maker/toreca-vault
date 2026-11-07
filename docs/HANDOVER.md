@@ -1005,3 +1005,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 
 ### CI follow-up
 - Hashed-reference version of the review resolver passed GitHub Actions v2-ci #774 on commit `43d40d3a5acacfc813e3a1a5318fff444b11e5b2`, including the Firestore Emulator job. This remains code/CI validation only; no live review authorization or runtime connection.
+
+
+### Free-tier review (2026-11-08; official pricing pages)
+- A single default Firestore Standard database has a free allowance of 1 GiB stored, 50,000 document reads/day, 20,000 writes/day, 20,000 deletes/day, and 10 GiB outbound/month. Firestore managed deletes/TTL, PITR, backups, and restores are billed features and require billing.
+- Cloud Run request-based allowance includes 2 million requests/month plus CPU/RAM allowances; it is a billing-account-level allowance, not a guarantee of zero cost. Cloud Scheduler provides 3 free jobs/account/month; one dispatcher job fits the job count.
+- Cloud Storage Always Free storage applies only in US-WEST1, US-CENTRAL1, US-EAST1, so a Japan-region backup bucket is outside that free storage allowance.
+- This is quota fit, not a cost forecast. Actual Firestore operations, dataset size, logging/egress, and backup/restore cost are unmeasured; no billing setting or resource was enabled. Sources: https://cloud.google.com/firestore/quotas ; https://cloud.google.com/run/pricing ; https://cloud.google.com/scheduler/pricing ; https://cloud.google.com/storage/pricing
