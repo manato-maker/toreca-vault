@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTransaction, emptyV2 } from '../../v2/core.js';
-import { marketTargetKey, refreshMarketQuotes } from '../src/market-refresh-worker.js';
+import { createMarketRefreshHandler, marketTargetKey, refreshMarketQuotes } from '../src/market-refresh-worker.js';
 
 function sampleState() {
   let state = applyTransaction(emptyV2(), {
@@ -123,4 +123,22 @@ test('market refresh skips empty inventory and rejects unsafe target limits befo
   const store = memoryStore(manyTargets);
   await assert.rejects(refreshMarketQuotes({ store, provider, mutationId: 'too-small-limit', maxTargets: 1 }), /target count/);
   assert.equal(calls, 0);
+});
+
+test('scheduled market handler uses the stable daily key and planned time', async () => {
+  const store = memoryStore(sampleState());
+  const handler = createMarketRefreshHandler({
+    store,
+    provider: { async lookupMany(targets) {
+      return [{ targetKey: targets[0].targetKey, price: 1600, source: 'Verified shop' }];
+    } }
+  });
+  const result = await handler({
+    kind: 'market-refresh',
+    jobKey: 'market-refresh:2026-11-07',
+    scheduledAt: '2026-11-07T13:45:00+09:00'
+  });
+  assert.equal(result.checkedAt, '2026-11-07T04:45:00.000Z');
+  assert.equal((await store.read()).payload.lastMutationId, 'market-refresh:2026-11-07');
+  await assert.rejects(handler({ kind: 'market-refresh', jobKey: 'invalid', scheduledAt: new Date() }), /scheduled daily/);
 });
