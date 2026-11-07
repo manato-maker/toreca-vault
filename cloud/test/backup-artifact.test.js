@@ -94,6 +94,12 @@ test('backup parsing rejects malformed JSON, invalid snapshots, and oversized in
   assert.throws(() => parseBackupArtifact('{'), /not valid JSON/);
   assert.throws(() => createBackupArtifact({ schemaVersion: 1, revision: 0 }), /schemaVersion=2/);
   assert.throws(() => parseBackupArtifact(' '.repeat(7_500_001)), /size limit/);
+  const invalidCost = sampleSnapshot();
+  invalidCost.inventoryLots[0].unitCost = 'Infinity';
+  assert.throws(() => createBackupArtifact(invalidCost), /Inventory cost is not finite/);
+  const invalidQuantity = sampleSnapshot();
+  invalidQuantity.inventoryLots[0].quantity = 0;
+  assert.throws(() => createBackupArtifact(invalidQuantity), /在庫数量は正数/);
 });
 
 test('offline CLI creates without overwriting, verifies, and previews without exposing payload fields', async () => {
