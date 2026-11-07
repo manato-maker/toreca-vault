@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { validateState } from '../../v2/core.js';
-import { inspectV2Snapshot } from './migration-report.js';
 
 export const BACKUP_SCHEMA_VERSION = 1;
 export const MAX_BACKUP_ARTIFACT_BYTES = 7_500_000;
@@ -64,6 +63,16 @@ function inventorySummary(snapshot) {
   return { totalQuantity: quantity, knownAcquisitionCost: knownCost, unknownCostLots };
 }
 
+function countsSummary(snapshot) {
+  return {
+    transactions: snapshot.transactions.length,
+    inventoryLots: snapshot.inventoryLots.length,
+    lotteries: snapshot.lotteries.length,
+    marketQuotes: snapshot.marketQuotes.length,
+    auditLogEntries: snapshot.auditLog.length
+  };
+}
+
 export function createBackupArtifact(snapshot, { createdAt = new Date() } = {}) {
   const payload = asJsonSnapshot(snapshot);
   const timestamp = createdAt instanceof Date ? createdAt.toISOString() : String(createdAt);
@@ -110,7 +119,7 @@ export function verifyBackupArtifact(artifact) {
     revision: artifact.revision,
     payloadHash: actualPayloadHash,
     artifactHash: artifact.artifactHash,
-    report: inspectV2Snapshot(payload),
+    counts: countsSummary(payload),
     inventory: inventorySummary(payload)
   };
 }
@@ -148,12 +157,12 @@ export function previewBackupRestore(artifact, currentSnapshot, { expectedCurren
       createdAt: backup.createdAt,
       revision: backup.revision,
       payloadHash: backup.payloadHash,
-      counts: backup.report.counts,
+      counts: backup.counts,
       inventory: backup.inventory
     },
     current: {
       revision: current.revision,
-      counts: inspectV2Snapshot(current).counts,
+      counts: countsSummary(current),
       inventory: inventorySummary(current)
     }
   };
