@@ -108,3 +108,25 @@ test('same explicit identity uses the shared cross-source lottery key and confli
   assert.match(queueInput.businessEventKey, /^lottery:v1:[a-f0-9]{64}$/);
   assert.equal([...db.documents.values()][0].status, 'review');
 });
+
+test('a Gmail retry with a different requestId is suppressed by the Chat business-event key', async () => {
+  const db = fakeFirestore();
+  const { createLotteryBusinessEventKey } = await import('../src/business-event-identity.js');
+  const key = createLotteryBusinessEventKey({ kind: 'application', ...identity }).businessEventKey;
+  const acceptedByChat = new Map([[key, 'chat-report-123']]);
+  const queueCalls = [];
+  const queue = { async enqueue(input) {
+    queueCalls.push(input);
+    const existingRequestId = acceptedByChat.get(input.businessEventKey);
+    if (existingRequestId) return { status: 'duplicate', accepted: false, duplicate: true, businessDuplicate: true, existingRequestId };
+    acceptedByChat.set(input.businessEventKey, input.requestId);
+    return { status: 'pending', accepted: true, duplicate: false };
+  } };
+  const outbox = createGmailCommandOutbox({ store: createFirestoreGmailCommandOutbox(db), commandQueue: queue });
+  const result = await outbox.record({ messageId: 'gmail-distinct-request', classification: { kind: 'application' }, commandDraft: draft, businessEventIdentity: identity, nowMs: 50 });
+  assert.equal(result.status, 'submitted');
+  assert.equal(result.duplicate, true);
+  assert.notEqual(queueCalls[0].requestId, 'chat-report-123');
+  assert.equal(queueCalls[0].businessEventKey, key);
+  assert.equal(acceptedByChat.size, 1);
+});
