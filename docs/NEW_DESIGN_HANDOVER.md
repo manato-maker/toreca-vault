@@ -476,3 +476,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - `test/cloud-api.test.js` にデフォルト無効、認証、時刻/marker検証、成功、失敗時503のテストを追加。関連ローカルテスト9件、audit-tests全25件が成功。GitHub Actions v2-ci #703はnpm test/checkとFirestore Emulatorの両jobがsuccess。
 - このendpointは新しい認証関数/runtimeの注入が必要で、`start()`からは未接続・未有効。Cloud Run IAM/OIDCの構成、本番handler、Cloud Scheduler/Cloud Run配備は未実施。PR #105はdraft、既存V2/Apps Script/queue/課金設定に変更なし。
 - code head: `de8e2fa560884bce60658da0cca89e3b648cbfc2`。
+
+
+## 2026-11-07 JST — Scheduled job handler失敗の分離
+
+- 発見: `dispatchJobs`は全予定jobのhandler存在を事前検証するため、Gmailなど1 handlerの未設定だけで、同じtickのcommand queue等も起動しない可能性があった。これはGmail障害と独立処理要件に反する。
+- 修正: `runScheduledTick`でjobごとにdispatch。handler未設定はpayloadや名前を出さず`unconfigured`/`HandlerUnavailable`として失敗件数とheartbeatへ記録し、他の設定済みjobは続行する。
+- 検証: schedule/runtime/dispatcher関連12件成功。全cloud単体テストは30 passed、1 emulator test skipped（ローカルにEmulatorなし）。GitHub Actions v2-ci #706はtest/checkとFirestore Emulator両job success。
+- 実handler/OAuth/Cloud Run/Schedulerは未接続。PR #105はdraft・未配備、進捗約25%。本番・旧V2・Apps Script・既存queue・課金は変更なし。
+- code head: `8f4d0f61faffa52af9775fa156d2657510da1f55`。
