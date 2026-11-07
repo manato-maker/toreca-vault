@@ -35,7 +35,7 @@ function eventKey(kind, identity) {
 
 /** Outbox writes first, then sends to the idempotent command queue using a stable hashed-mail requestId. */
 export function createGmailCommandOutbox({ store, commandQueue } = {}) {
-  if (!store || !['recordOnce', 'get', 'markSubmitted', 'markReview'].every((m) => typeof store[m] === 'function')) throw new TypeError('a durable Gmail outbox store is required');
+  if (!store || !['recordOnce', 'get', 'markSubmitted', 'markReview', 'approveReview'].every((m) => typeof store[m] === 'function')) throw new TypeError('a durable Gmail outbox store is required');
   if (!commandQueue || typeof commandQueue.enqueue !== 'function') throw new TypeError('a durable command queue is required');
 
   async function deliver(entry) {
@@ -75,6 +75,23 @@ export function createGmailCommandOutbox({ store, commandQueue } = {}) {
     async retry(messageId) {
       const entry = await store.get(messageHash(messageId));
       return entry ? deliver(entry) : { status: 'missing', submitted: false };
+    },
+    async approveReview({ messageId, expectedPayloadHash, confirmed, commandDraft, businessEventIdentity, nowMs = Date.now() } = {}) {
+      if (confirmed !== true) return { status: 'review', submitted: false, reasonCode: 'explicit-confirmation-required' };
+      const hash = messageHash(messageId);
+      if (!/^[a-f0-9]{64}$/.test(String(expectedPayloadHash || ''))) return { status: 'review', submitted: false, reasonCode: 'review-version-required' };
+      if (!Number.isSafeInteger(nowMs) || nowMs < 0) throw new TypeError('nowMs is invalid');
+      const entry = await store.get(hash);
+      if (!entry) return { status: 'missing', submitted: false };
+      if (entry.status !== 'review') return { status: entry.status, submitted: entry.status === 'submitted' };
+      if (!validCommand(entry.kind, commandDraft)) return { status: 'review', submitted: false, reasonCode: 'command-evidence-incomplete' };
+      const key = eventKey(entry.kind, businessEventIdentity);
+      if (!key) return { status: 'review', submitted: false, reasonCode: 'business-identity-incomplete' };
+      const command = clone(commandDraft);
+      command.requestId = entry.requestId;
+      const approved = await store.approveReview({ messageIdHash: hash, expectedPayloadHash, command, businessEventKey: key, nowMs });
+      if (approved.status !== 'ready') return { status: approved.status, submitted: false, reasonCode: approved.status === 'stale' ? 'review-version-changed' : undefined };
+      return deliver((await store.get(hash)) || { ...entry, status: 'ready', command, businessEventKey: key });
     }
   };
 }
