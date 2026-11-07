@@ -136,6 +136,17 @@ export async function refreshMarketQuotes({
   next.revision = nextRevision;
   next.lastMutationId = mutationId;
   next.auditLog.push({ mutationId, revision: nextRevision, kind: 'market-refresh' });
+  next.automation = next.automation && typeof next.automation === 'object' ? next.automation : {};
+  next.automation.health = next.automation.health && typeof next.automation.health === 'object'
+    ? next.automation.health : {};
+  const previousHealth = next.automation.health.marketRefresh || {};
+  next.automation.health.marketRefresh = {
+    lastAttemptAt: checkedAtIso,
+    lastSuccessfulAt: refreshedCount > 0 ? checkedAtIso : previousHealth.lastSuccessfulAt || null,
+    refreshedCount,
+    staleCount,
+    status: staleCount > 0 ? 'degraded' : 'healthy'
+  };
   validateState(next);
   await store.save({ expectedRevision: current.revision, mutationId, payload: next });
   const readback = await store.read();
