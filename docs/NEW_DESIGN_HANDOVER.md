@@ -550,3 +550,27 @@ Status: user-approved requirements; implementation and production wiring remain 
 - V2 canonical JSON: still unavailable/unverified. No Drive V1 or staging JSON was used. No production data, Apps Script, queue, pending sale, Cloud resource, or billing setting was changed; no deploy, merge, cutover, or old-system shutdown occurred. PR #105 remains open, draft, unmerged, and undeployed.
 - Still open: normal Chat-to-command live path and screenshot E2E; real Gmail/Chat common-key E2E and durable review-safe outbox; live Gmail OAuth; Scheduler/runtime production composition; confirmed market source; canonical V2 read-only export and migration reconciliation; persistent backup configuration/retention decision and production-data restore drill; monitoring/alerts and measured costs.
 - Next: build a mocked crash/retry-safe Gmail classification-to-command outbox and connect the regular Chat Action path end to end in isolated tests; then propose disabled-by-default authenticated Cloud Run composition. Keep the GCS lifecycle unapplied pending explicit retention/location/cost review.
+
+
+## 2026-11-08 JST — Gmail command outbox and cross-source retry safety; about 80%
+
+### Implemented
+
+- Reused PR #105. Added a Firestore-backed Gmail command outbox and optional composition point in the classifier processor. For explicitly complete commands, it writes a durable outbox record before queue submission. The requestId is stable and derived from the SHA-256 of the Gmail message ID; raw message IDs and mail text are not persisted by the outbox.
+- The outbox derives the same business-event key from explicit retailer key/application ID as the Chat API. If required command fields or identity are missing, it records a compact review state and does not queue. Queue payload conflict also routes to review.
+- Queue delivery happens after the durable outbox write. If the process fails after queue acceptance but before marking the outbox submitted, retry resends the same requestId and business key; the queue’s existing idempotency/business-event index suppresses a second mutation.
+- buildCommandDraft is an optional injected pure composition point. This change does not add real Gmail field extraction for title/date/target lottery, retailer alias deployment, Gmail OAuth, or production runtime wiring; without a complete explicitly constructed draft, the item remains review-only.
+
+### Verified
+
+- Added tests for crash after queue acceptance and retry, missing identity/fields to review, processor-to-outbox ordering, no persistence of raw message ID or email body, queue collision, and Chat/Gmail same business key under different request IDs.
+- Focused local tests: 5 passed. Working-tree full suite: 143 passed, 0 failed, 1 skipped because local Firestore Emulator was not configured. npm run check --prefix cloud passed.
+- GitHub Actions v2-ci #762 passed on code head f4985cf20c77f30305a0f474e9ebaecc08add436.
+
+### Not yet verified / next
+
+- This is mocked/Firestore-adapter test coverage, not live Gmail, Chat Action, or Cloud Run E2E. The classifier’s real-to-command builder, reviewed retailer alias configuration, and review inbox/monitoring are not connected. Regular Chat Action API/schema already exists but no deployed endpoint or screenshot report E2E is available.
+- Remaining: live Gmail OAuth, authenticated and deployed Cloud Run/Scheduler composition, confirmed market provider, canonical V2 read-only export and migration reconciliation, persistent backup bucket/location/retention decision and production restore drill, operational alerts, and measured project-wide cost/free-tier fit.
+- V2 canonical JSON is still unavailable; V1/staging is excluded. No production V2, Apps Script, existing queue, pending sale, billing setting, cloud resource, or deployment changed. PR #105 remains open, draft, unmerged, and undeployed.
+- Overall progress estimate updated from about 70% to about 80%; this is a rough implementation/test estimate, not production readiness. Confirmed Gmail schedule (07:00–24:00 JST hourly, 12:30 focus, 19:00 merged), independent 15-minute Chat queue, and daily 13:30+ market schedule are unchanged. The 90-day GCS lifecycle remains an unapplied proposal.
+- Next: add a conservative, tested Gmail command-draft builder for only explicitly labelled fields; missing/ambiguous evidence must stay in review. Then compose and test the disabled-by-default Chat Action + Gmail + queue path. Do not enable OAuth, billing, production queues, or lifecycle policy in this phase.
