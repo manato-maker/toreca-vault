@@ -146,6 +146,7 @@ test('classifier processor writes the durable outbox before returning and never 
     provider: { async getMessageForClassification() { return { subject: 'ポケモンカード 抽選申込完了', text: '応募ID: APP-123\n店舗名: トレカショップA\n商品名: 商品A\n応募日: 2026-11-08\nemail body with confidential text' }; } },
     classificationStore: { async record() { events.push('classification'); } },
     commandOutbox: outbox,
+    resolveIdentity: () => ({ status: 'ready', businessEventIdentity: { retailerKey: 'shop-a', applicationId: 'APP-123' } }),
     buildCommandDraft: async ({ fields, classification }) => buildGmailLotteryCommandDraft({
       kind: classification.kind,
       subject: fields.subject,
@@ -242,6 +243,7 @@ test('Chat Action HTTP submission and Gmail classification share one event and q
       provider: { async getMessageForClassification() { return { subject: 'ポケモンカード 抽選申込完了', text: '応募ID: APP-123\n店舗名: 店舗A\n商品名: 商品A\n応募日: 2026-11-08' }; } },
       classificationStore: { async record() {} },
       commandOutbox: outbox,
+      resolveIdentity: () => ({ status: 'ready', businessEventIdentity: identity }),
       buildCommandDraft: ({ fields, classification }) => buildGmailLotteryCommandDraft({
         kind: classification.kind, subject: fields.subject, text: fields.text,
         retailerAliases: { '店舗A': 'store-a' }
