@@ -76,9 +76,9 @@ export function createGmailCommandOutbox({ store, commandQueue } = {}) {
       const entry = await store.get(messageHash(messageId));
       return entry ? deliver(entry) : { status: 'missing', submitted: false };
     },
-    async approveReview({ messageId, expectedPayloadHash, confirmed, commandDraft, businessEventIdentity, nowMs = Date.now() } = {}) {
+    async approveReview({ messageIdHash: hash, expectedPayloadHash, confirmed, commandDraft, businessEventIdentity, nowMs = Date.now() } = {}) {
       if (confirmed !== true) return { status: 'review', submitted: false, reasonCode: 'explicit-confirmation-required' };
-      const hash = messageHash(messageId);
+      if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) throw new TypeError('messageIdHash is invalid');
       if (!/^[a-f0-9]{64}$/.test(String(expectedPayloadHash || ''))) return { status: 'review', submitted: false, reasonCode: 'review-version-required' };
       if (!Number.isSafeInteger(nowMs) || nowMs < 0) throw new TypeError('nowMs is invalid');
       const entry = await store.get(hash);
