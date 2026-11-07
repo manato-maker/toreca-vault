@@ -1,4 +1,5 @@
 import { classifyLotteryMessage } from './gmail-classifier.js';
+import { resolveGmailLotteryIdentity } from './lottery-event-intake.js';
 
 /** Fetch bounded transient fields and durably record only their compact classification. */
 export function createGmailClassifierProcessor({
@@ -7,6 +8,7 @@ export function createGmailClassifierProcessor({
   commandOutbox = null,
   buildCommandDraft = null,
   classify = classifyLotteryMessage,
+  resolveIdentity = resolveGmailLotteryIdentity,
   resultOnly = false
 } = {}) {
   if (!provider || typeof provider.getMessageForClassification !== 'function') {
@@ -33,14 +35,26 @@ export function createGmailClassifierProcessor({
     if (!classification || typeof classification.kind !== 'string') {
       throw new TypeError('message classifier returned an invalid result');
     }
+    // The raw ID and derived key stay transient. The durable classifier store
+    // intentionally receives only the allowlisted kind/reason outcome.
     await classificationStore.record(messageId, classification);
+    if (classification.kind !== 'application' && classification.kind !== 'result') return classification;
+    const eventKind = classification.kind === 'application' ? 'application' : 'result';
+    const identity = resolveIdentity({ kind: eventKind, subject: fields.subject, text: fields.text });
     let queue = null;
-    if (commandOutbox && ['application', 'result'].includes(classification.kind)) {
-      const draft = buildCommandDraft ? await buildCommandDraft({ fields, classification }) : null;
-      queue = await commandOutbox.record({ messageId, classification, commandDraft: draft?.command || null,
-        businessEventIdentity: draft?.businessEventIdentity || null });
+    if (commandOutbox) {
+      const draft = buildCommandDraft ? await buildCommandDraft({ fields, classification, identity }) : null;
+      const draftIdentity = draft?.businessEventIdentity;
+      const identityMatches = identity?.status === 'ready'
+        && draftIdentity?.retailerKey === identity.businessEventIdentity?.retailerKey
+        && draftIdentity?.applicationId === identity.businessEventIdentity?.applicationId;
+      queue = await commandOutbox.record({
+        messageId,
+        classification,
+        commandDraft: identityMatches ? draft.command : null,
+        businessEventIdentity: identityMatches ? draftIdentity : null
+      });
     }
-    if (queue) return { ...classification, queue };
-    return classification;
+    return { ...classification, identity, ...(queue ? { queue } : {}) };
   };
 }
