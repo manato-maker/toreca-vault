@@ -71,7 +71,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
 
   const requestId = 'chat-synthetic-request';
   const command = {
-    type: 'lottery', title: 'Synthetic product', store: 'Synthetic store',
+    type: 'lottery', title: 'Synthetic product', store: 'カードボックス オーサカ店',
     status: '応募済', applicationDate: '2026-11-08', requestId
   };
   const address = server.address();
@@ -80,7 +80,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
     headers: { authorization: `Bearer ${apiToken}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       requestId,
-      businessEventIdentity: { retailerKey: 'store-a', applicationId: 'APP-SYNTHETIC-123' },
+      businessEventIdentity: { retailerKey: 'cardbox-osaka', applicationId: 'APP-SYNTHETIC-123' },
       command
     })
   });
@@ -93,7 +93,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
       async getMessageForClassification() {
         return {
           subject: '抽選申込完了',
-          text: '応募ID: APP-SYNTHETIC-123\n店舗名: Synthetic store\n商品名: Synthetic product\n応募日: 2026-11-08'
+          text: '応募ID: APP-SYNTHETIC-123\n店舗名: カードボックス オーサカ店\n商品名: Synthetic product\n応募日: 2026-11-08'
         };
       }
     },
@@ -103,7 +103,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
       kind: classification.kind,
       subject: fields.subject,
       text: fields.text,
-      retailerAliases: { 'Synthetic store': 'store-a' }
+      retailerAliases: { 'カードボックス オーサカ店': 'cardbox-osaka' }
     })
   });
   const gmailResult = await processor({ messageId: `synthetic-mail-${suffix}` });
@@ -115,10 +115,10 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
     messageId: `synthetic-conflicting-mail-${suffix}`,
     classification: { kind: 'application' },
     commandDraft: {
-      type: 'lottery', title: 'Conflicting product', store: 'Synthetic store',
+      type: 'lottery', title: 'Conflicting product', store: 'カードボックス オーサカ店',
       status: '応募済', applicationDate: '2026-11-08'
     },
-    businessEventIdentity: { retailerKey: 'store-a', applicationId: 'APP-SYNTHETIC-123' }
+    businessEventIdentity: { retailerKey: 'cardbox-osaka', applicationId: 'APP-SYNTHETIC-123' }
   });
   assert.equal(collision.status, 'review');
   assert.equal(collision.reasonCode, 'queue-conflict');
@@ -126,7 +126,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
   const missingIdProcessor = createGmailClassifierProcessor({
     provider: {
       async getMessageForClassification() {
-        return { subject: '抽選申込完了', text: '店舗名: Synthetic store\n商品名: Synthetic product\n応募日: 2026-11-08' };
+        return { subject: '抽選申込完了', text: '店舗名: カードボックス オーサカ店\n商品名: Synthetic product\n応募日: 2026-11-08' };
       }
     },
     classificationStore: { async record() {} },
@@ -135,7 +135,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
       kind: classification.kind,
       subject: fields.subject,
       text: fields.text,
-      retailerAliases: { 'Synthetic store': 'store-a' }
+      retailerAliases: { 'カードボックス オーサカ店': 'cardbox-osaka' }
     })
   });
   const missingIdResult = await missingIdProcessor({ messageId: `synthetic-missing-id-${suffix}` });
