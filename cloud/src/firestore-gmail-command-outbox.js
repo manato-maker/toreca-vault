@@ -46,7 +46,8 @@ export function createFirestoreGmailCommandOutbox(db, collectionPath = 'torecaVa
         const row = snapshot.data();
         if (row.status === 'submitted') return { status: 'duplicate' };
         if (row.status !== 'ready') return { status: row.status };
-        tx.set(ref, { ...row, status: 'submitted', resultCode, updatedAtMs: Date.now() });
+        const updated = { ...row, status: 'submitted', resultCode, updatedAtMs: Date.now() };
+        tx.set(ref, { ...updated, payloadHash: fingerprint(updated) });
         return { status: 'submitted' };
       });
     },
@@ -57,8 +58,26 @@ export function createFirestoreGmailCommandOutbox(db, collectionPath = 'torecaVa
         if (!snapshot.exists) return { status: 'missing' };
         const row = snapshot.data();
         if (row.status === 'submitted') return { status: 'submitted' };
-        tx.set(ref, { ...row, status: 'review', reasonCode, updatedAtMs: Date.now() });
+        const updated = { ...row, status: 'review', reasonCode, updatedAtMs: Date.now() };
+        tx.set(ref, { ...updated, payloadHash: fingerprint(updated) });
         return { status: 'review' };
+      });
+    },
+    async approveReview({ messageIdHash, expectedPayloadHash, command, businessEventKey, nowMs = Date.now() } = {}) {
+      const ref = refFor(messageIdHash);
+      if (typeof expectedPayloadHash !== 'string' || !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+        || !command || typeof command !== 'object' || Array.isArray(command)
+        || typeof businessEventKey !== 'string' || !/^lottery:v1:[a-f0-9]{64}$/.test(businessEventKey)
+        || !Number.isSafeInteger(nowMs) || nowMs < 0) throw new TypeError('review approval is invalid');
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) return { status: 'missing' };
+        const row = snapshot.data();
+        if (row.status !== 'review') return { status: row.status };
+        if (row.payloadHash !== expectedPayloadHash) return { status: 'stale' };
+        const approved = { ...row, status: 'ready', reasonCode: '', command: clone(command), businessEventKey, updatedAtMs: nowMs };
+        tx.set(ref, { ...approved, payloadHash: fingerprint(approved) });
+        return { status: 'ready' };
       });
     }
   };
