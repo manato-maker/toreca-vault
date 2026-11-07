@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Firestore } from '@google-cloud/firestore';
 import { applyTransaction, emptyV2 } from '../../v2/core.js';
 import { createBackupArtifact, verifyBackupArtifact } from '../src/backup-artifact.js';
 import { createFirestoreStore } from '../src/firestore-store.js';
@@ -10,6 +9,7 @@ const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 const skipReason = emulatorHost ? false : 'Set FIRESTORE_EMULATOR_HOST to run Firestore Emulator integration tests';
 
 test('Firestore Emulator restores a verified backup into an isolated canonical store and reads it back', { skip: skipReason }, async () => {
+  const { Firestore } = await import('@google-cloud/firestore');
   const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
   const db = new Firestore({ projectId });
   const documentPath = 'backupRestoreTestRuns/' + randomUUID() + '/canonical';
