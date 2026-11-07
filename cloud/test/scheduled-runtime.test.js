@@ -127,3 +127,29 @@ test('an unconfigured job is recorded without blocking configured work or heartb
   assert.equal(heartbeat.failedJobCount, 1);
   assert.equal(evaluateSchedulerHealth(heartbeat, { nowMs: seven.getTime() + 2000 }).healthy, false);
 });
+test('a failed Gmail job does not block the command queue or market refresh', async () => {
+  const db = fakeFirestore();
+  const ledger = createFirestoreJobLedger(db);
+  const heartbeatStore = createFirestoreSchedulerHeartbeatStore(db);
+  const fourteen = atJst('14:00');
+  const completed = [];
+  const tick = await runScheduledTick({
+    now: fourteen,
+    scheduledAt: fourteen,
+    ledger,
+    heartbeatStore,
+    handlers: {
+      'command-queue': async () => { completed.push('command-queue'); },
+      'gmail-lottery-inbox': async () => { throw Object.assign(new Error('temporary quota issue'), { name: 'GmailQuotaError' }); },
+      'lottery-result-focus': async () => { completed.push('lottery-result-focus'); },
+      'market-refresh': async () => { completed.push('market-refresh'); }
+    },
+    clock: () => fourteen.getTime() + 1000
+  });
+
+  assert.deepEqual(completed, ['command-queue', 'lottery-result-focus', 'market-refresh']);
+  assert.deepEqual(tick.results.map(({ status }) => status), ['completed', 'retry', 'completed', 'completed']);
+  assert.equal(tick.failedJobCount, 1);
+  const heartbeat = await heartbeatStore.read();
+  assert.equal(heartbeat.failedJobCount, 1);
+});
