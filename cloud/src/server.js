@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
+import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import {
   CanonicalNotInitialized,
   RevisionConflict,
@@ -344,8 +345,18 @@ export async function start() {
   if (commandWorkerEnabled && (!writesEnabled || !commandsEnabled)) {
     throw new Error('command worker requires both writes and command queue to be explicitly enabled');
   }
-  const workerToken = process.env.TV2_WORKER_TOKEN || '';
-  if (commandWorkerEnabled && workerToken.length < 32) throw new Error('TV2_WORKER_TOKEN must contain at least 32 characters');
+  const schedulerAudience = process.env.TV2_SCHEDULER_AUDIENCE || '';
+  const schedulerServiceAccountEmail = process.env.TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL || '';
+  if (commandWorkerEnabled && (!schedulerAudience.startsWith('https://') || !schedulerServiceAccountEmail)) {
+    throw new Error('command worker requires TV2_SCHEDULER_AUDIENCE and TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL');
+  }
+  const workerAuthorize = commandWorkerEnabled
+    ? createGoogleSchedulerAuthorizer({
+      verifier: new (await import('google-auth-library')).OAuth2Client(),
+      audience: schedulerAudience,
+      serviceAccountEmail: schedulerServiceAccountEmail
+    })
+    : null;
   const commandWorker = commandWorkerEnabled
     ? createCommandBatchWorker({ queue: commandQueue, store })
     : null;
@@ -353,7 +364,7 @@ export async function start() {
     store,
     commandQueue,
     commandWorker,
-    workerAuthorize: commandWorkerEnabled ? (request) => isAuthorized(request, workerToken) : null,
+    workerAuthorize,
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
     writesEnabled,
