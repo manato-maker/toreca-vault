@@ -111,3 +111,17 @@ A page is limited to 50 messages at both planner and provider boundaries. Google
 - The current Firestore snapshot remains one document with the 900,000-byte safety limit. Do not migrate until the confirmed canonical export has been measured. Reassess partitioning above 630,000 bytes or when measured 90-day growth projects crossing the safety limit within 12 months.
 - No backup/restore workflow, live Gmail OAuth, dispatcher heartbeat alert, Cloud Monitoring alert, or budget alert is connected. No paid backup or production resources were enabled.
 - Official current cost references reviewed: Firestore https://cloud.google.com/firestore/pricing ; Cloud Run https://cloud.google.com/run/pricing ; Cloud Scheduler https://cloud.google.com/scheduler/pricing ; GPT Actions https://help.openai.com/en/articles/9442513-configuring-actions-in-gpts .
+
+
+## Bounded command queue worker
+
+The API can process accepted commands through a bounded worker endpoint:
+
+- `POST /internal/worker/commands` is disabled unless the worker, command queue, and V2 writes are all explicitly enabled.
+- The worker requires a separate `TV2_WORKER_TOKEN` of at least 32 characters plus Cloud Scheduler's planned-time and marker headers. Store this token in Secret Manager; never put it in a chat or commit.
+- Each tick queries only pending command request IDs (maximum 50; default batch 10) and uses the existing queue claim, revision-CAS, readback, and settlement logic. Concurrent ticks are fenced by queue leases.
+- Configure Cloud Scheduler for every 15 minutes only after the canonical V2 snapshot has been imported and verified. This repository change does not create a Scheduler job or deploy the service.
+- If the canonical snapshot is absent, processing leaves a bounded retry state; after the existing attempt limit, the queue moves the command to review. Do not enable the worker before the migration gate is passed.
+
+The worker API is implementation and Emulator-tested, not live. OAuth/Gmail workers, the complete dispatcher composition, Scheduler job, ChatGPT Action registration, and monitoring remain unconnected.
+
