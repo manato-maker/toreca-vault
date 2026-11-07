@@ -582,3 +582,26 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Tightened the optional Gmail command builder boundary after code review: the outbox now reconstructs commands from a type-specific allowlist. Unknown properties (including body/raw mail fields or caller-supplied requestId), conflicting title/product values, control characters, oversized strings, and malformed optional dates send the item to review without queue submission or persistence of the rejected fields.
 - Focused outbox tests: 7 passed. Working-tree full suite: 145 passed, 0 failed, 1 skipped without local Firestore Emulator. Syntax check passed. GitHub Actions v2-ci #765 passed on code head b73951fc0a5fd99f8da5143eaf5a4573110ddbb7.
 - Remaining functional gap: review states are safely retained, but a review inbox and explicit user-confirmation-to-command flow are not implemented or connected. This and the live Chat/Gmail/Cloud Run path remain product-completion work. Progress estimate stays about 80%; the estimate is not a production readiness claim.
+
+
+
+## 2026-11-08 JST — Labelled Gmail command builder and Chat/Gmail mock E2E; about 90%
+
+### Implemented
+
+- Added a conservative Gmail lottery command builder for only explicit labelled fields: external application ID, allowlisted retailer name, product, and ISO date; result status/date are also required for results. It does not infer from sender, product codes, unlabelled numbers, message timestamps, or surrounding prose. Conflicting/missing labels, unknown store aliases, malformed/oversized data return no draft and stay in review. The builder emits only the command fields needed by V2; outbox applies its own command allowlist.
+- Added a mocked end-to-end test: a regular Chat Action HTTP request submits a lottery application, then the Gmail classifier/parser/outbox sees the same explicit event under a different Gmail ID and is suppressed by the same business-event key. This is isolated HTTP/mock coverage, not an actual ChatGPT screenshot or live network connection.
+- Added an opt-in Firestore Emulator test for concurrent outbox create-once calls, readback, hashed message ID, and submitted-state update.
+
+### Verified
+
+- Focused builder/outbox tests: 12 passed. Working-tree full suite: 150 passed, 0 failed, 2 skipped locally because no Firestore Emulator was configured. Syntax check passed.
+- GitHub Actions v2-ci #769 passed, including full test/check and Firestore Emulator jobs. Code head: `63f34b818a4671040b873b7f2a872a4febe86364`.
+
+### Remaining / completion gates
+
+- Overall progress estimate updated from about 80% to about 90%; this remains implementation/test coverage, not production readiness. Real store aliases and Gmail templates have not been reviewed against actual messages. Result commands still depend on the V2 worker finding exactly one matching lottery row; otherwise the existing worker must leave them in review.
+- Normal ChatGPT Action is not deployed or configured. Screenshot interpretation, actual endpoint/auth, live Gmail OAuth, Cloud Scheduler/runtime composition, review inbox and explicit review-resolution flow are unverified/unimplemented. No command is being registered automatically from this ordinary Chat session.
+- Canonical V2 JSON remains unavailable; no V1/staging source is used. Migration reconciliation, persistent Cloud backup connection/retention application/restore drill, confirmed market provider, operational alerts, and project-wide cost measurement remain open. GCS lifecycle remains unapplied. No production data, Apps Script, pending queue, Cloud resource, billing setting, deployment, or cutover changed.
+- Reaching production completion requires owner-side access to export the configured canonical V2 JSON read-only, reviewed store aliases and representative sanitized Gmail templates, plus approval before any billing/project activation. Do not send tokens or secrets in chat.
+- Next safe step: test the strict builder against sanitized, real retailer mail formats and add an explicit review resolution path. Then prepare disabled-by-default Cloud Run composition and a reviewable setup/cost plan before any external activation.
