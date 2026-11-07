@@ -873,3 +873,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 全jobのhandlerを事前検証する実装では、Gmail handler未設定が同一tickのqueue処理まで止め得ることを発見。job単位でdispatchし、未設定jobは安全な失敗状態/heartbeatに記録しつつ、他jobを継続するよう修正。
 - 関連test12件、全cloud test30件成功。ローカルではEmulator統合1件をskip。GitHub Actions v2-ci #706のtest/checkとFirestore Emulatorは成功。
 - PR #105 head `8f4d0f61faffa52af9775fa156d2657510da1f55`、draft/未配備。実handler接続、V2正本取得、通常Chatの実接続は未完了。実システムへの変更なし。
+
+
+### 2026-11-07 JST — Offline backup integrity and restore-preview foundation
+
+- Added a versioned V2 backup artifact with canonical JSON SHA-256, a separate metadata hash, schema/revision checks, inventory cost/quantity validation, and a 7.5 MB fail-closed limit. Added a local-only CLI for create, verify, and restore preview. Creation refuses to overwrite an existing output and writes with owner-only permissions; input snapshots remain unchanged.
+- Restore preview requires the observed current revision and returns only aggregate counts, total quantity, known acquisition cost, and unknown-cost lot count. It never applies a restore or exposes product names, transaction IDs, or lottery IDs.
+- Focused backup and migration-report tests: 10 passed locally. GitHub Actions v2-ci #716 passed test/check and Firestore Emulator. Code head: `0bf32262cdd425cf559f9492d7567a857d49fd21`.
+- This is an offline backup-file foundation, not automated/retained cloud backup or a restore drill. No canonical V2 export, Cloud storage, retention, automatic restore, production data, Apps Script, queue, or billing configuration was touched. Existing V1/staging candidates remain excluded; pending sale work was not replayed.
+- Overall development estimate: about 30% (previously about 25%). The backup artifact and dry-run path are now implemented; authenticated regular-Chat integration, canonical V2 confirmation, live runtime/OAuth, scheduled backup retention and actual restore drill, monitoring, and cost measurement remain open. The requested 35% milestone is not yet reached.
