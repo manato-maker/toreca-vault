@@ -485,3 +485,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 検証: schedule/runtime/dispatcher関連12件成功。全cloud単体テストは30 passed、1 emulator test skipped（ローカルにEmulatorなし）。GitHub Actions v2-ci #706はtest/checkとFirestore Emulator両job success。
 - 実handler/OAuth/Cloud Run/Schedulerは未接続。PR #105はdraft・未配備、進捗約25%。本番・旧V2・Apps Script・既存queue・課金は変更なし。
 - code head: `8f4d0f61faffa52af9775fa156d2657510da1f55`。
+
+
+## 2026-11-07 JST — Offline backup integrity and restore-preview foundation
+
+- Added a versioned V2 backup artifact with canonical JSON SHA-256, a separate metadata hash, schema/revision checks, inventory cost/quantity validation, and a 7.5 MB fail-closed limit. Added a local-only CLI for create, verify, and restore preview. Creation refuses to overwrite an existing output and writes with owner-only permissions; input snapshots remain unchanged.
+- Restore preview requires the observed current revision and returns only aggregate counts, total quantity, known acquisition cost, and unknown-cost lot count. It never applies a restore or exposes product names, transaction IDs, or lottery IDs.
+- Focused backup and migration-report tests: 10 passed locally. GitHub Actions v2-ci #716 passed test/check and Firestore Emulator. Code head: `0bf32262cdd425cf559f9492d7567a857d49fd21`.
+- This is an offline backup-file foundation, not automated/retained cloud backup or a restore drill. No canonical V2 export, Cloud storage, retention, automatic restore, production data, Apps Script, queue, or billing configuration was touched. Existing V1/staging candidates remain excluded; pending sale work was not replayed.
+- Overall development estimate: about 30% (previously about 25%). The backup artifact and dry-run path are now implemented; authenticated regular-Chat integration, canonical V2 confirmation, live runtime/OAuth, scheduled backup retention and actual restore drill, monitoring, and cost measurement remain open. The requested 35% milestone is not yet reached.
