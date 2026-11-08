@@ -723,3 +723,13 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Firestore保存見積りはpayload 1,036,003 bytes。単一document安全上限900,000 bytesを超えるためchunked-v1 5 segment（基準13 reads/6 writes per successful mutation）を選択。payload size/segment limits内で安全計画可能。これは設計見積りで実測費用ではない。原価不明lot 4件は推測補完しない。
 - 既存Sheets queueは9行（未処理売却8、抽選1）、今回2件と一致なし。似た名称の「オリジナルアートワークコレクション 1BOX」抽選応募3件はDUEL SET受取と別扱い。
 - 通常Chat報告は確認済みだが、新アプリqueue送信なし、V2反映なし、登録後readbackなし。新アプリAPI/Cloud Runは未配備、旧V2書込みと未処理売却再投入なし。受取専用（原価を二重計上しない）一般commandは未実装。通常Chat連携とreceipt-only設計が次工程。PR #105はDraft・未merge・未deploy。
+
+
+### 2026-11-08 JST — 通常Chat接続の公開Plugin経路（検討中）
+
+- 新規GPT作成や個人用の直接MCP接続を前提にせず、ChatGPTの公開Plugin／アプリディレクトリから通常Chatへ接続する経路を候補として調査した。公開PluginはChatGPTのモバイルでも利用できる設計だが、個々のPluginの提供プラン・画面は異なるため、PlusのAndroidでの利用可否は公開候補の実機テストで確認する。
+- 公開には安定した公開HTTPS MCP endpoint、OAuth 2.1 user authentication、開発者本人確認、公開レビュー、モバイルを含む動作テストが必要。既存RESTのBearer API tokenはChatGPTの公開MCP認証として流用しない。OAuth providerは未選定。
+- 現時点は「候補・未実装・未検証」。公開申請、公開、配備、本番データ接続、課金設定の有効化は行っていない。API queue/worker/write flagsも有効化しない。
+- 次工程: 既存Cloud Run APIに対する独立したMCP/OAuth adapter案、ローカル/CI mock E2E、公開審査要件一覧を作る。安全なステージング接続と費用・billing案をレビュー可能にしてから、必要な承認を得る。
+- 旧V2書込み、売却queue再投入、本番切替は禁止。通常Chat未登録の2件は確認済みだがqueue送信なし/V2反映なし。JSONはrevision 2708で画面revision 2709より古く、移行には2709以降の正本再出力が必要。
+- Official refs: https://help.openai.com/en/articles/20001256-plugins-in-chatgpt ; https://developers.openai.com/plugins/build/auth ; https://developers.openai.com/plugins/deploy/app-review ; https://developers.openai.com/plugins/plugin-guidelines
