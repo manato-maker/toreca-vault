@@ -164,6 +164,58 @@ test('scheduler route validates planned time, dispatches an authorized tick, and
   });
 });
 
+test('Google Sheets intake route is disabled by default and cannot accept work without the queue gate', async () => {
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/internal/worker/sheets-intake`, { method: 'POST' });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: 'Google Sheets intake is disabled' });
+  });
+
+  let calls = 0;
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/internal/worker/sheets-intake`, { method: 'POST' });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: 'Google Sheets intake is disabled' });
+    assert.equal(calls, 0);
+  }, {
+    sheetsIntakeEnabled: true,
+    sheetsIntakeAuthorize: async () => true,
+    sheetsIntakeWorker: async () => { calls++; return { seen: 1 }; }
+  });
+});
+
+test('Google Sheets intake route requires Scheduler authorization and returns bounded aggregate counts only', async () => {
+  const calls = [];
+  await withServer(createFakeStore(), async (base) => {
+    const makeRequest = (headers = {}) => fetch(`${base}/internal/worker/sheets-intake`, { method: 'POST', headers });
+    const unauthorized = await makeRequest({ 'x-cloudscheduler': 'true', 'x-cloudscheduler-scheduletime': '2026-11-08T12:00:00Z' });
+    assert.equal(unauthorized.status, 401);
+
+    const common = { 'x-intake-auth': 'trusted', 'x-cloudscheduler': 'true' };
+    const missingTime = await makeRequest(common);
+    assert.equal(missingTime.status, 400);
+    const wrongMarker = await makeRequest({ ...common, 'x-cloudscheduler': 'false', 'x-cloudscheduler-scheduletime': '2026-11-08T12:00:00Z' });
+    assert.equal(wrongMarker.status, 400);
+
+    const response = await makeRequest({ ...common, 'x-cloudscheduler-scheduletime': '2026-11-08T12:00:00Z' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true, scheduledAt: '2026-11-08T12:00:00.000Z', seen: 2,
+      enqueued: 1, duplicate: 1, review: 0, skipped: 0
+    });
+    assert.equal(calls.length, 1);
+  }, {
+    commandsEnabled: true,
+    sheetsIntakeEnabled: true,
+    sheetsIntakeAuthorize: async (request) => request.headers['x-intake-auth'] === 'trusted',
+    sheetsIntakeWorker: async (input) => {
+      calls.push(input);
+      return { seen: 2, enqueued: 1, duplicate: 1, review: 0, skipped: 0, rawRows: ['must not leak'] };
+    }
+  });
+  assert.equal(calls[0].scheduledAt.toISOString(), '2026-11-08T12:00:00.000Z');
+});
+
 test('command worker route is disabled by default and requires authorization plus the planned Scheduler slot', async () => {
   await withServer(createFakeStore(), async (base) => {
     const response = await fetch(`${base}/internal/worker/commands`, { method: 'POST' });

@@ -743,3 +743,13 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 次: row parserとpoll result→Firestore queue importerを副作用のないpure function/adapterとしてテストする。受取専用・原価なしはpurchaseに変換しない。OAuth / public MCP案は審査準備を要する代替候補として保持。
 - No production sheet/resource was created or modified. Billing, old V2, old queue, cutover remain unchanged.
 - Official reference: https://help.openai.com/en/articles/10929079-google-drive-app-and-setup-in-chatgpt ; https://help.openai.com/en/articles/20001256-plugins-in-chatgpt
+
+
+### 2026-11-08 JST — 専用Sheets受付workerの実装
+
+- `Toreca Vault New App Intake` 専用Spreadsheetから `new` 行を最大20件（provider上限50件）読み、Firestore create-once queueへ登録するprocessor、Sheets API provider、Scheduler認証付き `/internal/worker/sheets-intake` handlerを追加。status/result/accepted request ID/処理時刻だけを同じ専用sheetのD:Gへ返し、A:Cは変更しない。既存V2 Queueのファイル名・IDは設定不可で、旧V2 API/CASへは接続しない。
+- 申込・結果・受取の抽選イベントでは、明示されたretailerKeyとapplicationIdが無い/不正なら`review`へ送り、requestIdの違うChat/Gmail報告でも共通businessEventKeyで重複を防ぐ。再試行は同一requestIdを使い、queue成功後のreceipt書込み失敗時も重複登録しない。
+- Verification: `npm run check --prefix cloud` passed. Full cloud suite: 180 passed, 0 failed, 5 Emulator integration tests skipped because `FIRESTORE_EMULATOR_HOST` is not configured. Google Sheets parser/provider 9 tests and HTTP handler auth/disabled-gate tests passed. No live Google Sheets, ChatGPT Android, Cloud Run, Scheduler, OAuth, or Firestore project was connected.
+- `TV2_ENABLE_GOOGLE_SHEETS_INTAKE` is false in `.env.example`; runtime also requires the queue gate and Scheduler OIDC settings. All production flags remain off. No spreadsheet, account grant, billing, or deployment was created. Standard Chat to sheet row write and end-to-end result visibility remain unverified, so ordinary reports are still not considered queued.
+- Implementation/test progress estimate: approximately 95% (code and local tests only), not operational readiness. V2 canonical export state remains unchanged: schemaVersion 2/revision 2708 export trails screen revision 2709 by one; no V2 writes. Two reported items remain confirmed/unregistered/not queued/not applied. Existing queue untouched; pending sales not replayed.
+- Next: verify the user-facing normal Chat Google Sheets write/read action on Android; create the isolated intake sheet only when that path is confirmed; separately review Cloud Run identity, Scheduler, active billing requirement, cost estimate, service access and production gates. Until then do not enable flags, deploy or migrate.

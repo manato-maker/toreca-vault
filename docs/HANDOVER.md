@@ -1131,3 +1131,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 次: row parserとpoll result→Firestore queue importerを副作用のないpure function/adapterとしてテストする。受取専用・原価なしはpurchaseに変換しない。OAuth / public MCP案は審査準備を要する代替候補として保持。
 - No production sheet/resource was created or modified. Billing, old V2, old queue, cutover remain unchanged.
 - Official reference: https://help.openai.com/en/articles/10929079-google-drive-app-and-setup-in-chatgpt ; https://help.openai.com/en/articles/20001256-plugins-in-chatgpt
+
+
+### 2026-11-08 JST — Google Sheets専用受付worker実装
+
+- 専用sheet `Toreca Vault New App Intake` のstatus=`new` 行を最大20件読み、Firestore create-once queueへ渡すprocessor/providerと、Scheduler OIDC認証付きworker routeを実装。受付内容A:Cは変更せず、結果のみD:Gへ記録する。抽選イベントの応募IDまたは店舗キー不足・不確実時は`review`。Chat/Gmailで異なるrequestIdでも明示情報から同じbusinessEventKeyを作る。
+- テスト: `npm run check --prefix cloud`成功、cloud suite 180成功/0失敗/5件Emulator未実行（local Emulator未設定）。live Sheets/ChatGPT Android/Cloud Run/Scheduler/OAuthは未接続。
+- Runtime flagsはすべて初期無効。production sheetやservice account grant、billing、deploymentは作成・変更なし。通常Chatの書込・結果確認E2Eが未検証なので、報告内容はqueue送信済みとして扱わない。
+- 進捗概算はコード/ローカルテスト範囲で約95%。運用可能率ではない。V2正本JSONはrev2708のまま画面rev2709より古く、2報告は内容確認済み/queue未送信/V2未反映/事後readbackなし。旧queueは未変更、売却行の再投入なし。
+- 次工程はPlus Android通常ChatからのGoogle Sheets更新可否とreadback確認。可能な場合に限り、専用sheet作成と接続設計へ進む。課金・production接続・migration・cutoverは未実施。

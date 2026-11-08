@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
+import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
+import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
 import {
   createFirestoreSchedulerHeartbeatStore,
   evaluateSchedulerHealth
@@ -75,6 +77,9 @@ export function createServer({
   commandQueue = null,
   commandWorker = null,
   workerAuthorize = null,
+  sheetsIntakeWorker = null,
+  sheetsIntakeAuthorize = null,
+  sheetsIntakeEnabled = false,
   schedulerHealth = null,
   schedulerTick = null,
   schedulerAuthorize = null,
@@ -92,6 +97,38 @@ export function createServer({
     const path = new URL(request.url || '/', 'http://localhost').pathname;
     const requestOrigin = String(request.headers.origin || '');
     const allowedOrigin = requestOrigin && origins.has(requestOrigin) ? requestOrigin : '';
+
+    if (path === '/internal/worker/sheets-intake') {
+      if (request.method !== 'POST') return send(response, 405, { ok: false, error: 'method not allowed' });
+      if (!commandsEnabled || !sheetsIntakeEnabled || typeof sheetsIntakeWorker !== 'function'
+        || typeof sheetsIntakeAuthorize !== 'function') {
+        return send(response, 503, { ok: false, error: 'Google Sheets intake is disabled' });
+      }
+      try {
+        if (!await sheetsIntakeAuthorize(request)) return send(response, 401, { ok: false, error: 'unauthorized' });
+      } catch {
+        return send(response, 503, { ok: false, error: 'intake authorization unavailable' });
+      }
+      if (String(request.headers['x-cloudscheduler'] || '').toLowerCase() !== 'true') {
+        return send(response, 400, { ok: false, error: 'missing scheduler marker' });
+      }
+      let scheduledAt;
+      try {
+        scheduledAt = parseSchedulerScheduleTime(request.headers['x-cloudscheduler-scheduletime']);
+      } catch {
+        return send(response, 400, { ok: false, error: 'invalid scheduler time' });
+      }
+      try {
+        const result = await sheetsIntakeWorker({ scheduledAt, triggeredAt: new Date() });
+        const counts = {};
+        for (const key of ['seen', 'enqueued', 'duplicate', 'review', 'skipped']) {
+          counts[key] = Number.isSafeInteger(result?.[key]) && result[key] >= 0 ? result[key] : 0;
+        }
+        return send(response, 200, { ok: true, scheduledAt: scheduledAt.toISOString(), ...counts });
+      } catch {
+        return send(response, 503, { ok: false, error: 'Google Sheets intake failed' });
+      }
+    }
 
     if (request.method === 'OPTIONS') {
       if (!allowedOrigin) return send(response, 403, { ok: false, error: 'origin not allowed' });
@@ -372,29 +409,51 @@ export async function start() {
   const writesEnabled = process.env.TV2_ENABLE_WRITES === 'true';
   const commandsEnabled = process.env.TV2_ENABLE_COMMAND_QUEUE === 'true';
   const commandWorkerEnabled = process.env.TV2_ENABLE_COMMAND_WORKER === 'true';
+  const sheetsIntakeEnabled = process.env.TV2_ENABLE_GOOGLE_SHEETS_INTAKE === 'true';
   if (commandWorkerEnabled && (!writesEnabled || !commandsEnabled)) {
     throw new Error('command worker requires both writes and command queue to be explicitly enabled');
   }
+  if (sheetsIntakeEnabled && !commandsEnabled) {
+    throw new Error('Google Sheets intake requires the command queue to be explicitly enabled');
+  }
   const schedulerAudience = process.env.TV2_SCHEDULER_AUDIENCE || '';
   const schedulerServiceAccountEmail = process.env.TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL || '';
-  if (commandWorkerEnabled && (!schedulerAudience.startsWith('https://') || !schedulerServiceAccountEmail)) {
-    throw new Error('command worker requires TV2_SCHEDULER_AUDIENCE and TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL');
+  const scheduledWorkerEnabled = commandWorkerEnabled || sheetsIntakeEnabled;
+  if (scheduledWorkerEnabled && (!schedulerAudience.startsWith('https://') || !schedulerServiceAccountEmail)) {
+    throw new Error('scheduled workers require TV2_SCHEDULER_AUDIENCE and TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL');
   }
-  const workerAuthorize = commandWorkerEnabled
+  const scheduledWorkerAuthorize = scheduledWorkerEnabled
     ? createGoogleSchedulerAuthorizer({
       verifier: new (await import('google-auth-library')).OAuth2Client(),
       audience: schedulerAudience,
       serviceAccountEmail: schedulerServiceAccountEmail
     })
     : null;
+  const workerAuthorize = commandWorkerEnabled ? scheduledWorkerAuthorize : null;
   const commandWorker = commandWorkerEnabled
     ? createCommandBatchWorker({ queue: commandQueue, store })
     : null;
+  let sheetsIntakeWorker = null;
+  if (sheetsIntakeEnabled) {
+    const spreadsheetId = process.env.TV2_NEW_APP_INTAKE_SPREADSHEET_ID || '';
+    if (!spreadsheetId) throw new Error('TV2_NEW_APP_INTAKE_SPREADSHEET_ID is required when Sheets intake is enabled');
+    const { GoogleAuth } = await import('google-auth-library');
+    const googleAuth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheetsClient = await googleAuth.getClient();
+    const provider = createGoogleSheetsIntakeProvider({
+      spreadsheetId,
+      getAccessToken: async () => (await sheetsClient.getAccessToken()).token
+    });
+    sheetsIntakeWorker = createGoogleSheetsIntakeProcessor({ provider, queue: commandQueue, maxRowsPerRun: 20 });
+  }
   const server = createServer({
     store,
     commandQueue,
     commandWorker,
     workerAuthorize,
+    sheetsIntakeWorker,
+    sheetsIntakeAuthorize: sheetsIntakeEnabled ? scheduledWorkerAuthorize : null,
+    sheetsIntakeEnabled,
     schedulerHealth: async () => evaluateSchedulerHealth(await heartbeatStore.read()),
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),

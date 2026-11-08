@@ -126,3 +126,13 @@ The API can process accepted commands through a bounded worker endpoint:
 
 The worker API is implementation and Emulator-tested, not live. OAuth/Gmail workers, the complete dispatcher composition, Scheduler job, ChatGPT Action registration, and monitoring remain unconnected.
 
+
+## Standard Chat intake bridge candidate: dedicated Google Sheet
+
+A disabled-by-default one-way adapter is implemented for a separate spreadsheet titled `Toreca Vault New App Intake`, with a tab named `Intake`. It is isolated from the existing V2 command queue. The worker reads only `Intake!A2:D...` (at most 50 rows, normally 20) and writes receipts only to columns D:G. It never writes to the old V2 API or canonical snapshot.
+
+The columns are `requestId`, `commandJson`, `businessEventIdentityJson`, `status`, `resultCode`, `acceptedRequestId`, and `processedAtMs`. Add only new-app reports with status `new`. Lottery event identities must include an explicit canonical `retailerKey` and explicit `applicationId`; absent or malformed IDs go to `review`. The Firestore queue's create-once request ID and source-independent event key prevent retries and cross-source lottery duplicates.
+
+The adapter requires all of these gates: `TV2_ENABLE_GOOGLE_SHEETS_INTAKE=true`, `TV2_ENABLE_COMMAND_QUEUE=true`, Scheduler OIDC settings, and `TV2_NEW_APP_INTAKE_SPREADSHEET_ID`. Google Sheets access uses the Cloud Run service identity, which must be granted access to this exact dedicated file. Queue intake does not require canonical writes to be enabled. All flags remain false/unset in production; this repository change creates no spreadsheet, service account grant, Scheduler job, or deployment.
+
+This is a code-level bridge candidate, not an end-to-end ChatGPT integration. It has not been verified that the Google Drive app can reliably append the required rows from standard ChatGPT on the user's Android Plus client. Until that surface test and Cloud Run connection are complete, a normal Chat report is not considered queued. Do not share tokens or use the existing V2 command queue spreadsheet.
