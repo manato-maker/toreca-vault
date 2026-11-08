@@ -112,6 +112,17 @@ test('scheduler health endpoint exposes only bounded heartbeat state and marks u
   await withServer(createFakeStore(), async (base) => {
     const response = await fetch(`${base}/health/scheduler`);
     assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.failedJobCount, 2);
+  }, { schedulerHealth: async () => ({
+    healthy: true, stale: false, lastScheduledAtMs: 1_000, lastCompletedAtMs: 1_010,
+    ageMs: 10, latestMissedSlots: 0, failedJobCount: 2
+  }) });
+
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { ok: false, error: 'scheduler health unavailable' });
   }, { schedulerHealth: async () => { throw new Error('sensitive raw failure'); } });
 });
