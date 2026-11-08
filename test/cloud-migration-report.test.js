@@ -86,3 +86,32 @@ test('migration report reduces unknown transaction and lottery values to aggrega
   assert.equal(text.includes('customer-name@example.test'), false);
 });
 
+
+test('migration report inspects the app V2 export envelope and preserves source hash', () => {
+  const snapshot = sampleSnapshot();
+  snapshot.inventoryLots[0].condition = 'シュリンクなし';
+  const envelope = {
+    app: 'toreca-vault', schemaVersion: 2, exportedAt: '2026-11-08T08:39:39.236Z',
+    revision: snapshot.revision, data: snapshot
+  };
+  const raw = Buffer.from(JSON.stringify(envelope, null, 2), 'utf8');
+  const report = inspectV2Snapshot(envelope, raw);
+  assert.equal(report.schemaVersion, 2);
+  assert.equal(report.revision, snapshot.revision);
+  assert.deepEqual(report.exportEnvelope, {
+    app: 'toreca-vault', revision: snapshot.revision, exportedAt: envelope.exportedAt
+  });
+  assert.equal(report.sourceBytes, raw.length);
+  assert.equal(report.sha256, createHash('sha256').update(raw).digest('hex'));
+  assert.equal(report.counts.inventoryQuantityByCategoryCondition['BOX / シュリンクなし'], 2);
+  assert.equal(JSON.stringify(envelope.data), JSON.stringify(snapshot));
+});
+
+test('migration report rejects export envelope revision mismatch', () => {
+  const snapshot = sampleSnapshot();
+  const envelope = {
+    app: 'toreca-vault', schemaVersion: 2, exportedAt: '2026-11-08T08:39:39.236Z',
+    revision: snapshot.revision + 1, data: snapshot
+  };
+  assert.throws(() => inspectV2Snapshot(envelope), /envelope revision mismatch/);
+});
