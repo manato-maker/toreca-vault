@@ -700,3 +700,15 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Current OpenAI authenticated MCP guidance requires an OAuth 2.1 authorization flow for write-capable/customer-specific tools and states ChatGPT cannot present custom API keys. The existing Cloud Run REST bearer token therefore cannot be reused as the ChatGPT app connector credential. No OAuth authorization server/provider has been selected or implemented.
 - The public plugin directory remains a possible regular-Chat path, but it requires the remote MCP endpoint, OAuth flow, verified developer identity, and submission review. This is not a change to the user requirement; it is a newly confirmed product authentication gate. Do not publish or enable write access until the OAuth design, deployment, canonical data, and reviewable permission scope are ready.
 - Official reference: https://developers.openai.com/plugins/build/auth
+
+
+### 2026-11-08 JST — 通常Chat未登録2件の読み取り専用照合
+
+- 通常Chatの報告内容を確認したが、Chat→新アプリqueueには送信されていない。V2にも反映されていない。①11/6 30th CELEBRATION 1BOX、イトーヨーカドー アリオ八尾店、シュリンク付き、原価7,200円（支払7,205円から袋代5円除外）。②11/7 ORIGINAL ARTWORK DUEL SET 3種類各1個・合計1セット、過去支払済みで新規原価なし。
+- ユーザーがV2アプリ画面の「V2正本を書き出す」から出力したsnapshotをread-only確認。schemaVersion 2、revision 2708、exportedAt 2026-11-08 17:39 JST、SHA-256 `930bb73fca5c9d8145cf78008dc7595b01985565d4bccc646cad930d2ec70b88`。画面表示はrevision 2709のため、snapshotは画面より1 revision古い。
+- revision 2708のtransactions/inventoryLotsに2件と一致する記録なし。類似名称「オリジナルアートワークコレクション 1BOX」の抽選応募3件は別記録として扱い、DUEL SETと自動同一視しない。
+- 既存Google Sheets Command Queueを読み取り専用で確認し、9行中8行が保留売却、1行が抽選。今回の2件に一致する行なし。Queueは一切変更せず、保留売却を再投入していない。
+- 現行migration validatorはBOX condition「シュリンクなし」で失敗。canonical exportの誤りではなく、新アプリ側の値互換性不足。原本JSONは変更していない。原価不明の在庫4ロットは推測補完しない。
+- 状態: 報告内容確認済み / queue送信なし / V2反映なし / 登録後の正本再読込検証なし。read-only exportのみ検査済み。Cloud Run queue実接続は未完了であり、旧V2直接書込みは禁止。
+- 登録案: 30thはpurchase commandにできるが、live queueがないため未送信。DUEL SETは汎用のreceipt-only/no-new-cost commandが未実装。0円purchaseで代用せず、原価二重計上を防ぐ受取専用処理を設計する。revision 2709以降の再export・二重登録確認・登録内容提示とユーザー承認を経るまで登録しない。
+- Overall estimate remains approximately 94% implementation/test work, not production readiness. No production, Apps Script, V2, queue, billing, deployment, or cutover changes.
