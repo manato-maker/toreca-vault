@@ -1121,3 +1121,13 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 次工程: 既存Cloud Run APIに対する独立したMCP/OAuth adapter案、ローカル/CI mock E2E、公開審査要件一覧を作る。安全なステージング接続と費用・billing案をレビュー可能にしてから、必要な承認を得る。
 - 旧V2書込み、売却queue再投入、本番切替は禁止。通常Chat未登録の2件は確認済みだがqueue送信なし/V2反映なし。JSONはrevision 2708で画面revision 2709より古く、移行には2709以降の正本再出力が必要。
 - Official refs: https://help.openai.com/en/articles/20001256-plugins-in-chatgpt ; https://developers.openai.com/plugins/build/auth ; https://developers.openai.com/plugins/deploy/app-review ; https://developers.openai.com/plugins/plugin-guidelines
+
+
+### 2026-11-08 JST — 通常Chat入力の短期ブリッジ候補（Google Driveアプリ＋専用受付シート）
+
+- 公開Pluginの審査/OAuth準備とは別に、ChatGPT標準のGoogle Driveアプリが通常会話でGoogle Sheetsの更新を許可する場合、専用受付シートを新アプリのinput bridgeにする候補を評価する。OpenAIの現行ヘルプはGoogle Sheets/Docs/Slidesのソース更新を説明しているが、個々のactionはプラン・権限・surfaceに依存する。
+- 使用する場合も既存V2 Command Queue、V2 JSON、Apps Scriptには書き込まない。新アプリ専用sheetに未処理報告を置き、Cloud Runのread-only readerが検証・idempotent Firestore enqueueを行い、処理結果を専用sheetへ記録する設計候補。
+- Plus AndroidでGoogle Sheets更新actionが利用可能か、行追加と読み戻しまでの通常Chat E2Eは未確認。サービスアカウント共有、Cloud Run課金、表の書込範囲、保持・削除方針も未決定。この方式を確定仕様とはしない。
+- 次: row parserとpoll result→Firestore queue importerを副作用のないpure function/adapterとしてテストする。受取専用・原価なしはpurchaseに変換しない。OAuth / public MCP案は審査準備を要する代替候補として保持。
+- No production sheet/resource was created or modified. Billing, old V2, old queue, cutover remain unchanged.
+- Official reference: https://help.openai.com/en/articles/10929079-google-drive-app-and-setup-in-chatgpt ; https://help.openai.com/en/articles/20001256-plugins-in-chatgpt
