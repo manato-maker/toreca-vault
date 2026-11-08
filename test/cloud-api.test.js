@@ -201,7 +201,8 @@ test('Google Sheets intake route requires Scheduler authorization and returns bo
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       ok: true, scheduledAt: '2026-11-08T12:00:00.000Z', seen: 2,
-      enqueued: 1, duplicate: 1, review: 0, skipped: 0
+      enqueued: 1, duplicate: 1, review: 0, skipped: 0,
+      statusChecked: 2, statusFinalized: 1, statusPending: 1
     });
     assert.equal(calls.length, 1);
   }, {
@@ -210,7 +211,10 @@ test('Google Sheets intake route requires Scheduler authorization and returns bo
     sheetsIntakeAuthorize: async (request) => request.headers['x-intake-auth'] === 'trusted',
     sheetsIntakeWorker: async (input) => {
       calls.push(input);
-      return { seen: 2, enqueued: 1, duplicate: 1, review: 0, skipped: 0, rawRows: ['must not leak'] };
+      return {
+        seen: 2, enqueued: 1, duplicate: 1, review: 0, skipped: 0, rawRows: ['must not leak'],
+        statusReconciliation: { checked: 2, finalized: 1, pending: 1, rawRows: ['must not leak'] }
+      };
     }
   });
   assert.equal(calls[0].scheduledAt.toISOString(), '2026-11-08T12:00:00.000Z');

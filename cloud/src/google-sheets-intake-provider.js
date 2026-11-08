@@ -85,7 +85,7 @@ export function createGoogleSheetsIntakeProvider({
       if (!Number.isSafeInteger(rowNumber) || rowNumber < 2 || rowNumber > 100_001) {
         throw new RangeError('rowNumber is outside the allowed intake range');
       }
-      if (!receipt || !['queued', 'duplicate', 'review'].includes(receipt.status)
+      if (!receipt || !['queued', 'processing', 'v2-applied', 'duplicate', 'review'].includes(receipt.status)
         || !/^[a-z0-9-]{1,48}$/.test(String(receipt.resultCode || ''))
         || typeof receipt.acceptedRequestId !== 'string'
         || !Number.isSafeInteger(receipt.processedAtMs) || receipt.processedAtMs < 0) {

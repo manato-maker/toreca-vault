@@ -16,12 +16,15 @@ function fakeFirestore() {
     collection(path) {
       return {
         where(field, operation, expected) {
-          let results = [...docs.entries()].filter(([documentPath, value]) => documentPath.startsWith(`${path}/`) && operation === '==' && value[field] === expected);
+          let results = [...docs.entries()].filter(([documentPath, value]) => {
+            const actual = field.split('.').reduce((current, key) => current?.[key], value);
+            return documentPath.startsWith(`${path}/`) && (operation === '==' ? actual === expected : operation === 'in' && expected.includes(actual));
+          });
           return {
             limit(maximum) {
               return {
                 async get() {
-                  return { docs: results.slice(0, maximum).map(([documentPath, value]) => ({ id: documentPath.slice(path.length + 1), data: () => structuredClone(value) })) };
+                return { docs: results.slice(0, maximum).map(([documentPath, value]) => ({ id: documentPath.slice(path.length + 1), data: () => structuredClone(value) })) };
                 }
               };
             }
@@ -120,4 +123,45 @@ test('pending queue listing is bounded and excludes business-event index rows', 
   await queue.enqueue({ requestId: 'r2', command: lottery('r2'), now: 20 });
   assert.deepEqual(await queue.listPending({ limit: 1 }), [{ requestId: 'r1' }]);
   await assert.rejects(queue.listPending({ limit: 51 }), /limit must be from 1 to 50/);
+});
+
+test('intake receipt references are hashed, bounded, and disappear from the pending reconciliation page after verified readback', async () => {
+  const db = fakeFirestore();
+  const queue = createFirestoreCommandQueue(db);
+  const requestId = 'sheet:purchase:42';
+  const spreadsheetIdHash = 'a'.repeat(64);
+  await queue.enqueue({
+    requestId,
+    command: { requestId, type: 'purchase', product: 'Sample', quantity: 1, unitPrice: 100 },
+    intakeReceipt: { spreadsheetIdHash, rowNumber: 42 },
+    now: 123
+  });
+  const rows = await queue.listIntakeReceipts({ limit: 10 });
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0], {
+    requestId,
+    requestIdHash: '1718000e288369e601ed0ebcc2fc48298a15302a62fb66af667c37e2b8064215',
+    spreadsheetIdHash,
+    rowNumber: 42,
+    receiptState: 'queued'
+  });
+  const stored = await queue.inspectByRequestIdHash(rows[0].requestIdHash);
+  assert.deepEqual(stored.intakeReceipt, { spreadsheetIdHash, rowNumber: 42, state: 'queued', updatedAtMs: 123 });
+  assert.equal(JSON.stringify(stored).includes(spreadsheetIdHash), true);
+  assert.equal(JSON.stringify(stored).includes('raw-sheet-id-value'), false);
+  assert.deepEqual(await queue.setIntakeReceiptStatus(requestId, { state: 'processing', now: 200 }), {
+    updated: true, status: 'processing', duplicate: false
+  });
+  assert.equal((await queue.listIntakeReceipts())[0].receiptState, 'processing');
+  assert.deepEqual(await queue.setIntakeReceiptStatus(requestId, { state: 'final', now: 300 }), {
+    updated: true, status: 'final', duplicate: false
+  });
+  assert.deepEqual(await queue.listIntakeReceipts(), []);
+  assert.deepEqual(await queue.setIntakeReceiptStatus(requestId, { state: 'processing', now: 400 }), {
+    updated: true, status: 'final', duplicate: true
+  });
+  await assert.rejects(queue.enqueue({
+    requestId: 'invalid', command: { requestId: 'invalid', type: 'purchase' },
+    intakeReceipt: { spreadsheetIdHash: 'short', rowNumber: 2 }
+  }), /intake receipt reference is invalid/);
 });

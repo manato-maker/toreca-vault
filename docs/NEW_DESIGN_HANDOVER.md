@@ -783,3 +783,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Sheets intake providerはD:Gへreceiptを書いた後、同じ4セルを再読込して値が一致した場合のみ成功を返す。空欄や不一致の場合はworkerがcursorを進めず同一pageを再試行する。
 - queueへの再送は安定requestIdで冪等。通常Chatの実取引報告、queueからworkerの本番E2E、画像報告、Cloud Run実接続は未検証。
 - Receipt readbackの成功/欠落/不一致テストを追加。`npm test --prefix cloud`: 184 passed, 0 failed, 6 skipped (local Emulator未設定); `npm run check --prefix cloud` passed. GitHub Actions v2-ci #819 passed test/check and Firestore Emulator.
+
+### 2026-11-09 JST — Intake受付からV2結果までのstatus追跡
+
+- Accepted Sheets rows now receive a request correlation embedded in the existing queue item: SHA-256(sheet ID), row number, and a small receipt state. No raw sheet ID is copied into Firestore. The existing 15-minute Sheets worker reconciles terminal queue outcomes; no extra Scheduler job is required.
+- The sheet remains `queued` while the queue is pending or processing, avoiding stale concurrent status regressions. After the command worker has verified the V2 revision/mutation readback, the status reconciler writes `v2-applied` plus `canonical-readback-verified` (or `duplicate`/`review`) to D:G, rereads all four cells, then marks the receipt final in Firestore. Failures leave reconciliation retryable.
+- Local full suite: 188 passed, 0 failed, 7 skipped without local Emulator; `npm run check --prefix cloud` passed. Emulator coverage was added for hashed queue correlation and finalization; CI is pending.
+- No production runtime, Cloud Run, Scheduler, Firestore, Gmail, V2, or billing was connected. Normal Chat real-report/result E2E and screenshot intake remain unverified; the two historical reports are still not queued/not applied.

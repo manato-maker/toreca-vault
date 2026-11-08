@@ -12,6 +12,17 @@ const safeResultCode = (value) => {
   return /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(code) ? code : 'worker-result';
 };
 
+function normalizeIntakeReceipt(value) {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some((key) => !['spreadsheetIdHash', 'rowNumber'].includes(key))
+    || !/^[a-f0-9]{64}$/.test(String(value.spreadsheetIdHash || ''))
+    || !Number.isSafeInteger(value.rowNumber) || value.rowNumber < 2 || value.rowNumber > 100_001) {
+    throw new TypeError('intake receipt reference is invalid');
+  }
+  return { spreadsheetIdHash: value.spreadsheetIdHash, rowNumber: value.rowNumber, state: 'queued' };
+}
+
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -67,12 +78,13 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
   const refForBusinessEvent = (businessEventKeyHash) => db.doc(`${collectionPath}/_event_${businessEventKeyHash}`);
 
   return {
-    async enqueue({ requestId, command, businessEventKey, now = Date.now() }) {
+    async enqueue({ requestId, command, businessEventKey, intakeReceipt: intakeReceiptInput, now = Date.now() }) {
       safeNow(now);
       validateCommand(requestId, command);
       const ref = refFor(requestId);
       const payloadHash = createHash('sha256').update(canonicalJson(command)).digest('hex');
       const normalizedEventKey = normalizeBusinessEventKey(businessEventKey);
+      const intakeReceipt = normalizeIntakeReceipt(intakeReceiptInput);
       const businessEventKeyHash = normalizedEventKey
         ? createHash('sha256').update(normalizedEventKey).digest('hex') : '';
       const businessPayloadHash = normalizedEventKey ? businessFingerprint(command) : '';
@@ -118,6 +130,7 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
           command: clone(command),
           payloadHash,
           ...(businessEventKeyHash ? { businessEventKeyHash } : {}),
+          ...(intakeReceipt ? { intakeReceipt: { ...intakeReceipt, updatedAtMs: now } } : {}),
           status: 'pending',
           attempts: 0,
           createdAtMs: now,
@@ -195,6 +208,55 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
     async inspect(requestId) {
       const snapshot = await refFor(requestId).get();
       return snapshot.exists ? clone(snapshot.data()) : null;
+    },
+
+    async inspectByRequestIdHash(requestIdHash) {
+      if (typeof requestIdHash !== 'string' || !/^[a-f0-9]{64}$/.test(requestIdHash)) {
+        throw new TypeError('requestIdHash is invalid');
+      }
+      const snapshot = await db.doc(`${collectionPath}/${requestIdHash}`).get();
+      return snapshot.exists ? clone(snapshot.data()) : null;
+    },
+
+    async listIntakeReceipts({ limit = 20 } = {}) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new RangeError('intake receipt limit must be from 1 to 50');
+      if (typeof db.collection !== 'function') throw new TypeError('Firestore collection queries are required');
+      const snapshot = await db.collection(collectionPath).where('intakeReceipt.state', 'in', ['queued', 'processing']).limit(limit).get();
+      return snapshot.docs.map((document) => {
+        const row = document.data();
+        const receipt = row.intakeReceipt;
+        if (typeof row.requestId !== 'string' || !row.requestId.trim()
+          || typeof receipt?.spreadsheetIdHash !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.spreadsheetIdHash)
+          || !Number.isSafeInteger(receipt.rowNumber) || receipt.rowNumber < 2 || receipt.rowNumber > 100_001
+          || !['queued', 'processing'].includes(receipt.state)) {
+          throw new Error('Firestore returned an invalid intake receipt reference');
+        }
+        return {
+          requestId: row.requestId,
+          requestIdHash: document.id,
+          spreadsheetIdHash: receipt.spreadsheetIdHash,
+          rowNumber: receipt.rowNumber,
+          receiptState: receipt.state
+        };
+      });
+    },
+
+    async setIntakeReceiptStatus(requestId, { state, now = Date.now() } = {}) {
+      safeNow(now);
+      if (!['queued', 'processing', 'final'].includes(state)) throw new TypeError('intake receipt state is invalid');
+      const ref = refFor(requestId);
+      return db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists) return { updated: false, status: 'missing' };
+        const current = snapshot.data();
+        if (!current.intakeReceipt) return { updated: false, status: 'not-intake' };
+        if (current.intakeReceipt.state === 'final') return { updated: true, status: 'final', duplicate: true };
+        transaction.set(ref, {
+          ...current,
+          intakeReceipt: { ...current.intakeReceipt, state, updatedAtMs: now }
+        });
+        return { updated: true, status: state, duplicate: false };
+      });
     },
 
     async listPending({ limit = 10 } = {}) {

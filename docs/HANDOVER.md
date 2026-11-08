@@ -1167,3 +1167,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - Sheets intake providerは、D:Gへの受付結果書込み後に同じセル範囲を再読込し、status/resultCode/acceptedRequestId/processedAtMsの4値が一致した場合だけreceipt成功を返す。
 - 書込み応答または読戻しが欠落/不一致ならworkerはページcursorを進めず、同じrequestIdで再試行する。queue create-onceにより再送は冪等。
 - Added tests for receipt readback success, missing readback, and mismatched readback. `npm test --prefix cloud`: 184 passed, 0 failed, 6 skipped without local Emulator; `npm run check --prefix cloud` passed. GitHub Actions v2-ci #819 passed both test/check and Firestore Emulator; no live sheet worker or Cloud Run was invoked.
+
+### 2026-11-09 JST — キュー受付から最終結果までの受付行追跡
+
+- Intake起点のqueue commandにsheet ID hash・row numberだけのcorrelation metadataを追加。15分の同じSheets intake workerがqueue状態を照合し、既存のCloud Run workerが完了した結果を専用sheet D:Gへ返す。
+- queue pending/processing中はシートstatusを`queued`のまま保持し、並行処理の古いstatus上書きを避ける。V2 workerが保存後readbackした`v2-applied`またはduplicate/reviewをreceiptへ反映し、Sheets側も同じD:Gを再読込して4値一致を確認してからqueue receiptをfinalにする。失敗時は再試行できる。
+- receipt status/hash/row correlationの単体テスト、queue metadataのFirestore Emulatorテスト、worker routeの集計応答テストを追加。Local cloud suite: 188 passed, 0 failed, 7 skipped (local Emulator未設定); `npm run check --prefix cloud` passed. GitHub Actionsは次のcode commitで実行予定。
+- これはコードとCI fixtureの検証であり、live Cloud Run/Scheduler/Firestore/V2接続ではない。通常Chat実取引E2E/画像報告、V2正本revision2708→最新確認、課金、本番移行は未完。2件はキュー未送信/V2未反映、旧売却キュー未変更。

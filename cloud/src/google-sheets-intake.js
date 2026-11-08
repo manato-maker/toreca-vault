@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/;
@@ -57,7 +58,7 @@ function safeCount(value) {
  * Reads only rows explicitly marked `new`, then uses the durable queue's
  * create-once request/business keys. It never edits source cells A:C.
  */
-export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore, maxRowsPerRun = 20, now = Date.now } = {}) {
+export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore, spreadsheetId, maxRowsPerRun = 20, now = Date.now } = {}) {
   if (!provider || typeof provider.readRows !== 'function' || typeof provider.writeReceipt !== 'function') {
     throw new TypeError('a Google Sheets intake provider is required');
   }
@@ -65,6 +66,10 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
   if (!cursorStore || typeof cursorStore.read !== 'function' || typeof cursorStore.advance !== 'function') {
     throw new TypeError('a durable intake cursor store is required');
   }
+  if (typeof spreadsheetId !== 'string' || !/^[A-Za-z0-9_-]{20,200}$/.test(spreadsheetId)) {
+    throw new TypeError('a dedicated intake spreadsheet ID is required');
+  }
+  const spreadsheetIdHash = createHash('sha256').update(spreadsheetId).digest('hex');
   if (!Number.isSafeInteger(maxRowsPerRun) || maxRowsPerRun < 1 || maxRowsPerRun > 50) {
     throw new RangeError('maxRowsPerRun must be from 1 to 50');
   }
@@ -111,7 +116,8 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
         queued = await queue.enqueue({
           requestId: parsed.requestId,
           command: parsed.command,
-          businessEventKey: parsed.businessEventKey
+          businessEventKey: parsed.businessEventKey,
+          intakeReceipt: { spreadsheetIdHash, rowNumber: row.rowNumber }
         });
       } catch {
         // Leave the source row as `new`; a later tick retries with the same requestId.

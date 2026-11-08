@@ -56,3 +56,31 @@ test('pending queue pages return only pending command request IDs', { skip: skip
     await db.terminate();
   }
 });
+
+test('Firestore intake receipt correlation survives until the final sheet readback is confirmed', { skip: skipReason }, async () => {
+  const { Firestore } = await import('@google-cloud/firestore');
+  const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
+  const db = new Firestore({ projectId });
+  const namespace = 'sheetsIntakeReceiptTestRuns/' + randomUUID();
+  const collectionPath = namespace + '/commands';
+  const parent = db.doc(namespace);
+  try {
+    const queue = createFirestoreCommandQueue(db, collectionPath);
+    const requestId = 'sheet-' + randomUUID();
+    const intakeReceipt = { spreadsheetIdHash: 'a'.repeat(64), rowNumber: 23 };
+    await queue.enqueue({ requestId, command: { requestId, type: 'purchase' }, intakeReceipt, now: 100 });
+    const page = await queue.listIntakeReceipts({ limit: 10 });
+    assert.equal(page.length, 1);
+    assert.equal(page[0].requestId, requestId);
+    assert.equal(page[0].rowNumber, 23);
+    assert.equal(page[0].receiptState, 'queued');
+    assert.equal((await queue.inspectByRequestIdHash(page[0].requestIdHash)).intakeReceipt.spreadsheetIdHash, intakeReceipt.spreadsheetIdHash);
+    assert.deepEqual(await queue.setIntakeReceiptStatus(requestId, { state: 'processing', now: 200 }), { updated: true, status: 'processing', duplicate: false });
+    assert.equal((await queue.listIntakeReceipts({ limit: 10 }))[0].receiptState, 'processing');
+    assert.deepEqual(await queue.setIntakeReceiptStatus(requestId, { state: 'final', now: 300 }), { updated: true, status: 'final', duplicate: false });
+    assert.deepEqual(await queue.listIntakeReceipts({ limit: 10 }), []);
+  } finally {
+    await db.recursiveDelete(parent);
+    await db.terminate();
+  }
+});

@@ -5,6 +5,7 @@ import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
+import { createGoogleSheetsIntakeStatusProcessor } from './google-sheets-intake-status.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
 import { createFirestoreGoogleSheetsIntakeCursorStore } from './firestore-google-sheets-intake-cursor.js';
 import {
@@ -125,7 +126,14 @@ export function createServer({
         for (const key of ['seen', 'enqueued', 'duplicate', 'review', 'skipped']) {
           counts[key] = Number.isSafeInteger(result?.[key]) && result[key] >= 0 ? result[key] : 0;
         }
-        return send(response, 200, { ok: true, scheduledAt: scheduledAt.toISOString(), ...counts });
+        const body = { ok: true, scheduledAt: scheduledAt.toISOString(), ...counts };
+        if (result?.statusReconciliation && typeof result.statusReconciliation === 'object') {
+          for (const key of ['checked', 'finalized', 'pending']) {
+            body[`status${key[0].toUpperCase()}${key.slice(1)}`] = Number.isSafeInteger(result.statusReconciliation[key])
+              && result.statusReconciliation[key] >= 0 ? result.statusReconciliation[key] : 0;
+          }
+        }
+        return send(response, 200, body);
       } catch {
         return send(response, 503, { ok: false, error: 'Google Sheets intake failed' });
       }
@@ -446,7 +454,15 @@ export async function start() {
       getAccessToken: async () => (await sheetsClient.getAccessToken()).token
     });
     const cursorStore = createFirestoreGoogleSheetsIntakeCursorStore(firestore, spreadsheetId);
-    sheetsIntakeWorker = createGoogleSheetsIntakeProcessor({ provider, queue: commandQueue, cursorStore, maxRowsPerRun: 20 });
+    const intakeWorker = createGoogleSheetsIntakeProcessor({
+      provider, queue: commandQueue, cursorStore, spreadsheetId, maxRowsPerRun: 20
+    });
+    const statusWorker = createGoogleSheetsIntakeStatusProcessor({ provider, queue: commandQueue, spreadsheetId, maxRowsPerRun: 20 });
+    sheetsIntakeWorker = async (input) => {
+      const intake = await intakeWorker(input);
+      const statusReconciliation = await statusWorker(input);
+      return { ...intake, statusReconciliation };
+    };
   }
   const server = createServer({
     store,
