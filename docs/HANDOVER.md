@@ -1174,3 +1174,11 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - queue pending/processing中はシートstatusを`queued`のまま保持し、並行処理の古いstatus上書きを避ける。V2 workerが保存後readbackした`v2-applied`またはduplicate/reviewをreceiptへ反映し、Sheets側も同じD:Gを再読込して4値一致を確認してからqueue receiptをfinalにする。失敗時は再試行できる。
 - receipt status/hash/row correlationの単体テスト、queue metadataのFirestore Emulatorテスト、worker routeの集計応答テストを追加。Local cloud suite: 188 passed, 0 failed, 7 skipped (local Emulator未設定); `npm run check --prefix cloud` passed. GitHub Actions v2-ci #821 passed test/check and Firestore Emulator.
 - これはコードとCI fixtureの検証であり、live Cloud Run/Scheduler/Firestore/V2接続ではない。通常Chat実取引E2E/画像報告、V2正本revision2708→最新確認、課金、本番移行は未完。2件はキュー未送信/V2未反映、旧売却キュー未変更。
+
+
+### 2026-11-09 JST — 受付から最終receiptまでのFirestore Emulator統合確認
+
+- 受付workerが専用sheet行をFirestore queueへ登録し、command workerがテスト用V2 snapshotを保存・再読込し、最終status reconcilerが同じ行へv2-applied / canonical-readback-verifiedを返してcorrelationをfinalにする合成経路テストを追加。
+- GitHub Actions v2-ci #823: 通常test/checkとFirestore Emulator jobの両方が成功。ローカル全体は188 passed、0 failed、8 skipped（Emulator testはCIで実行）；npm run check --prefix cloud passed。
+- 境界: 実Firestore Emulatorでqueue/correlationを検証したが、Sheets providerとV2 snapshot storeはtest double。Google Sheets、Cloud Run、Scheduler、OAuth、V2正本には接続していない。通常Chatの実取引・画像報告E2Eも未検証。
+- PR #105 head 5e230653e11081e9fa3e9de2122c9bdd67129bdd はDraft/open/unmerged/undeployed。開発進捗の概算は約94%で据置（実装・テスト範囲であり本番稼働率ではない）。V2正本exportはschemaVersion 2/revision 2708、アプリ画面revision 2709との一致は未確認。未登録2報告はqueue未送信・V2未反映、既存queueと未処理売却は変更なし。課金・本番切替なし。
