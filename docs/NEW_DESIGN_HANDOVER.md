@@ -753,3 +753,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - `TV2_ENABLE_GOOGLE_SHEETS_INTAKE` is false in `.env.example`; runtime also requires the queue gate and Scheduler OIDC settings. All production flags remain off. No spreadsheet, account grant, billing, or deployment was created. Standard Chat to sheet row write and end-to-end result visibility remain unverified, so ordinary reports are still not considered queued.
 - Implementation/test progress estimate: approximately 95% (code and local tests only), not operational readiness. V2 canonical export state remains unchanged: schemaVersion 2/revision 2708 export trails screen revision 2709 by one; no V2 writes. Two reported items remain confirmed/unregistered/not queued/not applied. Existing queue untouched; pending sales not replayed.
 - Next: verify the user-facing normal Chat Google Sheets write/read action on Android; create the isolated intake sheet only when that path is confirmed; separately review Cloud Run identity, Scheduler, active billing requirement, cost estimate, service access and production gates. Until then do not enable flags, deploy or migrate.
+
+
+### 2026-11-08 JST — 専用受付シート準備・CI確認
+
+- Google Driveに専用Spreadsheet「Toreca Vault New App Intake」を作成し、`Intake` tabとA1:G1の7列headerを設定。A2:G2以降にデータ行が無いことを再読込で確認。既存V2 Command Queueとは別ファイルで、報告データは投入していない。
+- GitHub Actions v2-ci #814 passed on head `82b8230705d4a3a3534d2fb1fcf968fd22a825c7`; `test` and Firestore Emulator jobs both succeeded. PR #105 remains open, Draft, unmerged, undeployed.
+- Google Drive/Sheets access is available in this Work session, but this does not prove the user's standard ChatGPT Android client can write rows. Service-account permission, Cloud Run, Scheduler, OAuth, production flags, and billing remain unset. No queue delivery or V2 update is claimed.
+- Next: test a harmless write/read from ordinary ChatGPT Android. Only after that succeeds connect a dedicated Cloud Run identity to this sheet. Do not enter a real transaction until queue receipt/status and retry behavior are end-to-end verified.

@@ -1140,3 +1140,11 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - Runtime flagsはすべて初期無効。production sheetやservice account grant、billing、deploymentは作成・変更なし。通常Chatの書込・結果確認E2Eが未検証なので、報告内容はqueue送信済みとして扱わない。
 - 進捗概算はコード/ローカルテスト範囲で約95%。運用可能率ではない。V2正本JSONはrev2708のまま画面rev2709より古く、2報告は内容確認済み/queue未送信/V2未反映/事後readbackなし。旧queueは未変更、売却行の再投入なし。
 - 次工程はPlus Android通常ChatからのGoogle Sheets更新可否とreadback確認。可能な場合に限り、専用sheet作成と接続設計へ進む。課金・production接続・migration・cutoverは未実施。
+
+
+### 2026-11-08 JST — 専用受付シート準備・CI確認
+
+- Google Driveに専用Spreadsheet「Toreca Vault New App Intake」を作成し、`Intake` tabとA1:G1のheaderを設定。A2:G2以降は空であることを再読込確認。既存V2 Queueとは別ファイルで、取引報告は投入していない。
+- GitHub Actions v2-ci #814 passed on head `82b8230705d4a3a3534d2fb1fcf968fd22a825c7`; testとFirestore Emulatorの両方成功。PR #105はopen/Draft/unmerged/undeployed。
+- WorkセッションのGoogle Sheets接続は通常ChatGPT Androidでの書込可否を保証しない。service-account権限、Cloud Run、Scheduler、OAuth、production flags、billingは未設定。queue受付済みやV2反映済みとは扱わない。
+- 次は通常ChatGPT Androidから安全なテスト行を追加/読み戻しできるか確認し、成功後にだけCloud Run identityを接続する。実取引報告はqueue receipt/statusと再試行動作のE2E確認まで投入しない。
