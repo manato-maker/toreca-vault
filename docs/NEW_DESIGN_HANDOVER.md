@@ -659,3 +659,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 合成データのFirestore Emulator testでChat HTTP endpointが先に応募を受け付け、その後Gmail classifier→builder→outboxから異なるrequestIdで同一応募を送ったとき、Firestore上のcommand本体とbusiness-event indexが各1件であることを確認。ID欠落と同一キー・異なるcommand内容もreview/collision扱いで検証した。
 - 検証: ローカル cloud suite 161 passed / 0 failed / 5 skipped（local Emulatorなし）、check成功。GitHub Actions v2-ci #796のtest/checkとFirestore Emulatorがsuccess。Emulator内の該当統合testはpass、0 skipped。
 - Live Gmail/OAuthからの呼出、通常Chatとの実接続、production Cloud Run/Scheduler、V2正本export/migration、backup保持とproduction復元、監視/費用実測は未完了。V2正本未取得。進捗約94%は実装・テストの概算で本番readinessではない。既存V2、Apps Script、現行queue、売却保留、課金設定に変更なし。
+
+### 2026-11-08 JST — Google Cloud無料枠/backup費用の公式確認
+
+- 現行Google公式料金表: Firestore Standard無料枠は1 GiB、50,000 reads/day、20,000 writes/day、20,000 deletes/dayだが、Backup/Restore/PITR/TTLは無料利用対象外で課金有効化が必要。Cloud Runの公表無料枠は月2M requests等、Cloud Schedulerはbilling accountごと3 jobs/month。1件のdispatcher jobはjob数の無料枠内だが、全体無料を保証しない。
+- Cloud Storage Always Freeは標準storage 5 GB-months等だがUS-WEST1/US-CENTRAL1/US-EAST1限定。Tokyo/Osaka bucketはこの無料保存枠対象外。したがって日本リージョンの永続backupは無料前提にできず、Firestore managed backup/restoreも課金なしでは使えない。
+- 実データ容量・実API利用量・既存billing accountの使用量が未確認で、実月額は未算出。billingは有効化しておらず、backup保存先・保持日数・削除lifecycleも確定/適用していない。90日削除ポリシー等は承認前に適用しない。
+- Official sources: https://cloud.google.com/firestore/pricing ; https://cloud.google.com/run/pricing ; https://cloud.google.com/scheduler/pricing ; https://cloud.google.com/storage/pricing
