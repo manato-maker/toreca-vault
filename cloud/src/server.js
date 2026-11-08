@@ -5,6 +5,10 @@ import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import {
+  createFirestoreSchedulerHeartbeatStore,
+  evaluateSchedulerHealth
+} from './scheduler-heartbeat.js';
+import {
   CanonicalNotInitialized,
   RevisionConflict,
   createFirestoreStore
@@ -71,6 +75,7 @@ export function createServer({
   commandQueue = null,
   commandWorker = null,
   workerAuthorize = null,
+  schedulerHealth = null,
   schedulerTick = null,
   schedulerAuthorize = null,
   apiToken,
@@ -187,6 +192,27 @@ export function createServer({
           canonicalInitialized: false,
           writesEnabled: Boolean(writesEnabled)
         });
+      }
+    }
+
+    if (path === '/health/scheduler' && request.method === 'GET') {
+      if (typeof schedulerHealth !== 'function') {
+        return send(response, 503, { ok: false, error: 'scheduler health is not configured' });
+      }
+      try {
+        const health = await schedulerHealth();
+        const body = {
+          ok: Boolean(health?.healthy),
+          stale: health ? Boolean(health.stale) : true,
+          lastScheduledAtMs: Number.isSafeInteger(health?.lastScheduledAtMs) ? health.lastScheduledAtMs : null,
+          lastCompletedAtMs: Number.isSafeInteger(health?.lastCompletedAtMs) ? health.lastCompletedAtMs : null,
+          ageMs: Number.isSafeInteger(health?.ageMs) ? health.ageMs : null,
+          latestMissedSlots: Number.isSafeInteger(health?.latestMissedSlots) ? health.latestMissedSlots : 0,
+          failedJobCount: Number.isSafeInteger(health?.failedJobCount) ? health.failedJobCount : 0
+        };
+        return send(response, body.ok ? 200 : 503, body);
+      } catch {
+        return send(response, 503, { ok: false, error: 'scheduler health unavailable' });
       }
     }
 
@@ -339,6 +365,7 @@ export async function start() {
   const { createFirestoreCommandQueue } = await import('./firestore-command-queue.js');
   const commandQueue = createFirestoreCommandQueue(firestore);
   const store = createFirestoreStore(firestore, documentPath);
+  const heartbeatStore = createFirestoreSchedulerHeartbeatStore(firestore);
   const writesEnabled = process.env.TV2_ENABLE_WRITES === 'true';
   const commandsEnabled = process.env.TV2_ENABLE_COMMAND_QUEUE === 'true';
   const commandWorkerEnabled = process.env.TV2_ENABLE_COMMAND_WORKER === 'true';
@@ -365,6 +392,7 @@ export async function start() {
     commandQueue,
     commandWorker,
     workerAuthorize,
+    schedulerHealth: async () => evaluateSchedulerHealth(await heartbeatStore.read()),
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
     writesEnabled,
