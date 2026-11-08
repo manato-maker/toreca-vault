@@ -798,3 +798,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 - GitHub Actions v2-ci #823 passed both the normal test/check job and the Firestore Emulator job. Local suite: 188 passed, 0 failed, 8 skipped (Emulator tests ran in CI); npm run check --prefix cloud passed.
 - Scope: Firestore queue/correlation used the real Emulator; the Sheets provider and V2 snapshot store were test doubles. No live Sheets, Cloud Run, Scheduler, OAuth, or canonical V2 connection was made. Real transaction or screenshot reporting from ordinary ChatGPT remains unverified.
 - PR #105 head 5e230653e11081e9fa3e9de2122c9bdd67129bdd remains Draft/open/unmerged/undeployed. The development estimate remains about 94% of implementation/test work, not production readiness. The schemaVersion 2 export is revision 2708 while the app screen showed 2709; canonical latest revision is unconfirmed. The two historical reports remain unqueued/unapplied; old queue and pending sales were untouched. No billing or production cutover was enabled.
+
+
+### 2026-11-09 JST — Verify intake row identity before writing receipts
+
+- Before writing a queued or terminal receipt to D:G, the Sheets provider rereads the target row A:D and verifies that its A-column request ID still matches the queue's accepted request ID. A mismatch fails closed and leaves the Firestore receipt correlation retryable, preventing a moved/replaced row from receiving another command's status.
+- Added coverage for source-row mismatch and retained write/readback failure coverage. Local full suite: 189 passed, 0 failed, 8 skipped (Emulator cases run in CI); npm run check --prefix cloud passed. GitHub Actions v2-ci #825 passed normal test/check and Firestore Emulator jobs.
+- This is code/CI verification, not a live Sheets/Cloud Run test. PR #105 remains Draft/open/unmerged/undeployed. No V2/old-queue/pending-sale/billing/cutover changes; normal Chat transaction/screenshot E2E and latest canonical V2 export remain unverified.
