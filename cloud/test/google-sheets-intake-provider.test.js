@@ -69,7 +69,8 @@ test('receipt writes update only D:G and require matching readback', async () =>
     fetchImpl: async (url, init) => {
       requests.push({ url: String(url), init });
       if (requests.length === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
-      if (requests.length === 2) return ok({ updatedCells: 4 });
+      if (requests.length === 2) return ok({ values: [['request:1', '{"requestId":"request:1"}', '', 'new']] });
+      if (requests.length === 3) return ok({ updatedCells: 4 });
       return ok({ values: [['queued', 'accepted', 'request:1', 123]] });
     }
   });
@@ -77,13 +78,15 @@ test('receipt writes update only D:G and require matching readback', async () =>
     status: 'queued', resultCode: 'accepted', acceptedRequestId: 'request:1', processedAtMs: 123
   });
   assert.deepEqual(result, { updated: true });
-  assert.match(requests[1].url, /Intake!D7%3AG7/);
-  assert.equal(requests[1].init.method, 'PUT');
-  assert.deepEqual(JSON.parse(requests[1].init.body), {
+  assert.match(requests[1].url, /Intake!A7%3AD7/);
+  assert.equal(requests[1].init.method, 'GET');
+  assert.match(requests[2].url, /Intake!D7%3AG7/);
+  assert.equal(requests[2].init.method, 'PUT');
+  assert.deepEqual(JSON.parse(requests[2].init.body), {
     majorDimension: 'ROWS', values: [['queued', 'accepted', 'request:1', 123]]
   });
-  assert.equal(requests[2].init.method, 'GET');
-  assert.match(requests[2].url, /Intake!D7%3AG7/);
+  assert.equal(requests[3].init.method, 'GET');
+  assert.match(requests[3].url, /Intake!D7%3AG7/);
 });
 
 test('receipt write fails closed when readback is missing or differs', async () => {
@@ -95,7 +98,8 @@ test('receipt write fails closed when readback is missing or differs', async () 
       fetchImpl: async () => {
         calls++;
         if (calls === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
-        if (calls === 2) return ok({ updatedCells: 4 });
+        if (calls === 2) return ok({ values: [['request:1', '{"requestId":"request:1"}', '', 'new']] });
+        if (calls === 3) return ok({ updatedCells: 4 });
         return ok(values ? { values } : {});
       }
     });
@@ -103,6 +107,23 @@ test('receipt write fails closed when readback is missing or differs', async () 
       status: 'queued', resultCode: 'accepted', acceptedRequestId: 'request:1', processedAtMs: 123
     }), /readback did not match/);
   }
+});
+
+test('receipt write refuses to update a row whose source request ID no longer matches', async () => {
+  let calls = 0;
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async () => {
+      calls++;
+      if (calls === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      return ok({ values: [['request:other', '{"requestId":"request:other"}', '', 'new']] });
+    }
+  });
+  await assert.rejects(provider.writeReceipt(9, {
+    status: 'v2-applied', resultCode: 'canonical-readback-verified', acceptedRequestId: 'request:1', processedAtMs: 123
+  }), /request ID changed/);
+  assert.equal(calls, 2);
 });
 
 test('provider rejects unsafe token, row bounds, invalid receipt, and API errors without returning response body', async () => {
