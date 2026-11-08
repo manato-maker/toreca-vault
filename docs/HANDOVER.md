@@ -1062,3 +1062,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - Driveのcreate-onceを維持する候補設計: `files.generateIds`のIDをFirestoreのstable backup-key registryへtransactionalに保存し、そのIDでDrive fileを作成。競合/再試行は同じIDの409とSHA-256 readbackで照合。Firestore registryは引き続きGoogle Cloudサービスなのでactive billing account要件が残る。Firestore managed Backup/Restore機能は利用せず、application-generated JSON backupをDriveへ保存する案。
 - Google Cloud projectはactive Cloud Billing accountへリンクしないと、free tier範囲だけの利用でもGoogle Cloud resourceを使えない。従って「利用料0円の可能性」と「課金を有効にしなくても動作」は別。現在billingは未有効化。GCS Japan保存、retention period、自動削除lifecycle、Drive接続はいずれも未設定。
 - Status: Drive案は検討中、仕様変更/実装/接続/削除なし。保持容量を超えた場合の扱いと保持期間は未決定。Sources: https://developers.google.com/workspace/gmail/api/reference/quota ; https://developers.google.com/workspace/drive/api/guides/limits ; https://developers.google.com/workspace/drive/api/guides/create-file ; https://support.google.com/drive/answer/9312312 ; https://docs.cloud.google.com/billing/docs/how-to/manage-billing-account
+
+
+### 2026-11-08 JST — Drive backup adapter prototype (unconnected)
+
+- Added an optional Google Drive backup repository candidate plus a Firestore transactional stable-key → generated Drive file ID registry. Retries reuse the reserved ID; an existing file is accepted only when the key hash and payload SHA-256 match. Readback verifies payload bytes/hash, and payload size is bounded at 7.5 MB.
+- Verification: local cloud suite 166 passed, 0 failed, 5 skipped (local Firestore Emulator is unavailable); `npm run check --prefix cloud` passed. PR #105 v2-ci #803 passed both the full test/check job and the Firestore Emulator job, including the concurrent registry reservation test.
+- This is an unconnected candidate implementation. It is not wired to backup export or runtime, and has not been tested against Google Drive API/OAuth. No Drive folder, OAuth grant, retention, or deletion lifecycle was configured; no backup data was written. Existing backup location and Gmail schedule are unchanged.
+- Progress remains about 94% implementation/test work, not production readiness. The V2 canonical export remains unavailable/unverified. Production authentication/runtime, normal ChatGPT intake, live Gmail/OAuth, recovery drill, monitoring, cost measurements, billing approval, and migration validation remain outstanding.
+- Cost note: Drive may use available user storage quota, but Cloud Run/Firestore still require an active billing account linked to the project. No billing configuration was enabled and actual free-tier fit remains unmeasured.
