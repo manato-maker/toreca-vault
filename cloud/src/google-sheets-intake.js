@@ -57,23 +57,35 @@ function safeCount(value) {
  * Reads only rows explicitly marked `new`, then uses the durable queue's
  * create-once request/business keys. It never edits source cells A:C.
  */
-export function createGoogleSheetsIntakeProcessor({ provider, queue, maxRowsPerRun = 20, now = Date.now } = {}) {
+export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore, maxRowsPerRun = 20, now = Date.now } = {}) {
   if (!provider || typeof provider.readRows !== 'function' || typeof provider.writeReceipt !== 'function') {
     throw new TypeError('a Google Sheets intake provider is required');
   }
   if (!queue || typeof queue.enqueue !== 'function') throw new TypeError('a durable command queue is required');
+  if (!cursorStore || typeof cursorStore.read !== 'function' || typeof cursorStore.advance !== 'function') {
+    throw new TypeError('a durable intake cursor store is required');
+  }
   if (!Number.isSafeInteger(maxRowsPerRun) || maxRowsPerRun < 1 || maxRowsPerRun > 50) {
     throw new RangeError('maxRowsPerRun must be from 1 to 50');
   }
   if (typeof now !== 'function') throw new TypeError('now must be a function');
 
   return async function processIntake() {
-    const rows = await provider.readRows({ limit: maxRowsPerRun });
-    if (!Array.isArray(rows) || rows.length > maxRowsPerRun) throw new Error('Google Sheets returned an invalid row page');
+    const cursor = await cursorStore.read();
+    const startRow = cursor?.nextRow;
+    if (!Number.isSafeInteger(startRow) || startRow < 2 || startRow > 100_002) {
+      throw new Error('Google Sheets intake cursor is invalid');
+    }
     const result = { seen: 0, enqueued: 0, duplicate: 0, review: 0, skipped: 0 };
+    if (startRow === 100_002) return result;
+    const limit = Math.min(maxRowsPerRun, 100_002 - startRow);
+    const rows = await provider.readRows({ startRow, limit });
+    if (!Array.isArray(rows) || rows.length > limit) throw new Error('Google Sheets returned an invalid row page');
 
     for (const row of rows) {
-      if (!Number.isSafeInteger(row?.rowNumber) || row.rowNumber < 2) throw new Error('Google Sheets returned an invalid row number');
+      if (!Number.isSafeInteger(row?.rowNumber) || row.rowNumber !== startRow + result.skipped + result.seen) {
+        throw new Error('Google Sheets returned an invalid row sequence');
+      }
       const status = String(row.values?.[3] ?? '').trim();
       if (status !== 'new') {
         result.skipped++;
@@ -130,6 +142,11 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, maxRowsPerR
         });
         result.review++;
       }
+    }
+
+    if (rows.length > 0) {
+      const advanced = await cursorStore.advance({ expectedNextRow: startRow, nextRow: startRow + rows.length });
+      if (!advanced) throw new Error('Google Sheets intake cursor changed during processing');
     }
 
     return Object.fromEntries(Object.entries(result).map(([key, value]) => [key, safeCount(value)]));

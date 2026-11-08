@@ -6,6 +6,7 @@ import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
+import { createFirestoreGoogleSheetsIntakeCursorStore } from './firestore-google-sheets-intake-cursor.js';
 import {
   createFirestoreSchedulerHeartbeatStore,
   evaluateSchedulerHealth
@@ -444,7 +445,8 @@ export async function start() {
       spreadsheetId,
       getAccessToken: async () => (await sheetsClient.getAccessToken()).token
     });
-    sheetsIntakeWorker = createGoogleSheetsIntakeProcessor({ provider, queue: commandQueue, maxRowsPerRun: 20 });
+    const cursorStore = createFirestoreGoogleSheetsIntakeCursorStore(firestore, spreadsheetId);
+    sheetsIntakeWorker = createGoogleSheetsIntakeProcessor({ provider, queue: commandQueue, cursorStore, maxRowsPerRun: 20 });
   }
   const server = createServer({
     store,

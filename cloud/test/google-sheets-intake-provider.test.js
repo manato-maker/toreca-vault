@@ -44,6 +44,23 @@ test('wrong spreadsheet title or missing intake tab fails closed before reading 
   }
 });
 
+test('provider reads the bounded page from the durable append cursor row', async () => {
+  const requests = [];
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async (url) => {
+      requests.push(String(url));
+      if (requests.length === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      return ok({ values: [['sheet:later:1', '{"requestId":"sheet:later:1","type":"purchase"}', '', 'new']] });
+    }
+  });
+  const rows = await provider.readRows({ startRow: 42, limit: 20 });
+  assert.equal(rows[0].rowNumber, 42);
+  assert.match(requests[1], /Intake!A42%3AD61/);
+  await assert.rejects(provider.readRows({ startRow: 1 }), /startRow/);
+});
+
 test('receipt writes update only D:G and require a four-cell API acknowledgement', async () => {
   const requests = [];
   const provider = createGoogleSheetsIntakeProvider({

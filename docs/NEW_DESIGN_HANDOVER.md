@@ -769,3 +769,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - これで通常Chat Androidから接続済みGoogle Driveアプリを使った基本write/readは確認できた。ただしChatが取引報告を安全なcommand JSONへ変換する処理、通常Chat→queue→worker→結果表示のE2E、スクリーンショット報告はまだ未検証。テスト値はqueueに送信していない。
 - 通常Chatの入力経路は「Google Driveアプリ＋専用受付シート」で表面上の基本接続を検証済み、backend連携は未実装/未接続として扱う。通常Chatの投稿のみで取引登録できるという完成条件は未達。
 - 次工程: Cloud Run service identity、Scheduler OIDC、Firestore queueの接続仕様と具体的な費用見積りをレビュー可能にする。Cloud billing有効化・deployment・service-account共有はユーザー承認前に行わない。受取のみ/原価計上なしcommandと処理結果readback E2Eも引き続き未完了。
+
+### 2026-11-08 JST — IntakeのFirestoreページカーソル
+
+- 通常Chat AndroidからGoogle Driveアプリ経由で専用sheet A2にテスト値を書き、読み戻せることを確認。Workで同値を再確認後、A2のみクリアし、header保持と空データ行を確認した。これは基本write/readだけで、実取引をqueueに送っていない。
+- intakeが常に先頭20行だけを見て以後の新しい行を見落とす問題を解消するため、Firestoreにページカーソルを追加。保存するのはspreadsheet IDのhash、nextRow、generation、timestampだけ。連続20行を処理し、全receipt完了後にCAS advanceする。queue/receiptが失敗すると位置を進めず、再実行はstable requestIdとbusinessEventKeyで冪等。
+- append-only運用を前提とする。シート上で過去行をsort/delete/insertせず、訂正は新行・新requestIdで行う。データやcommand内容はcursor storeに保存しない。
+- Local check passed; full cloud suite 183 passed/0 failed/6 skipped (local Firestore Emulator未設定)。Firestore Emulator用cursor競合テストを追加済み、GitHub CIは次のcode commitで確認する。
+- 運用未完: normal Chat command JSON生成・queue反映・15分処理・結果表示E2E、Cloud Run/Scheduler/Firestore接続、OAuth/Service Account access、billing approval、canonical V2最新export/migration、receipt-only no-cost command。production flagsはoff、V2/旧Queueは変更なし。

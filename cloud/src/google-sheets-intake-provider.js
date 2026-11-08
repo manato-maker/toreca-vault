@@ -64,17 +64,20 @@ export function createGoogleSheetsIntakeProvider({
   }
 
   return {
-    async readRows({ limit = 20 } = {}) {
+    async readRows({ startRow = 2, limit = 20 } = {}) {
+      if (!Number.isSafeInteger(startRow) || startRow < 2 || startRow > 100_001) {
+        throw new RangeError('startRow is outside the allowed intake range');
+      }
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_ROWS) throw new RangeError('row limit must be from 1 to 50');
       await verifyTarget();
-      const range = encodeURIComponent(`${SHEET_NAME}!A2:D${limit + 1}`);
+      const range = encodeURIComponent(`${SHEET_NAME}!A${startRow}:D${startRow + limit - 1}`);
       const url = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
       const body = await request(url, { method: 'GET' }, 'Google Sheets intake read');
       if (!Array.isArray(body.values)) return [];
       if (body.values.length > limit) throw new Error('Google Sheets returned more rows than requested');
       return body.values.map((values, index) => {
         if (!Array.isArray(values)) throw new Error('Google Sheets returned a malformed row');
-        return { rowNumber: index + 2, values: values.slice(0, 4) };
+        return { rowNumber: index + startRow, values: values.slice(0, 4) };
       });
     },
 

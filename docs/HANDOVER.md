@@ -1154,3 +1154,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - ユーザーが通常Chatから専用受付シート`Intake!A2`へ`normal-chat-smoke-test`を書き込み、読み戻しに成功したと報告。Work側で同値を再確認し、A2だけ空に戻した。再読込でheader保持とA2:G3の空状態を確認。
 - 通常Chat AndroidのGoogle Driveアプリを使った基本write/readは確認済み。取引報告→command JSON生成→Firestore queue→worker→結果readbackの実運用E2Eと画像報告は未確認。smoke testはqueueに投入していない。
 - Chat-only登録の完成条件は未達。今後はCloud Run identity/Scheduler OIDC/Firestore接続案と費用見積りを固める。billing有効化、deployment、service-account共有は承認前に行わない。受取のみで原価を計上しないcommandも未実装。
+
+### 2026-11-08 JST — 受付シートの再開カーソル
+
+- 通常Chatの基本write/readは確認済み。運用時に古い行が先頭20件を占有し、新しい報告が処理されなくなる問題を防ぐため、sheet ID hashとnextRowのみを持つFirestore CAS cursorを追加。20行ごとの連続pageを読み、各行のreceiptが完了してからカーソルを進める。queue/receipt失敗なら同じpageを再試行し、queueのstable requestIdで重複を防ぐ。
+- シートはappend-only前提。過去行の並べ替え・削除・カーソル通過後の編集はしない。訂正は新しいrequestIdの新規行として送る。
+- `npm run check --prefix cloud` passed。Full local cloud suite: 183 passed, 0 failed, 6 skipped because `FIRESTORE_EMULATOR_HOST` is not configured. New Emulator test covers concurrent cursor CAS/resume; CI pending.
+- Normal Chat→Sheets smoke testは成功済みだが、report-to-command JSON、Firestore queue、15分worker、Chatでの結果提示のE2Eは未検証。通常Chatだけでの登録完成条件は未達。Cloud billing、deployment、service-account共有は未実施。V2 revision 2708 exportはscreen 2709より古いまま。2報告は未キュー/未反映。

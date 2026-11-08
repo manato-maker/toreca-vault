@@ -15,6 +15,19 @@ function fakeProvider(rows) {
   };
 }
 
+function fakeCursorStore(startRow = 2) {
+  let nextRow = startRow;
+  return {
+    async read() { return { nextRow }; },
+    async advance({ expectedNextRow, nextRow: updatedNextRow }) {
+      if (nextRow !== expectedNextRow) return false;
+      nextRow = updatedNextRow;
+      return true;
+    },
+    current() { return nextRow; }
+  };
+}
+
 test('new purchase row enqueues once and writes only a bounded receipt', async () => {
   const command = { requestId: 'sheet:purchase:1', type: 'purchase', product: '30th CELEBRATION', quantity: 1 };
   const provider = fakeProvider([row(command.requestId, command)]);
@@ -22,6 +35,7 @@ test('new purchase row enqueues once and writes only a bounded receipt', async (
   const run = createGoogleSheetsIntakeProcessor({
     provider,
     queue: { async enqueue(input) { calls.push(input); return { accepted: true, duplicate: false, status: 'pending' }; } },
+    cursorStore: fakeCursorStore(),
     now: () => 1234
   });
   assert.deepEqual(await run(), { seen: 1, enqueued: 1, duplicate: 0, review: 0, skipped: 0 });
@@ -47,8 +61,10 @@ test('retries use the same durable request ID and a repeated explicit lottery id
       return { accepted: true, duplicate: false, status: 'pending' };
     }
   };
-  const run = createGoogleSheetsIntakeProcessor({ provider, queue, now: () => 2000 });
+  const cursorStore = fakeCursorStore();
+  const run = createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore, now: () => 2000 });
   assert.deepEqual(await run(), { seen: 2, enqueued: 1, duplicate: 1, review: 0, skipped: 0 });
+  assert.equal(cursorStore.current(), 4);
   assert.match(provider.receipts[1].resultCode, /duplicate/);
   assert.equal(provider.receipts[1].acceptedRequestId, first.requestId);
 });
@@ -61,7 +77,8 @@ test('malformed commands, mismatched IDs, and missing lottery IDs route to revie
     row('sheet:lottery:missing', { requestId: 'sheet:lottery:missing', type: 'lottery' }, '', 'new', 5)
   ]);
   let queueCalls = 0;
-  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { queueCalls++; } }, now: () => 3000 });
+  const cursorStore = fakeCursorStore();
+  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { queueCalls++; } }, cursorStore, now: () => 3000 });
   assert.deepEqual(await run(), { seen: 4, enqueued: 0, duplicate: 0, review: 4, skipped: 0 });
   assert.equal(queueCalls, 0);
   assert.deepEqual(provider.receipts.map((item) => item.status), ['review', 'review', 'review', 'review']);
@@ -71,16 +88,18 @@ test('malformed commands, mismatched IDs, and missing lottery IDs route to revie
 test('only explicit new rows are processed and batch bounds are enforced', async () => {
   const provider = fakeProvider([row('sheet:done:1', { requestId: 'sheet:done:1', type: 'purchase' }, '', 'queued')]);
   let queueCalls = 0;
-  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { queueCalls++; } } });
+  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { queueCalls++; } }, cursorStore: fakeCursorStore() });
   assert.deepEqual(await run(), { seen: 0, enqueued: 0, duplicate: 0, review: 0, skipped: 1 });
   assert.equal(queueCalls, 0);
-  assert.throws(() => createGoogleSheetsIntakeProcessor({ provider, queue: { enqueue() {} }, maxRowsPerRun: 51 }), /from 1 to 50/);
+  assert.throws(() => createGoogleSheetsIntakeProcessor({ provider, queue: { enqueue() {} }, cursorStore: fakeCursorStore(), maxRowsPerRun: 51 }), /from 1 to 50/);
 });
 
 test('a queue failure leaves the row retryable and does not mark it processed', async () => {
   const command = { requestId: 'sheet:retry:1', type: 'purchase' };
   const provider = fakeProvider([row(command.requestId, command)]);
-  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { throw new Error('sensitive details'); } } });
+  const cursorStore = fakeCursorStore();
+  const run = createGoogleSheetsIntakeProcessor({ provider, queue: { async enqueue() { throw new Error('sensitive details'); } }, cursorStore });
   await assert.rejects(run(), /Google Sheets command enqueue failed/);
   assert.deepEqual(provider.receipts, []);
+  assert.equal(cursorStore.current(), 2);
 });
