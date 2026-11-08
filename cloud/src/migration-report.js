@@ -64,7 +64,14 @@ function storagePlan(snapshot, documentBytes) {
   return { plan: 'chunked', segmentCount };
 }
 
-export function inspectV2Snapshot(snapshot, sourceBytes = null) {
+export function inspectV2Snapshot(input, sourceBytes = null) {
+  const exportEnvelope = input?.app === 'toreca-vault' && input.schemaVersion === 2
+    && input.data && typeof input.data === 'object' && !Array.isArray(input.data);
+  const snapshot = exportEnvelope ? input.data : input;
+  if (exportEnvelope && (!Number.isSafeInteger(Number(input.revision))
+    || Number(input.revision) !== Number(snapshot.revision))) {
+    throw new Error('V2 export envelope revision mismatch');
+  }
   validateState(snapshot);
   const serialized = JSON.stringify(snapshot);
   const bytes = sourceBytes == null ? Buffer.from(serialized, 'utf8') : Buffer.from(sourceBytes);
@@ -96,6 +103,11 @@ export function inspectV2Snapshot(snapshot, sourceBytes = null) {
   return {
     schemaVersion: snapshot.schemaVersion,
     revision: Number(snapshot.revision) || 0,
+    exportEnvelope: exportEnvelope ? {
+      app: 'toreca-vault',
+      revision: Number(input.revision),
+      exportedAt: String(input.exportedAt || '')
+    } : null,
     lastMutationIdPresent: Boolean(snapshot.lastMutationId),
     sourceBytes: bytes.length,
     firestoreDocumentBytesEstimate: estimate,
