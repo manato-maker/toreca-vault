@@ -775,5 +775,5 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 通常Chat AndroidからGoogle Driveアプリ経由で専用sheet A2にテスト値を書き、読み戻せることを確認。Workで同値を再確認後、A2のみクリアし、header保持と空データ行を確認した。これは基本write/readだけで、実取引をqueueに送っていない。
 - intakeが常に先頭20行だけを見て以後の新しい行を見落とす問題を解消するため、Firestoreにページカーソルを追加。保存するのはspreadsheet IDのhash、nextRow、generation、timestampだけ。連続20行を処理し、全receipt完了後にCAS advanceする。queue/receiptが失敗すると位置を進めず、再実行はstable requestIdとbusinessEventKeyで冪等。
 - append-only運用を前提とする。シート上で過去行をsort/delete/insertせず、訂正は新行・新requestIdで行う。データやcommand内容はcursor storeに保存しない。
-- Local check passed; full cloud suite 183 passed/0 failed/6 skipped (local Firestore Emulator未設定)。Firestore Emulator用cursor競合テストを追加済み、GitHub CIは次のcode commitで確認する。
+- Local check passed; full cloud suite 183 passed/0 failed/6 skipped (local Firestore Emulator未設定)。Firestore Emulator用cursor競合テストを追加。GitHub Actions v2-ci #817 passed test/check and Firestore Emulator.
 - 運用未完: normal Chat command JSON生成・queue反映・15分処理・結果表示E2E、Cloud Run/Scheduler/Firestore接続、OAuth/Service Account access、billing approval、canonical V2最新export/migration、receipt-only no-cost command。production flagsはoff、V2/旧Queueは変更なし。
