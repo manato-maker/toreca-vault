@@ -666,3 +666,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Cloud Storage Always Freeは標準storage 5 GB-months等だがUS-WEST1/US-CENTRAL1/US-EAST1限定。Tokyo/Osaka bucketはこの無料保存枠対象外。したがって日本リージョンの永続backupは無料前提にできず、Firestore managed backup/restoreも課金なしでは使えない。
 - 実データ容量・実API利用量・既存billing accountの使用量が未確認で、実月額は未算出。billingは有効化しておらず、backup保存先・保持日数・削除lifecycleも確定/適用していない。90日削除ポリシー等は承認前に適用しない。
 - Official sources: https://cloud.google.com/firestore/pricing ; https://cloud.google.com/run/pricing ; https://cloud.google.com/scheduler/pricing ; https://cloud.google.com/storage/pricing
+
+### 2026-11-08 JST — Gmail頻度とGoogle Drive backup費用の評価（検討中）
+
+- 確定済みGmail予定（07:00〜24:00 hourly、12:30重点確認、19:00は毎時scanへ統合）は変更していない。実装上の15分dispatcherはGmail以外にcommand queueも扱うため、Gmail scanを減らしてもdispatcherのCloud Run起動回数は減らない。Gmail API標準利用は追加料金なしで、現行新quotaのdaily threshold 80,000,000 units/day未満は追加料金なし。仮に19 scan/day、各scanがlist 1件 + 最大50件の`messages.get`をfull相当60 unitsで取得しても約57,095 units/day。これは概算で実測ではなく、projectの作成年/2025-11〜2026-04 API利用有無で適用quotaが変わる。Hourly設定を落としてもCloud請求アカウント要件は解消しない。
+- Google Driveの既存ユーザー領域は最大15 GBでGmail/Drive/Photos共有。標準Drive API利用は通常追加料金なしのため、空きがありユーザーOAuthで書ける場合、既存Drive folderをbackup先にする案はCloud Storage Japan regionより保存料を抑えられる候補。OAuth scopes/Drive API quota/利用可能容量は未確認。
+- Driveのcreate-onceを維持する候補設計: `files.generateIds`のIDをFirestoreのstable backup-key registryへtransactionalに保存し、そのIDでDrive fileを作成。競合/再試行は同じIDの409とSHA-256 readbackで照合。Firestore registryは引き続きGoogle Cloudサービスなのでactive billing account要件が残る。Firestore managed Backup/Restore機能は利用せず、application-generated JSON backupをDriveへ保存する案。
+- Google Cloud projectはactive Cloud Billing accountへリンクしないと、free tier範囲だけの利用でもGoogle Cloud resourceを使えない。従って「利用料0円の可能性」と「課金を有効にしなくても動作」は別。現在billingは未有効化。GCS Japan保存、retention period、自動削除lifecycle、Drive接続はいずれも未設定。
+- Status: Drive案は検討中、仕様変更/実装/接続/削除なし。保持容量を超えた場合の扱いと保持期間は未決定。Sources: https://developers.google.com/workspace/gmail/api/reference/quota ; https://developers.google.com/workspace/drive/api/guides/limits ; https://developers.google.com/workspace/drive/api/guides/create-file ; https://support.google.com/drive/answer/9312312 ; https://docs.cloud.google.com/billing/docs/how-to/manage-billing-account
