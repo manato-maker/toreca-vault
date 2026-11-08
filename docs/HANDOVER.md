@@ -1159,5 +1159,5 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 
 - 通常Chatの基本write/readは確認済み。運用時に古い行が先頭20件を占有し、新しい報告が処理されなくなる問題を防ぐため、sheet ID hashとnextRowのみを持つFirestore CAS cursorを追加。20行ごとの連続pageを読み、各行のreceiptが完了してからカーソルを進める。queue/receipt失敗なら同じpageを再試行し、queueのstable requestIdで重複を防ぐ。
 - シートはappend-only前提。過去行の並べ替え・削除・カーソル通過後の編集はしない。訂正は新しいrequestIdの新規行として送る。
-- `npm run check --prefix cloud` passed。Full local cloud suite: 183 passed, 0 failed, 6 skipped because `FIRESTORE_EMULATOR_HOST` is not configured. New Emulator test covers concurrent cursor CAS/resume; CI pending.
+- `npm run check --prefix cloud` passed。Full local cloud suite: 183 passed, 0 failed, 6 skipped because `FIRESTORE_EMULATOR_HOST` is not configured. GitHub Actions v2-ci #817 passed both test/check and Firestore Emulator, including concurrent cursor CAS/resume.
 - Normal Chat→Sheets smoke testは成功済みだが、report-to-command JSON、Firestore queue、15分worker、Chatでの結果提示のE2Eは未検証。通常Chatだけでの登録完成条件は未達。Cloud billing、deployment、service-account共有は未実施。V2 revision 2708 exportはscreen 2709より古いまま。2報告は未キュー/未反映。
