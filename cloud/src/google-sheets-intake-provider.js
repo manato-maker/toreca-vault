@@ -92,6 +92,10 @@ export function createGoogleSheetsIntakeProvider({
         throw new TypeError('intake receipt is invalid');
       }
       await verifyTarget();
+      const sourceRows = await this.readRows({ startRow: rowNumber, limit: 1 });
+      if (sourceRows.length !== 1 || sourceRows[0].rowNumber !== rowNumber || sourceRows[0].values[0] !== receipt.acceptedRequestId) {
+        throw new Error('intake row request ID changed before receipt write');
+      }
       const range = encodeURIComponent(`${SHEET_NAME}!D${rowNumber}:G${rowNumber}`);
       const url = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?valueInputOption=RAW`;
       const body = {
