@@ -1148,3 +1148,9 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - GitHub Actions v2-ci #814 passed on head `82b8230705d4a3a3534d2fb1fcf968fd22a825c7`; testとFirestore Emulatorの両方成功。PR #105はopen/Draft/unmerged/undeployed。
 - WorkセッションのGoogle Sheets接続は通常ChatGPT Androidでの書込可否を保証しない。service-account権限、Cloud Run、Scheduler、OAuth、production flags、billingは未設定。queue受付済みやV2反映済みとは扱わない。
 - 次は通常ChatGPT Androidから安全なテスト行を追加/読み戻しできるか確認し、成功後にだけCloud Run identityを接続する。実取引報告はqueue receipt/statusと再試行動作のE2E確認まで投入しない。
+
+### 2026-11-08 JST — 通常Chat AndroidからSheetsへの基本書込確認
+
+- ユーザーが通常Chatから専用受付シート`Intake!A2`へ`normal-chat-smoke-test`を書き込み、読み戻しに成功したと報告。Work側で同値を再確認し、A2だけ空に戻した。再読込でheader保持とA2:G3の空状態を確認。
+- 通常Chat AndroidのGoogle Driveアプリを使った基本write/readは確認済み。取引報告→command JSON生成→Firestore queue→worker→結果readbackの実運用E2Eと画像報告は未確認。smoke testはqueueに投入していない。
+- Chat-only登録の完成条件は未達。今後はCloud Run identity/Scheduler OIDC/Firestore接続案と費用見積りを固める。billing有効化、deployment、service-account共有は承認前に行わない。受取のみで原価を計上しないcommandも未実装。

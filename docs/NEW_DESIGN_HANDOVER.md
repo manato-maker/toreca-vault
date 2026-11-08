@@ -761,3 +761,11 @@ Status: user-approved requirements; implementation and production wiring remain 
 - GitHub Actions v2-ci #814 passed on head `82b8230705d4a3a3534d2fb1fcf968fd22a825c7`; `test` and Firestore Emulator jobs both succeeded. PR #105 remains open, Draft, unmerged, undeployed.
 - Google Drive/Sheets access is available in this Work session, but this does not prove the user's standard ChatGPT Android client can write rows. Service-account permission, Cloud Run, Scheduler, OAuth, production flags, and billing remain unset. No queue delivery or V2 update is claimed.
 - Next: test a harmless write/read from ordinary ChatGPT Android. Only after that succeeds connect a dedicated Cloud Run identity to this sheet. Do not enter a real transaction until queue receipt/status and retry behavior are end-to-end verified.
+
+
+### 2026-11-08 JST — 通常Chat AndroidからSheetsへの基本書込確認
+
+- ユーザーが通常Chatから「Toreca Vault New App Intake」の`Intake!A2`へ`normal-chat-smoke-test`を書き込み、同セルの読み戻しに成功したと報告。Work側でも同値をread-only再確認し、A2だけを空に戻した。再読込でA1:G1の見出しが保たれ、A2:G3にテスト行/取引行が残っていないことを確認。
+- これで通常Chat Androidから接続済みGoogle Driveアプリを使った基本write/readは確認できた。ただしChatが取引報告を安全なcommand JSONへ変換する処理、通常Chat→queue→worker→結果表示のE2E、スクリーンショット報告はまだ未検証。テスト値はqueueに送信していない。
+- 通常Chatの入力経路は「Google Driveアプリ＋専用受付シート」で表面上の基本接続を検証済み、backend連携は未実装/未接続として扱う。通常Chatの投稿のみで取引登録できるという完成条件は未達。
+- 次工程: Cloud Run service identity、Scheduler OIDC、Firestore queueの接続仕様と具体的な費用見積りをレビュー可能にする。Cloud billing有効化・deployment・service-account共有はユーザー承認前に行わない。受取のみ/原価計上なしcommandと処理結果readback E2Eも引き続き未完了。
