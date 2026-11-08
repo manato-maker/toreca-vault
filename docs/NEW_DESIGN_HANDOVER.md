@@ -777,3 +777,9 @@ Status: user-approved requirements; implementation and production wiring remain 
 - append-only運用を前提とする。シート上で過去行をsort/delete/insertせず、訂正は新行・新requestIdで行う。データやcommand内容はcursor storeに保存しない。
 - Local check passed; full cloud suite 183 passed/0 failed/6 skipped (local Firestore Emulator未設定)。Firestore Emulator用cursor競合テストを追加。GitHub Actions v2-ci #817 passed test/check and Firestore Emulator.
 - 運用未完: normal Chat command JSON生成・queue反映・15分処理・結果表示E2E、Cloud Run/Scheduler/Firestore接続、OAuth/Service Account access、billing approval、canonical V2最新export/migration、receipt-only no-cost command。production flagsはoff、V2/旧Queueは変更なし。
+
+### 2026-11-08 JST — 受付結果のreadback guard
+
+- Sheets intake providerはD:Gへreceiptを書いた後、同じ4セルを再読込して値が一致した場合のみ成功を返す。空欄や不一致の場合はworkerがcursorを進めず同一pageを再試行する。
+- queueへの再送は安定requestIdで冪等。通常Chatの実取引報告、queueからworkerの本番E2E、画像報告、Cloud Run実接続は未検証。
+- Receipt readbackの成功/欠落/不一致テストを追加。local check/testおよびCI結果は完了後に追記する。

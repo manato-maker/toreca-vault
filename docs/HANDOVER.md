@@ -1161,3 +1161,9 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - シートはappend-only前提。過去行の並べ替え・削除・カーソル通過後の編集はしない。訂正は新しいrequestIdの新規行として送る。
 - `npm run check --prefix cloud` passed。Full local cloud suite: 183 passed, 0 failed, 6 skipped because `FIRESTORE_EMULATOR_HOST` is not configured. GitHub Actions v2-ci #817 passed both test/check and Firestore Emulator, including concurrent cursor CAS/resume.
 - Normal Chat→Sheets smoke testは成功済みだが、report-to-command JSON、Firestore queue、15分worker、Chatでの結果提示のE2Eは未検証。通常Chatだけでの登録完成条件は未達。Cloud billing、deployment、service-account共有は未実施。V2 revision 2708 exportはscreen 2709より古いまま。2報告は未キュー/未反映。
+
+### 2026-11-08 JST — 受付receiptの読戻し確認
+
+- Sheets intake providerは、D:Gへの受付結果書込み後に同じセル範囲を再読込し、status/resultCode/acceptedRequestId/processedAtMsの4値が一致した場合だけreceipt成功を返す。
+- 書込み応答または読戻しが欠落/不一致ならworkerはページcursorを進めず、同じrequestIdで再試行する。queue create-onceにより再送は冪等。
+- Added tests for receipt readback success, missing readback, and mismatched readback. Local verification and CI are recorded after completion; no live sheet worker or Cloud Run was invoked.

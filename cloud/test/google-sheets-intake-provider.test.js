@@ -61,7 +61,7 @@ test('provider reads the bounded page from the durable append cursor row', async
   await assert.rejects(provider.readRows({ startRow: 1 }), /startRow/);
 });
 
-test('receipt writes update only D:G and require a four-cell API acknowledgement', async () => {
+test('receipt writes update only D:G and require matching readback', async () => {
   const requests = [];
   const provider = createGoogleSheetsIntakeProvider({
     spreadsheetId: SHEET_ID,
@@ -69,7 +69,8 @@ test('receipt writes update only D:G and require a four-cell API acknowledgement
     fetchImpl: async (url, init) => {
       requests.push({ url: String(url), init });
       if (requests.length === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
-      return ok({ updatedCells: 4 });
+      if (requests.length === 2) return ok({ updatedCells: 4 });
+      return ok({ values: [['queued', 'accepted', 'request:1', 123]] });
     }
   });
   const result = await provider.writeReceipt(7, {
@@ -81,6 +82,27 @@ test('receipt writes update only D:G and require a four-cell API acknowledgement
   assert.deepEqual(JSON.parse(requests[1].init.body), {
     majorDimension: 'ROWS', values: [['queued', 'accepted', 'request:1', 123]]
   });
+  assert.equal(requests[2].init.method, 'GET');
+  assert.match(requests[2].url, /Intake!D7%3AG7/);
+});
+
+test('receipt write fails closed when readback is missing or differs', async () => {
+  for (const values of [undefined, [['review', 'accepted', 'request:1', 123]]]) {
+    let calls = 0;
+    const provider = createGoogleSheetsIntakeProvider({
+      spreadsheetId: SHEET_ID,
+      getAccessToken: async () => token,
+      fetchImpl: async () => {
+        calls++;
+        if (calls === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+        if (calls === 2) return ok({ updatedCells: 4 });
+        return ok(values ? { values } : {});
+      }
+    });
+    await assert.rejects(provider.writeReceipt(8, {
+      status: 'queued', resultCode: 'accepted', acceptedRequestId: 'request:1', processedAtMs: 123
+    }), /readback did not match/);
+  }
 });
 
 test('provider rejects unsafe token, row bounds, invalid receipt, and API errors without returning response body', async () => {

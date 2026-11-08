@@ -102,6 +102,14 @@ export function createGoogleSheetsIntakeProvider({
       if (!Number.isSafeInteger(result.updatedCells) || result.updatedCells !== 4) {
         throw new Error('Google Sheets did not confirm all receipt cells');
       }
+      const readbackUrl = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+      const readback = await request(readbackUrl, { method: 'GET' }, 'Google Sheets intake receipt readback');
+      const actual = Array.isArray(readback.values) && readback.values.length === 1 && Array.isArray(readback.values[0])
+        ? readback.values[0].slice(0, 4) : [];
+      const expected = [receipt.status, receipt.resultCode, receipt.acceptedRequestId, receipt.processedAtMs];
+      if (actual.length !== 4 || actual.some((value, index) => value !== expected[index])) {
+        throw new Error('Google Sheets intake receipt readback did not match');
+      }
       return { updated: true };
     }
   };
