@@ -86,6 +86,36 @@ test('scheduler route is disabled by default and requires injected authorization
   });
 });
 
+test('scheduler health endpoint exposes only bounded heartbeat state and marks unhealthy ticks with 503', async () => {
+  const healthy = {
+    healthy: true, stale: false, lastScheduledAtMs: 1_000, lastCompletedAtMs: 1_010,
+    ageMs: 10, latestMissedSlots: 0, failedJobCount: 0, rawError: 'must not leak'
+  };
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true, stale: false, lastScheduledAtMs: 1_000, lastCompletedAtMs: 1_010,
+      ageMs: 10, latestMissedSlots: 0, failedJobCount: 0
+    });
+  }, { schedulerHealth: async () => healthy });
+
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      ok: false, stale: true, lastScheduledAtMs: null, lastCompletedAtMs: null,
+      ageMs: null, latestMissedSlots: 0, failedJobCount: 0
+    });
+  }, { schedulerHealth: async () => null });
+
+  await withServer(createFakeStore(), async (base) => {
+    const response = await fetch(`${base}/health/scheduler`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: 'scheduler health unavailable' });
+  }, { schedulerHealth: async () => { throw new Error('sensitive raw failure'); } });
+});
+
 test('scheduler route validates planned time, dispatches an authorized tick, and retries safe failures', async () => {
   const calls = [];
   await withServer(createFakeStore(), async (base) => {
