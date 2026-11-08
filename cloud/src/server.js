@@ -202,7 +202,7 @@ export function createServer({
       try {
         const health = await schedulerHealth();
         const body = {
-          ok: Boolean(health?.healthy),
+          ok: false,
           stale: health ? Boolean(health.stale) : true,
           lastScheduledAtMs: Number.isSafeInteger(health?.lastScheduledAtMs) ? health.lastScheduledAtMs : null,
           lastCompletedAtMs: Number.isSafeInteger(health?.lastCompletedAtMs) ? health.lastCompletedAtMs : null,
@@ -210,6 +210,9 @@ export function createServer({
           latestMissedSlots: Number.isSafeInteger(health?.latestMissedSlots) ? health.latestMissedSlots : 0,
           failedJobCount: Number.isSafeInteger(health?.failedJobCount) ? health.failedJobCount : 0
         };
+        body.ok = Boolean(health?.healthy) && !body.stale
+          && body.lastCompletedAtMs !== null
+          && body.latestMissedSlots === 0 && body.failedJobCount === 0;
         return send(response, body.ok ? 200 : 503, body);
       } catch {
         return send(response, 503, { ok: false, error: 'scheduler health unavailable' });
