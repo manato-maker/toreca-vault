@@ -92,7 +92,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
     provider: {
       async getMessageForClassification() {
         return {
-          subject: '抽選申込完了',
+          subject: 'ポケモンカード 抽選申込完了',
           text: '応募ID: APP-SYNTHETIC-123\n店舗名: カードボックス オーサカ店\n商品名: Synthetic product\n応募日: 2026-11-08'
         };
       }
@@ -126,7 +126,7 @@ test('Chat HTTP intake and Gmail classifier deduplicate one explicit lottery app
   const missingIdProcessor = createGmailClassifierProcessor({
     provider: {
       async getMessageForClassification() {
-        return { subject: '抽選申込完了', text: '店舗名: カードボックス オーサカ店\n商品名: Synthetic product\n応募日: 2026-11-08' };
+        return { subject: 'ポケモンカード 抽選申込完了', text: '店舗名: カードボックス オーサカ店\n商品名: Synthetic product\n応募日: 2026-11-08' };
       }
     },
     classificationStore: { async record() {} },
