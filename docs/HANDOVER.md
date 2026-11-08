@@ -1189,3 +1189,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 専用シートへD:Gの受付/完了receiptを書く直前に、対象行A:Dを再読込し、A列のrequestIdがqueue correlationのacceptedRequestIdと一致することを確認。一致しなければ更新を止め、Firestore correlationもfinalにしない。行の並替え・差替えによる別行へのreceipt誤記を抑止する。
 - 不一致・書込み不一致・readback不一致の再試行系テストを追加。ローカル全体189 passed、0 failed、8 skipped（Emulator testsはCIで実行）；check成功。GitHub Actions v2-ci #825のtest/checkとFirestore Emulator全jobが成功。
 - PR #105はDraft/open/unmerged/undeployed。実Google SheetsやCloud Runを使った検証ではない。既存V2/queue・未処理売却・課金・切替は不変。通常Chat取引/画像E2E、V2正本最新export（revision 2708/画面2709の差）および本番接続は未検証。
+
+
+### 2026-11-09 JST — 通常Chat・Android接続と無料枠の再確認
+
+- 最新のOpenAIヘルプを確認。自作MCPのwrite/full supportはBusinessおよびEnterprise/EduのChatGPT web向け。custom MCPのmobile接続は不可。Plus/Androidで専用MCPを直接使う案は運用ルートとして不適合。
+- 公開ChatGPT app directoryへの申請・審査・公開は候補として残す。公開appの利用可否・機能はplan/regionで異なり、Androidでの実機確認前に利用可能とは扱わない。公開endpoint/OAuth/privacy reviewが必要。
+- Google Cloud公式条件: Free Tier利用にも有効なBilling accountが必要。低利用時Cloud Run/Firestore/Schedulerは無料枠内の可能性があるが、超過・別サービス・バックアップで課金され得る。Firestore backup/restoreはfree quota対象外、Cloud Storage Always Freeは米国3 region限定。実費は未計測。
+- 当セッションにはGoogle Cloud Console操作権限がない。Billing連携、deployment、ChatGPT公開申請、OAuth設定は未実施。ユーザー承認前に課金有効化は禁止。
+- 進捗約94%は実装/テスト概算。PR #105 Draft/unmerged/undeployed。通常Chat取引/画像E2E、V2最新正本（export rev2708/画面2709）、本番接続は未完。
