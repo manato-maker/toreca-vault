@@ -1100,3 +1100,14 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 状態: 報告内容確認済み / queue送信なし / V2反映なし / 登録後の正本再読込検証なし。read-only exportのみ検査済み。Cloud Run queue実接続は未完了であり、旧V2直接書込みは禁止。
 - 登録案: 30thはpurchase commandにできるが、live queueがないため未送信。DUEL SETは汎用のreceipt-only/no-new-cost commandが未実装。0円purchaseで代用せず、原価二重計上を防ぐ受取専用処理を設計する。revision 2709以降の再export・二重登録確認・登録内容提示とユーザー承認を経るまで登録しない。
 - Overall estimate remains approximately 94% implementation/test work, not production readiness. No production, Apps Script, V2, queue, billing, deployment, or cutover changes.
+
+
+### 2026-11-08 JST — V2エクスポート形式の検証と互換性修正
+
+- `v2/core.js` が既存BOX状態「シュリンクなし」を有効値として許容するよう修正。値の書換えや正規化はせず、元データ表記を維持する。
+- `inspectV2Snapshot` がV2アプリのエクスポート外枠（app/schemaVersion/exportedAt/revision/data）を読み取れるよう修正。外枠とpayloadのrevision不一致は拒否し、SHA-256はJSON出力ファイル全体を対象に計算する。エクスポート形式、原本ハッシュ、revision不一致、既存BOX状態をテスト。
+- GitHub Actions v2-ci #810 は npm test、npm run check、Firestore Emulator jobがすべて成功。code head: `57463dcb7f39c19f0491cabe7744feb9fd14468b`。
+- 適用結果: ユーザーのV2アプリ画面から出力されたschemaVersion 2 / revision 2708 JSONをread-only検証。SHA-256 `930bb73fca5c9d8145cf78008dc7595b01985565d4bccc646cad930d2ec70b88`、sourceBytes 1,341,567、取引97（購入56/売却34/開封7）、在庫32ロット・数量37、抽選517、相場25、監査2,728。画面表示はrevision 2709で、JSONは1 revision古い。
+- Firestore保存見積りはpayload 1,036,003 bytes。単一document安全上限900,000 bytesを超えるためchunked-v1 5 segment（基準13 reads/6 writes per successful mutation）を選択。payload size/segment limits内で安全計画可能。これは設計見積りで実測費用ではない。原価不明lot 4件は推測補完しない。
+- 既存Sheets queueは9行（未処理売却8、抽選1）、今回2件と一致なし。似た名称の「オリジナルアートワークコレクション 1BOX」抽選応募3件はDUEL SET受取と別扱い。
+- 通常Chat報告は確認済みだが、新アプリqueue送信なし、V2反映なし、登録後readbackなし。新アプリAPI/Cloud Runは未配備、旧V2書込みと未処理売却再投入なし。受取専用（原価を二重計上しない）一般commandは未実装。通常Chat連携とreceipt-only設計が次工程。PR #105はDraft・未merge・未deploy。
