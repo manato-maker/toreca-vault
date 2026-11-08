@@ -805,3 +805,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Before writing a queued or terminal receipt to D:G, the Sheets provider rereads the target row A:D and verifies that its A-column request ID still matches the queue's accepted request ID. A mismatch fails closed and leaves the Firestore receipt correlation retryable, preventing a moved/replaced row from receiving another command's status.
 - Added coverage for source-row mismatch and retained write/readback failure coverage. Local full suite: 189 passed, 0 failed, 8 skipped (Emulator cases run in CI); npm run check --prefix cloud passed. GitHub Actions v2-ci #825 passed normal test/check and Firestore Emulator jobs.
 - This is code/CI verification, not a live Sheets/Cloud Run test. PR #105 remains Draft/open/unmerged/undeployed. No V2/old-queue/pending-sale/billing/cutover changes; normal Chat transaction/screenshot E2E and latest canonical V2 export remain unverified.
+
+
+### 2026-11-09 JST — Recheck of regular Chat mobile route and free-tier requirements
+
+- Current official OpenAI help says full custom MCP write support is available to Business and Enterprise/Edu on ChatGPT web; custom MCP servers are not connectable on mobile. A direct custom MCP write app is therefore not an available Plus/Android path.
+- Submitting an app for the public ChatGPT app directory remains a candidate route. Availability and functionality vary by plan/region, and Android support must be tested after review/publication. It requires a public endpoint, OAuth, privacy/safety review, and app approval.
+- Google Cloud requires a valid Cloud Billing account even when usage is intended to remain inside Free Tier. Low-volume Cloud Run/Firestore/Scheduler usage may fit published quotas, but overages and backup storage/features may bill. Firestore backup/restore features are excluded from free usage; Cloud Storage Always Free applies only to three US regions. Actual project-wide cost remains unmeasured.
+- No billing link, deployment, OAuth grant, or public app submission was made. This Work session has no Google Cloud Console control. Do not enable billing before the user's approval.
+- Progress remains approximately 94% of implementation/test work, not operational readiness. PR #105 is still Draft/unmerged/undeployed. Normal Chat text/screenshot transaction E2E and canonical latest V2 export (2708 file vs 2709 screen) remain unresolved.
