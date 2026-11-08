@@ -1166,4 +1166,4 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 
 - Sheets intake providerは、D:Gへの受付結果書込み後に同じセル範囲を再読込し、status/resultCode/acceptedRequestId/processedAtMsの4値が一致した場合だけreceipt成功を返す。
 - 書込み応答または読戻しが欠落/不一致ならworkerはページcursorを進めず、同じrequestIdで再試行する。queue create-onceにより再送は冪等。
-- Added tests for receipt readback success, missing readback, and mismatched readback. Local verification and CI are recorded after completion; no live sheet worker or Cloud Run was invoked.
+- Added tests for receipt readback success, missing readback, and mismatched readback. `npm test --prefix cloud`: 184 passed, 0 failed, 6 skipped without local Emulator; `npm run check --prefix cloud` passed. GitHub Actions v2-ci #819 passed both test/check and Firestore Emulator; no live sheet worker or Cloud Run was invoked.

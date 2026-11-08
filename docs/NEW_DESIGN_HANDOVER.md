@@ -782,4 +782,4 @@ Status: user-approved requirements; implementation and production wiring remain 
 
 - Sheets intake providerはD:Gへreceiptを書いた後、同じ4セルを再読込して値が一致した場合のみ成功を返す。空欄や不一致の場合はworkerがcursorを進めず同一pageを再試行する。
 - queueへの再送は安定requestIdで冪等。通常Chatの実取引報告、queueからworkerの本番E2E、画像報告、Cloud Run実接続は未検証。
-- Receipt readbackの成功/欠落/不一致テストを追加。local check/testおよびCI結果は完了後に追記する。
+- Receipt readbackの成功/欠落/不一致テストを追加。`npm test --prefix cloud`: 184 passed, 0 failed, 6 skipped (local Emulator未設定); `npm run check --prefix cloud` passed. GitHub Actions v2-ci #819 passed test/check and Firestore Emulator.
