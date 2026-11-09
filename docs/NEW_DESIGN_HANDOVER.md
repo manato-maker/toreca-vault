@@ -833,3 +833,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 2026-11-07のORIGINAL ARTWORK DUEL SETについて、transaction/inventoryLotsに報告された英語・日本語の商品名および一般的なカード名の一致は見つからない。過去支払いの記録は別の商品表記の可能性もあるため、費用を再計上せずに受取だけを記録できるcommandが必要。汎用receipt-only commandは未実装。
 - 旧handoverに記録したexport revision 2708 / screen 2709の差は、この添付revision 2789により古い状態の記録となった。添付内容と構造は変えていない。2件はまだsheet/queueへ送信せず、V2も書き換えていない。
 - 30th purchaseは既存purchase commandで表現可能。実行前にnormal Chat→intake→queue→worker→canonical readbackの実E2Eを完了させる。ORIGINAL ARTWORK受取は項目名と既払費用の対応を確認し、no-double-cost receipt transitionを追加してテストする。Cloud Run/Scheduler/OAuth、課金、deployment、migrationは未実施。
+
+
+### 2026-11-10 JST — 報告2件を専用Intakeへ記録
+
+- revision 2789のread-only照合を踏まえ、専用「Toreca Vault New App Intake」の Intake!A2:G3 に2件を記録し、値を読み戻して確認。
+- 11/6の30th CELEBRATION 1BOXはrequestId normalchat:2026-11-06:30th-celebration-arion-yao、status=new。既存purchase commandとして受付待ちにした。商品原価は7,200円（袋代5円を除外）、数量1、シュリンクあり、購入店/日付を記録。これはIntakeへのステージングであり、Firestore queue受理・worker処理・V2反映を意味しない。
+- 11/7のORIGINAL ARTWORK DUEL SETはrequestId review:2026-11-07:original-artwork-duel-set、status=review / resultCode=needs-review。3種類各1個・合計1セット、過去支払済みと記録し、商品別名と既払原価の対応が照合できるまで在庫・原価commandを投入しない。
+- Sheetはappend-only運用。要確認行を後から new に変更しない。照合後に処理する場合は、新しいrequestIdで新行を追加し、既払原価の二重計上を防ぐ。
+- 最新の読み戻しで両行の内容とstatusを確認。Firestore queue、Cloud Run worker、canonical readback、通常Chatからの完全E2Eは未検証。PR #105はDraft/unmerged/undeployed。V2原本・旧queue・未処理売却8件・billing・本番deploymentに変更なし。
