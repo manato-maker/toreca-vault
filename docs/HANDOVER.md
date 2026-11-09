@@ -1225,3 +1225,6 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 11/7 ORIGINAL ARTWORK DUEL SET: requestId review:2026-11-07:original-artwork-duel-set、status=review、resultCode=needs-review。3種類各1個・合計1セット、過去支払済み。商品別名と既払記録が照合できるまで在庫・原価commandを投入しない。append-onlyのため、照合後もこの行をnewへ変更せず、新requestIdの別行を使う。
 - 専用sheet以外への書込みなし。V2原本、旧queue、未処理売却8件、billing、deployment/cutoverは不変。通常Chat実取引→Firestore→worker→canonical readback E2Eは未検証。PR #105はDraft/unmerged/undeployed。
 - docs/NEW_DESIGN_HANDOVER.mdも同じ進捗へ更新。新DESIGN handover更新commit b1a7819f466e4ab10d1513d9bfa3c98b30d2bf57ではGitHub CI照会時点でworkflow run/statusは未返却。反映後に再確認する。
+
+
+CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762b3cac4a0ff8b726420d45c36, including the then-current new-app intake staging notes in both handover files. CI does not execute the intake queue or mutate V2.
