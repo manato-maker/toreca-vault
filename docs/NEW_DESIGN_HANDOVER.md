@@ -814,3 +814,13 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Google Cloud requires a valid Cloud Billing account even when usage is intended to remain inside Free Tier. Low-volume Cloud Run/Firestore/Scheduler usage may fit published quotas, but overages and backup storage/features may bill. Firestore backup/restore features are excluded from free usage; Cloud Storage Always Free applies only to three US regions. Actual project-wide cost remains unmeasured.
 - No billing link, deployment, OAuth grant, or public app submission was made. This Work session has no Google Cloud Console control. Do not enable billing before the user's approval.
 - Progress remains approximately 94% of implementation/test work, not operational readiness. PR #105 is still Draft/unmerged/undeployed. Normal Chat text/screenshot transaction E2E and canonical latest V2 export (2708 file vs 2709 screen) remain unresolved.
+
+
+### 2026-11-09 JST — 新Work継続時の状態照合
+
+- PR #105 remains open, Draft, unmerged, and undeployed. Branch head at this check: `38f494d495de0d59ef73f2c01ec13e726fb5947c`. GitHub Actions v2-ci #825 and the newer #828 both completed successfully; #828 is the latest observed run for this head. These are CI results only.
+- Read-only inspection of the isolated `Toreca Vault New App Intake` sheet found the seven-column header and no data rows in A2:G5. No test or transaction was written during this check.
+- The app feature set includes lottery receipt, which updates a matched lottery record without adding purchase or inventory. It does not include a general receipt-only command for a previously paid non-lottery order. Do not encode such a report as a zero-cost purchase or enqueue it until its V2 inventory/history semantics are explicit.
+- Current canonical export evidence remains schemaVersion 2/revision 2708, while the app screen was reported as revision 2709. Do not migrate, deduplicate against, or apply commands to the stale export until the latest canonical read-only export is confirmed and compared.
+- The 2026-11-06 30th CELEBRATION purchase and 2026-11-07 ORIGINAL ARTWORK DUEL SET receipt remain unqueued and unapplied pending duplicate checks. The receipt-only report must preserve prior cost without a second cost entry. Existing sale queue and pending sales remain untouched.
+- Safe next work: establish the general receipt-only state transition and tests against a confirmed current schema, then verify normal Chat report → intake row → queue → worker → canonical readback end to end. Live Sheets/Cloud Run/Scheduler/OAuth, screenshot reporting, canonical revision match, billing, migration, and production deployment remain unverified or disabled.
