@@ -1198,3 +1198,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - Google Cloud公式条件: Free Tier利用にも有効なBilling accountが必要。低利用時Cloud Run/Firestore/Schedulerは無料枠内の可能性があるが、超過・別サービス・バックアップで課金され得る。Firestore backup/restoreはfree quota対象外、Cloud Storage Always Freeは米国3 region限定。実費は未計測。
 - 当セッションにはGoogle Cloud Console操作権限がない。Billing連携、deployment、ChatGPT公開申請、OAuth設定は未実施。ユーザー承認前に課金有効化は禁止。
 - 進捗約94%は実装/テスト概算。PR #105 Draft/unmerged/undeployed。通常Chat取引/画像E2E、V2最新正本（export rev2708/画面2709）、本番接続は未完。
+
+
+### 2026-11-09 JST — 新Work継続時の最新状態
+
+- PR #105はDraft/open/unmerged/undeployed。開発ブランチheadは `23fce53f37c56c531e04e5faaeab82d8f987d9c4`。Actions v2-ci #825と資料更新後の#829は成功。
+- 専用 `Toreca Vault New App Intake` sheetはread-only確認でA1:G1のheaderのみ、A2:G5は空。テスト値や取引は追加していない。
+- 実装中の `lottery-receipt` はlottery record専用。支払済み通常注文の「受取のみ」commandは未実装。0円purchaseへ流用しない。V2 export revision 2708と画面2709の差を解消し、最新正本と既存記録を照合するまで両報告は未キュー・未反映。
+- 30th CELEBRATION購入は商品原価7,200円で、au PAY合計7,205円のうち袋代5円を原価へ含めない。ORIGINAL ARTWORK DUEL SETは3種類各1、過去支払済みで今回受取のみ。既払原価の二重計上を避ける状態遷移とテストが必要。
+- 既存V2、旧queue、未処理売却8件、billing、deploymentには変更なし。通常Chat実取引/画像report→queue→worker→結果readback、本番接続、V2最新exportの一致は未検証。安全な次工程はread-only最新V2確認と重複照合、その後に受取のみcommandのdata model/test設計。
