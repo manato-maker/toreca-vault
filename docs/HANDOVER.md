@@ -1216,3 +1216,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - ORIGINAL ARTWORK DUEL SETは報告された英語/日本語表記や一般的なカード名の一致なし。既払い履歴が別名の可能性は残る。既払原価を再計上しない汎用受取commandは未実装。
 - 以前のrevision 2708 export / screen 2709 mismatchは新しいrevision 2789 exportで置換。添付ファイルは未変更。どちらの報告もまだintake sheet/queueへ送っておらず、V2は未変更。
 - 30th purchase command自体は既存実装で表現できるが、実運用は通常Chat→intake→queue→worker→canonical readbackのE2E完了後。ORIGINAL ARTWORK受取は商品名/既払記録の対応と専用no-double-cost transition/testが必要。Cloud Run/Scheduler/OAuth、billing、deployment、migrationは未実施。
+
+
+### 2026-11-10 JST — 2件の新アプリ専用Intake記録
+
+- V2 export revision 2789で重複をread-only確認した後、専用「Toreca Vault New App Intake」Intake!A2:G3へ報告2件を記録し、再読込で値/statusを確認。
+- 11/6 30th CELEBRATION 1BOX: requestId normalchat:2026-11-06:30th-celebration-arion-yao、status=new、商品原価7,200円（袋代5円除外）、数量1、シュリンクあり。Intakeに受付待ちであるだけで、Firestore queue/worker/V2へ未反映。
+- 11/7 ORIGINAL ARTWORK DUEL SET: requestId review:2026-11-07:original-artwork-duel-set、status=review、resultCode=needs-review。3種類各1個・合計1セット、過去支払済み。商品別名と既払記録が照合できるまで在庫・原価commandを投入しない。append-onlyのため、照合後もこの行をnewへ変更せず、新requestIdの別行を使う。
+- 専用sheet以外への書込みなし。V2原本、旧queue、未処理売却8件、billing、deployment/cutoverは不変。通常Chat実取引→Firestore→worker→canonical readback E2Eは未検証。PR #105はDraft/unmerged/undeployed。
+- docs/NEW_DESIGN_HANDOVER.mdも同じ進捗へ更新。新DESIGN handover更新commit b1a7819f466e4ab10d1513d9bfa3c98b30d2bf57ではGitHub CI照会時点でworkflow run/statusは未返却。反映後に再確認する。
