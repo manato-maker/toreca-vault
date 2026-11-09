@@ -824,3 +824,12 @@ Status: user-approved requirements; implementation and production wiring remain 
 - Current canonical export evidence remains schemaVersion 2/revision 2708, while the app screen was reported as revision 2709. Do not migrate, deduplicate against, or apply commands to the stale export until the latest canonical read-only export is confirmed and compared.
 - The 2026-11-06 30th CELEBRATION purchase and 2026-11-07 ORIGINAL ARTWORK DUEL SET receipt remain unqueued and unapplied pending duplicate checks. The receipt-only report must preserve prior cost without a second cost entry. Existing sale queue and pending sales remain untouched.
 - Safe next work: establish the general receipt-only state transition and tests against a confirmed current schema, then verify normal Chat report → intake row → queue → worker → canonical readback end to end. Live Sheets/Cloud Run/Scheduler/OAuth, screenshot reporting, canonical revision match, billing, migration, and production deployment remain unverified or disabled.
+
+
+### 2026-11-10 JST — 最新V2 export revision 2789の重複照合
+
+- ユーザー添付の `toreca-vault-v2-2026-11-10.json` をscratch上で読み取り専用検証。app/schemaVersion=2、data.schemaVersion=2、revision=2789が一致。exportedAtは2026-11-09T22:06:52Z（2026-11-10 07:06 JST）。transactions=97、inventoryLots=32、lotteries=520、marketQuotes=25、auditLog=2809。
+- revision 2789に2026-11-06または11-07の日付のtransactionはない。2026-11-06の「30th CELEBRATION」1 BOX（イトーヨーカドー アリオ八尾店）と同名の在庫lotは見つからない。ただし過去の30th商品取引/他セット在庫は複数存在するため、今回のBOXと別商品であることを保って登録する。
+- 2026-11-07のORIGINAL ARTWORK DUEL SETについて、transaction/inventoryLotsに報告された英語・日本語の商品名および一般的なカード名の一致は見つからない。過去支払いの記録は別の商品表記の可能性もあるため、費用を再計上せずに受取だけを記録できるcommandが必要。汎用receipt-only commandは未実装。
+- 旧handoverに記録したexport revision 2708 / screen 2709の差は、この添付revision 2789により古い状態の記録となった。添付内容と構造は変えていない。2件はまだsheet/queueへ送信せず、V2も書き換えていない。
+- 30th purchaseは既存purchase commandで表現可能。実行前にnormal Chat→intake→queue→worker→canonical readbackの実E2Eを完了させる。ORIGINAL ARTWORK受取は項目名と既払費用の対応を確認し、no-double-cost receipt transitionを追加してテストする。Cloud Run/Scheduler/OAuth、課金、deployment、migrationは未実施。
