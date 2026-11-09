@@ -842,3 +842,6 @@ Status: user-approved requirements; implementation and production wiring remain 
 - 11/7のORIGINAL ARTWORK DUEL SETはrequestId review:2026-11-07:original-artwork-duel-set、status=review / resultCode=needs-review。3種類各1個・合計1セット、過去支払済みと記録し、商品別名と既払原価の対応が照合できるまで在庫・原価commandを投入しない。
 - Sheetはappend-only運用。要確認行を後から new に変更しない。照合後に処理する場合は、新しいrequestIdで新行を追加し、既払原価の二重計上を防ぐ。
 - 最新の読み戻しで両行の内容とstatusを確認。Firestore queue、Cloud Run worker、canonical readback、通常Chatからの完全E2Eは未検証。PR #105はDraft/unmerged/undeployed。V2原本・旧queue・未処理売却8件・billing・本番deploymentに変更なし。
+
+
+CI follow-up (2026-11-10 JST): GitHub Actions v2-ci #834 passed on commit 7e169dcafe2be762b3cac4a0ff8b726420d45c36 after both handover files had been updated. The latest intake staging state is documented above; CI is code/docs validation only and does not process the staged row.
