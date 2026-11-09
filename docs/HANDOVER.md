@@ -1207,3 +1207,12 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 - 実装中の `lottery-receipt` はlottery record専用。支払済み通常注文の「受取のみ」commandは未実装。0円purchaseへ流用しない。V2 export revision 2708と画面2709の差を解消し、最新正本と既存記録を照合するまで両報告は未キュー・未反映。
 - 30th CELEBRATION購入は商品原価7,200円で、au PAY合計7,205円のうち袋代5円を原価へ含めない。ORIGINAL ARTWORK DUEL SETは3種類各1、過去支払済みで今回受取のみ。既払原価の二重計上を避ける状態遷移とテストが必要。
 - 既存V2、旧queue、未処理売却8件、billing、deploymentには変更なし。通常Chat実取引/画像report→queue→worker→結果readback、本番接続、V2最新exportの一致は未検証。安全な次工程はread-only最新V2確認と重複照合、その後に受取のみcommandのdata model/test設計。
+
+
+### 2026-11-10 JST — 最新V2 export revision 2789
+
+- ユーザー提供の `toreca-vault-v2-2026-11-10.json` をread-only確認。schemaVersion 2、revision 2789（top-level/data一致）、export 2026-11-10 07:06 JST。97 transactions、32 inventoryLots、520 lotteries。
+- 11/6・11/7のtransactionsは存在しない。11/6の30th CELEBRATION 1BOXとイトーヨーカドー アリオ八尾の一致なし。過去の30th商品は存在するが、今回の拡張パックBOXと異なる9種カードセット等。現在のinventoryLotsに同商品のBOX lotはなし。
+- ORIGINAL ARTWORK DUEL SETは報告された英語/日本語表記や一般的なカード名の一致なし。既払い履歴が別名の可能性は残る。既払原価を再計上しない汎用受取commandは未実装。
+- 以前のrevision 2708 export / screen 2709 mismatchは新しいrevision 2789 exportで置換。添付ファイルは未変更。どちらの報告もまだintake sheet/queueへ送っておらず、V2は未変更。
+- 30th purchase command自体は既存実装で表現できるが、実運用は通常Chat→intake→queue→worker→canonical readbackのE2E完了後。ORIGINAL ARTWORK受取は商品名/既払記録の対応と専用no-double-cost transition/testが必要。Cloud Run/Scheduler/OAuth、billing、deployment、migrationは未実施。
