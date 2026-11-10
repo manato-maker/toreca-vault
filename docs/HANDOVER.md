@@ -1228,3 +1228,10 @@ PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, c
 
 
 CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762b3cac4a0ff8b726420d45c36, including the then-current new-app intake staging notes in both handover files. CI does not execute the intake queue or mutate V2.
+
+### 2026-11-10 JST — ステージング作成承認後の実行可否
+
+- ユーザーは新アプリ用ステージング作成・デプロイと必要な課金有効化を承認。旧V2への書込み/本番移行は未承認。
+- GitHubのcloud/README.mdと現状を確認。現在の作業環境にGCP provisioning connector、gcloud、Firebase CLIがない。Cloud Consoleは「Site Unavailable」で、1回の再読込後も利用不可。project/account/billing状態を確認できず、GCP resource・課金・deploymentの変更はゼロ。
+- ステージング作成は実行未完了。継続条件はGoogle Cloud Consoleまたは許可済みGCP API/CLIへの接続。接続後は専用project、最小権限、予算通知を先に確認しsyntheticデータでE2E確認する。旧V2、既存pending queue/売却8件、本番移行は触らない。
+- 詳細はdocs/NEW_DESIGN_HANDOVER.mdの「承認済みステージング作成の実行ブロッカー」を参照。
