@@ -845,3 +845,10 @@ Status: user-approved requirements; implementation and production wiring remain 
 
 
 CI follow-up (2026-11-10 JST): GitHub Actions v2-ci #834 passed on commit 7e169dcafe2be762b3cac4a0ff8b726420d45c36 after both handover files had been updated. The latest intake staging state is documented above; CI is code/docs validation only and does not process the staged row.
+
+### 2026-11-10 JST — 承認済みステージング作成の実行ブロッカー
+
+- ユーザーは新アプリ用ステージング環境の作成・デプロイと必要な課金有効化を承認。旧V2への書込みと本番移行は別途承認。
+- 実行前に既存手順と構成を確認。GitHubのcloud/README.mdでは未配備、Firestore接続・Cloud Run・Cloud Scheduler・production runtimeは未接続と記載。PR #105のflagsは既定でoff。
+- 操作環境にGCP provisioning connectorがなく、作業用workspaceにもgcloud/firebase CLIがない。承認されたCloud Console URLを開いて再読込したが、両方とも「Site Unavailable」。アカウント/project/既存billing状態を確認できず、作成・課金・deploymentは一切行っていない。
+- 次はConsole/適切なGCP APIアクセスが利用可能な環境で、ステージング専用project/region、最小API/identity/IAM、予算通知を確認し、syntheticデータだけでdeploymentとintake→Firestore→worker→readbackを検証する。旧V2書込み、本番移行、既存queue処理、billing範囲拡大は含めない。
