@@ -148,6 +148,8 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 
 ## Current staging and operator boundary — 2026-11-12 JST
 
+- Normal Chat setup guide: [`docs/STAGING_CHAT_QUICKSTART.md`](../docs/STAGING_CHAT_QUICKSTART.md). It describes the dedicated sheet row format and the requirement to report queue acceptance separately from V2 application.
+
 - Cloud Run `toreca-vault-staging` in `asia-northeast1` is private and Ready. The Scheduler OIDC job invokes the Sheets intake every 15 minutes (Asia/Tokyo). Sheets intake and Firestore queue are enabled in staging; V2 writes and command worker are disabled.
 - The intake sheet columns are: A `requestId`, B `commandJson`, C `businessEventIdentityJson` (lottery commands only), D `status`, E `resultCode`, F `acceptedRequestId`, G `processedAtMs`. Append rows only. For a valid new command, set D to `new` and leave E:G empty; the worker owns D:G receipts. For uncertain facts or duplicate/cost questions, set D to `review` and do not submit it as `new`. Never sort, edit, or resubmit old rows.
 - The 2026-11-06 30th CELEBRATION purchase is accepted as `pending`; `processed=false` and `canonicalReadbackVerified=false`. The 2026-11-07 ORIGINAL ARTWORK DUEL SET remains `review/needs-review` to prevent duplicate cost accounting.
