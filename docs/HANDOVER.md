@@ -1249,3 +1249,6 @@ CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762
 
 - GitHub Actions v2-ci #839 for commit `f5185dbfb1298d1c25362bfb237b7932b97bb47c` completed successfully. Test/check and Firestore Emulator jobs passed. This is CI verification only; staging queue acceptance did not apply the report to V2.
 - Current staging: Cloud Run `toreca-vault-staging` is private and Ready; A2 is queued/accepted with receipt readback, A3 remains review/needs-review. V2 writes and command worker are disabled. PR #105 remains Draft/open/unmerged.
+
+
+CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/handover status update) both completed successfully. Test/check and Firestore Emulator jobs passed. The staging configuration and data-path status above are unchanged; V2 writes/command worker remain disabled.
