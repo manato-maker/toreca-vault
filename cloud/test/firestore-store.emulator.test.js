@@ -107,3 +107,42 @@ test('Firestore Emulator atomically stores and reads a chunked V2 snapshot', { s
     await db.terminate();
   }
 });
+
+
+test('Firestore Emulator initializes a missing staging snapshot atomically and rejects replacement', { skip: skipReason }, async () => {
+  const [{ Firestore }, { emptyV2 }, { createFirestoreStore }] = await Promise.all([
+    import('@google-cloud/firestore'),
+    import('../../v2/core.js'),
+    import('../src/firestore-store.js')
+  ]);
+  const projectId = process.env.GCLOUD_PROJECT || 'demo-toreca-vault';
+  const db = new Firestore({ projectId });
+  const documentPath = 'stagingSnapshotImportTestRuns/' + randomUUID() + '/snapshots/canonical';
+  const root = db.doc(documentPath);
+  const store = createFirestoreStore(db, documentPath);
+  const payload = emptyV2();
+  const mutationId = 'import-' + randomUUID();
+  payload.revision = 2789;
+  payload.lastMutationId = mutationId;
+  payload.lotteries = Array.from({ length: 420 }, (_, index) => ({
+    id: 'lottery-' + index, title: 'Test event ' + index,
+    status: '応募済', memo: 'x'.repeat(1900)
+  }));
+  payload.auditLog = [{ mutationId, transactionId: 'snapshot-import', revision: 2789 }];
+
+  try {
+    const imported = await store.initializeFromSnapshot(payload);
+    assert.equal(imported.revision, 2789);
+    assert.deepEqual(imported.payload, payload);
+    const manifest = (await root.get()).data();
+    assert.equal(manifest.storageFormat, 'chunked-v1');
+    const chunks = await db.collection(documentPath + '/segments').get();
+    assert.equal(chunks.size, manifest.segmentIds.length);
+    assert.ok(chunks.size > 1);
+    await assert.rejects(store.initializeFromSnapshot(payload), /already initialized/);
+    assert.deepEqual((await store.read()).payload, payload);
+  } finally {
+    await db.recursiveDelete(root);
+    await db.terminate();
+  }
+});
