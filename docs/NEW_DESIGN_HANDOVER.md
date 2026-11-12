@@ -903,3 +903,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - `cloud/scripts/initialize-staging-snapshot.js`は専用project `project-8ff0bbc4-675d-4596-a8a`と`torecaVaultStaging/canonical`に固定し、schemaVersion 2 envelope・明示revision一致・サイズ上限を検証。synthetic chunked snapshotを含むFirestore Emulator統合テストを追加。GitHub Actions v2-ci #854（commit `c172f1455b68f7d14d807bd69465d8bfd8ea4d92`）は成功。
 - 運用判定は引き続き停止。Driveで新しいschemaVersion 2 exportを再検索したが確認できず、手元で確認できるrevision 2789は2026-11-10時点で現在のcanonicalと証明できないため、stagingへもインポートしていない。Cloud Run command worker / V2 writesはOFFのまま。A2の30th CELEBRATIONはqueue pending、ORIGINAL ARTWORK DUEL SETはreviewのまま。
 - 次に必要なのは、正本アプリから新たに書き出した最新V2 JSONをCloud Shellへ配置し、revisionを照合した上でstaging専用importerを一度実行すること。その readback が一致するまでworkerを有効化しない。これはstaging snapshotの準備であり、旧V2への書込みや本番切替ではない。
+
+
+### 2026-11-12 JST — 最新export revision 2924の検証
+
+- ユーザー添付の最新export `toreca-vault-v2-2026-11-12.json`を読み取り検証。app=`toreca-vault`、schemaVersion 2、top/data revision=2924で一致、exportedAt=`2026-11-12T11:23:34.111Z`（20:23 JST）。SHA-256=`286843691c5d741b9d7498e75ddc43570b2d0c99b03c7168c83579acb4f8bf7e`。transactions=97、inventoryLots=32、lotteries=521、marketQuotes=25、auditLog=2944。現在のPR branch `v2/core.js` / `migration-report.js`で構造・schema検証に成功し、Firestore storage planはchunked / 5 segments、上限内。
+- read-only duplicate scanで2026-11-06の30th CELEBRATION購入はtransactions/inventoryLotsに見つからず、ORIGINAL ARTWORK DUEL SET表記も見つからない。既存A2 commandはstaging queue pendingのままなので、このsnapshotをstaging canonicalへ入れた後のstaging worker処理候補とする。A3はreview/needs-reviewのまま。
+- import CLIのsnapshot validation呼出しを修正。v2-ci #856（commit `00acde974267325a42d61354b1cee39248e97a0d`）成功。
+- このChatGPT実行環境のCloud ShellページはSite Unavailableで、GCP provision/deploy connectorもないため、snapshot importやworker有効化は未実施。latest exportはChatGPT workspaceへ添付済みだが、Cloud Shellホームへは未配置。canonicalは前回のhealth確認時点で未初期化、command worker/V2 writesはOFF。実操作はCloud Shellでのimport・readback確認後に限る。旧V2/旧queue/未処理売却には変更なし。
