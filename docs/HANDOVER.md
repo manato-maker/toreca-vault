@@ -1274,3 +1274,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - DriveのV2 JSON検索ではschemaVersion 2の最新エクスポートを確認できず（handoffと旧V2 queueのみ）。既知のrevision 2789は2026-11-10のexportであり、これだけでは最新canonicalと断定せずstaging canonical初期化に使わない。
 - したがって新しいIntake rowsはFirestore staging queueまで受付可能だが、canonical V2 stateが未初期化、command worker/V2 writesはOFF。通常Chat full text/image-to-row E2E未検証。本番登録運用はまだ開始できない。
 - 未処理売却8件・旧V2/queueは未変更。本番移行と旧V2書込みは別途承認が必要。直近のCI v2-ci #844は成功。
+
+
+### 2026-11-12 JST — staging canonical初期化ガードと運用停止条件
+
+- 空のFirestore staging canonicalへ、検証済みschemaVersion 2 snapshotを一度だけ取り込む専用初期化処理を追加。通常のsaveは従来どおり未初期化canonicalへの書込みを拒否し、初期化処理も既存canonicalがあれば拒否、実行後は全payload/revision/lastMutationIdを読み戻して照合する。
+- `cloud/scripts/initialize-staging-snapshot.js`は専用project `project-8ff0bbc4-675d-4596-a8a`と`torecaVaultStaging/canonical`に固定し、schemaVersion 2 envelope・明示revision一致・サイズ上限を検証。synthetic chunked snapshotを含むFirestore Emulator統合テストを追加。GitHub Actions v2-ci #854（commit `c172f1455b68f7d14d807bd69465d8bfd8ea4d92`）は成功。
+- 運用判定は引き続き停止。Driveで新しいschemaVersion 2 exportを再検索したが確認できず、手元で確認できるrevision 2789は2026-11-10時点で現在のcanonicalと証明できないため、stagingへもインポートしていない。Cloud Run command worker / V2 writesはOFFのまま。A2の30th CELEBRATIONはqueue pending、ORIGINAL ARTWORK DUEL SETはreviewのまま。
+- 次に必要なのは、正本アプリから新たに書き出した最新V2 JSONをCloud Shellへ配置し、revisionを照合した上でstaging専用importerを一度実行すること。その readback が一致するまでworkerを有効化しない。これはstaging snapshotの準備であり、旧V2への書込みや本番切替ではない。
