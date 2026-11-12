@@ -159,7 +159,7 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 
 ## Mobile asset dashboard (2026-11-12)
 
-The staging Cloud Run service now includes a read-only mobile dashboard at `/`. It uses the same compact asset summary, inventory list, income/expense totals, and recent activity shown in the legacy GitHub Pages app, with a bottom navigation bar for phone screens.
+The staging Cloud Run service now includes a read-only mobile dashboard at `/`. It includes the asset summary, inventory list, income/expense totals, recent activity, and a monthly calendar under the four phone-friendly tabs `資産`, `予定`, `収支`, and `履歴`. Calendar dates come only from existing lottery fields (`applicationDate`, `deadline`, `resultDate`, `receiveDeadline`, `receivedDate`) and dated purchase/sale/opening transactions. Missing dates are omitted; the calendar never invents dates or creates lottery rows. Tapping a day shows its dated events and available details.
 
 The browser receives no `TV2_API_TOKEN`. Configure `TV2_GOOGLE_OAUTH_CLIENT_ID` with a Google OAuth web client ID and `TV2_DASHBOARD_VIEWER_EMAIL` with the one permitted Google account. The dashboard API verifies the Google ID token, requires a verified email, and compares it to that exact viewer address. The response omits internal IDs, memos, and raw payload data.
 
