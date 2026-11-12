@@ -114,7 +114,7 @@ export function createInventorySheetSync({
         method: 'POST',
         body: JSON.stringify({ requests: [{ addSheet: { properties: {
           title: INVENTORY_TAB,
-          gridProperties: { frozenRowCount: 2 }
+          gridProperties: { frozenRowCount: 2, frozenColumnCount: 1 }
         } } }] })
       }, 'Google Sheets inventory tab creation');
       metadata = await getMetadata();
