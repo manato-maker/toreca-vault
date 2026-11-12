@@ -1235,3 +1235,12 @@ CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762
 - GitHubのcloud/README.mdと現状を確認。現在の作業環境にGCP provisioning connector、gcloud、Firebase CLIがない。Cloud Consoleは「Site Unavailable」で、1回の再読込後も利用不可。project/account/billing状態を確認できず、GCP resource・課金・deploymentの変更はゼロ。
 - ステージング作成は実行未完了。継続条件はGoogle Cloud Consoleまたは許可済みGCP API/CLIへの接続。接続後は専用project、最小権限、予算通知を先に確認しsyntheticデータでE2E確認する。旧V2、既存pending queue/売却8件、本番移行は触らない。
 - 詳細はdocs/NEW_DESIGN_HANDOVER.mdの「承認済みステージング作成の実行ブロッカー」を参照。
+
+### 2026-11-12 JST — 新アプリ専用ステージングの作成とIntake受理確認
+
+- 承認済みの新アプリ staging をCloud Run/Firestoreで作成。Cloud Run `toreca-vault-staging`（asia-northeast1）はReady/100% traffic、private。HTTP /health readbackは200、canonicalInitialized=false、writesEnabled=false。
+- 専用Intake Sheetのみstaging runtime SAにwriter共有し、Scheduler OIDC service account/job（Asia/Tokyo・15分間隔）を構成。Sheets intake + Firestore queueはON、V2 writes + command workerはOFF。
+- Intake A2の30th CELEBRATION購入報告はstaging Firestore queueでaccepted/queuedとなり、同シートreceiptのreadback一致を確認。V2 canonicalには反映していない。A3のORIGINAL ARTWORK DUEL SETはreview/needs-reviewのまま。
+- 旧V2、旧queue、未処理売却8件、Gmail/Apps Script、本番migrationは不変更。Cloud Run deploy時はCloud Build SAにroles/run.builderを追加し、repo-root相対COPYに合わせた一時build contextで成功。アプリコードは変更なし。
+- まだ未完了: 普通Chat自然文/画像→commandJson→Sheetの完全E2E、API status確認、canonical V2 import/readback、worker実行。本番運用可能とは扱わない。PR #105はDraft/open/unmerged。詳細はdocs/NEW_DESIGN_HANDOVER.mdを参照。
+- 次: staging queue statusのread-only確認と通常Chat経路の合成データE2E。command workerはV2 canonical snapshotのrevision/hash/件数を照合し、本番移行の別途承認が完了するまでOFFを維持する。
