@@ -865,3 +865,8 @@ CI follow-up (2026-11-10 JST): GitHub Actions v2-ci #834 passed on commit 7e169d
 - PR #105はDraft/open/unmerged。今回のhandover更新でCIを再実行し、結果を追記する。実装・テスト進捗約94%は本番運用可能率ではない。
 
 次工程: private APIのqueue statusを読み取り確認し、通常Chatからの画像/文章報告→専用sheet→staging queueの経路を安全な合成報告で検証。その後もcommand workerはcanonical schemaVersion 2の最新exportを確定・照合し、移行が別途承認されるまでoffに保つ。
+
+### CI follow-up — 2026-11-12 JST
+
+- GitHub Actions v2-ci #839 for handover commit `f5185dbfb1298d1c25362bfb237b7932b97bb47c` completed successfully: test/check and Firestore Emulator jobs passed. This verifies code/CI only; it does not enable the command worker or apply the queued 30th CELEBRATION report to V2.
+- Staging intake evidence remains: A2 accepted/queued with receipt readback; A3 remains review/needs-review. Cloud Run is private and healthy. V2 writes and command worker remain disabled; PR #105 remains Draft/open/unmerged.
