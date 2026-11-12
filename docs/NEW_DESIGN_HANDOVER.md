@@ -888,3 +888,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - `cloud/README.md`の古い「未deploy/bridge未接続」記述を現在のstaging状態で補正し、Intake A:Gの列と安全な行ルールを追記。A=requestId、B=commandJson、C=抽選識別子JSON、D=status、E:G=receipt。正常な新規行だけD=`new`、曖昧/重複/原価未確認はD=`review`。既存行の並替え・修正・再送は禁止。
 - normal Chat Androidの単一セルSheets write/readは確認済み。自然文/画像を自動解析して完全なrowを作成するE2E、およびV2 canonical readbackは未確認。A2はstaging queueでpendingのまま。V2 writes/workerはOFF、PR #105はDraft/open/unmerged。
 - README変更commit `8b12bae00969d1bfe57314c35454ebba76a9dcdf`後のCIを確認する。
+
+### 2026-11-12 JST — 通常Chat用staging受付quickstart
+
+- `docs/STAGING_CHAT_QUICKSTART.md`を追加し、Android通常Chatで使う初期指示、Intake A:G列、requestId重複確認、曖昧情報をreviewにするルール、queued/pendingとV2反映の区別を明記。`cloud/README.md`からリンク。
+- DriveのV2 JSON検索ではschemaVersion 2の最新エクスポートを確認できず（handoffと旧V2 queueのみ）。既知のrevision 2789は2026-11-10のexportであり、これだけでは最新canonicalと断定せずstaging canonical初期化に使わない。
+- したがって新しいIntake rowsはFirestore staging queueまで受付可能だが、canonical V2 stateが未初期化、command worker/V2 writesはOFF。通常Chat full text/image-to-row E2E未検証。本番登録運用はまだ開始できない。
+- 未処理売却8件・旧V2/queueは未変更。本番移行と旧V2書込みは別途承認が必要。直近のCI v2-ci #844は成功。
