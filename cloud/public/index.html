@@ -21,7 +21,7 @@
     <section id="login" class="login-card">
       <div class="brand-mark" aria-hidden="true">TV</div>
       <h2>カード資産をひと目で確認</h2>
-      <p>Googleアカウントでログインすると、在庫・資産・取引履歴を表示します。</p>
+      <p>Googleアカウントでログインすると、在庫・資産・予定・取引履歴を表示します。</p>
       <div id="google-signin"></div>
       <p id="login-message" class="subtle">閲覧できるのは許可されたアカウントのみです。</p>
     </section>
@@ -84,6 +84,38 @@
         </section>
       </div>
 
+      <div id="calendar-view" class="view-panel" hidden>
+        <section class="calendar-section">
+          <div class="section-heading">
+            <div><p class="eyebrow">SCHEDULE</p><h2>予定カレンダー</h2></div>
+          </div>
+          <div class="calendar-toolbar">
+            <button id="calendar-prev" class="month-button" aria-label="前の月">‹</button>
+            <strong id="calendar-month"></strong>
+            <button id="calendar-next" class="month-button" aria-label="次の月">›</button>
+            <button id="calendar-today" class="today-button">今月</button>
+          </div>
+          <div class="calendar-legend" aria-label="予定の種類">
+            <span><i class="dot application"></i>応募</span>
+            <span><i class="dot deadline"></i>締切</span>
+            <span><i class="dot result"></i>発表</span>
+            <span><i class="dot receipt"></i>受取</span>
+            <span><i class="dot transaction"></i>取引</span>
+          </div>
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+          </div>
+          <div id="calendar-grid" class="calendar-grid" role="grid" aria-label="月間カレンダー"></div>
+          <section class="selected-day">
+            <div class="section-heading">
+              <h3 id="selected-date"></h3>
+              <span id="selected-count" class="stock-count"></span>
+            </div>
+            <div id="calendar-events" class="inventory-list"></div>
+          </section>
+        </section>
+      </div>
+
       <div id="income-view" class="view-panel" hidden>
         <section class="inventory-section">
           <div class="section-heading"><div><p class="eyebrow">INCOME & PROFIT</p><h2>収支</h2></div></div>
@@ -112,7 +144,7 @@
 
   <nav id="bottom-nav" class="bottom-nav" aria-label="メインメニュー" hidden>
     <button class="nav-item active" data-view="assets"><span aria-hidden="true">⌂</span>資産</button>
-    <button class="nav-item" data-view="inventory"><span aria-hidden="true">▤</span>在庫</button>
+    <button class="nav-item" data-view="calendar"><span aria-hidden="true">▦</span>予定</button>
     <button class="nav-item" data-view="income"><span aria-hidden="true">¥</span>収支</button>
     <button class="nav-item" data-view="activity"><span aria-hidden="true">↗</span>履歴</button>
   </nav>
