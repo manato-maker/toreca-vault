@@ -234,6 +234,41 @@ export function createFirestoreStore(db, documentPath = 'torecaVaultV2/canonical
       return db.runTransaction((transaction) => readInside(transaction));
     },
 
+    /**
+     * Initialize an empty, explicitly selected Firestore target from a validated V2 payload.
+     * This is intentionally separate from save(): ordinary mutation paths never create a baseline.
+     */
+    async initializeFromSnapshot(payload) {
+      validateState(payload);
+      const serialized = canonicalStringify(payload);
+      const payloadBytes = Buffer.byteLength(serialized, 'utf8');
+      if (payloadBytes > MAX_TRANSACTION_PAYLOAD_BYTES) throw new StateTooLarge();
+      const checked = {
+        serialized,
+        payloadBytes,
+        payloadHash: createHash('sha256').update(serialized).digest('hex')
+      };
+      const next = buildStorage(payload, checked);
+      if (1 + next.segments.length > 500) throw new StateTooLarge();
+
+      await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(ref);
+        if (current.exists) throw new Error('canonical Firestore state is already initialized');
+        for (const segment of next.segments) {
+          transaction.set(db.doc(segmentPath + '/' + segment.id), segment.data);
+        }
+        transaction.create(ref, next.root);
+      });
+
+      const confirmed = await this.read();
+      if (!confirmed || canonicalStringify(confirmed.payload) !== serialized
+        || confirmed.revision !== Number(payload.revision)
+        || confirmed.lastMutationId !== String(payload.lastMutationId || '')) {
+        throw new Error('staging snapshot initialization readback did not match');
+      }
+      return { ...confirmed, duplicate: false };
+    },
+
     async save({ expectedRevision, mutationId, payload }) {
       const checked = checkedSnapshot(payload, mutationId, expectedRevision);
       const existing = await this.read();
