@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09111b">
+  <meta name="description" content="Toreca Vault 資産ダッシュボード">
+  <title>資産ダッシュボード | Toreca Vault</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="today"></p>
+        <h1>資産ダッシュボード</h1>
+      </div>
+      <button id="refresh" class="icon-button" aria-label="データを更新" title="データを更新">↻</button>
+    </header>
+
+    <section id="login" class="login-card">
+      <div class="brand-mark" aria-hidden="true">TV</div>
+      <h2>カード資産をひと目で確認</h2>
+      <p>Googleアカウントでログインすると、在庫・資産・予定・取引履歴を表示します。</p>
+      <div id="google-signin"></div>
+      <p id="login-message" class="subtle">閲覧できるのは許可されたアカウントのみです。</p>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="status-row">
+        <div id="status" class="status-line" role="status">データを読み込みます</div>
+        <span class="read-only-badge">閲覧専用</span>
+      </div>
+
+      <div id="assets-view" class="view-panel">
+        <article class="hero-card">
+          <span class="label">推定総資産</span>
+          <strong id="total-assets" class="hero-value">—</strong>
+          <span id="asset-difference" class="delta"></span>
+        </article>
+        <article class="hero-card profit-card">
+          <span class="label">実現損益</span>
+          <strong id="realized-profit" class="hero-value">—</strong>
+          <span class="delta">売却済みのみ</span>
+        </article>
+
+        <div class="metric-grid">
+          <article class="metric-card"><span>現在庫取得原価</span><strong id="inventory-cost">—</strong></article>
+          <button class="metric-card metric-link" data-open-inventory="カード">
+            <span>カード推定資産</span><strong id="cards-value">—</strong><small>カード在庫を見る ›</small>
+          </button>
+          <button class="metric-card metric-link" data-open-inventory="BOX">
+            <span>BOX推定資産</span><strong id="boxes-value">—</strong><small>BOX在庫を見る ›</small>
+          </button>
+          <button class="metric-card metric-link" data-open-inventory="パック">
+            <span>バラパック推定資産</span><strong id="packs-value">—</strong><small>パック在庫を見る ›</small>
+          </button>
+          <article class="metric-card"><span>累計購入額</span><strong id="purchases-total">—</strong></article>
+          <article class="metric-card"><span>売却累計</span><strong id="sales-total">—</strong></article>
+        </div>
+
+        <section class="inventory-section">
+          <div class="section-heading">
+            <div><p class="eyebrow">CURRENT STOCK</p><h2>在庫の概要</h2></div>
+            <button class="text-button" data-nav="inventory">一覧を見る ›</button>
+          </div>
+          <div id="inventory-preview" class="inventory-list"></div>
+        </section>
+      </div>
+
+      <div id="inventory-view" class="view-panel" hidden>
+        <section class="inventory-section">
+          <div class="section-heading">
+            <div><p class="eyebrow">CURRENT STOCK</p><h2>在庫一覧</h2></div>
+            <span id="stock-count" class="stock-count"></span>
+          </div>
+          <div class="filters" role="group" aria-label="在庫種別">
+            <button class="filter active" data-filter="all">すべて</button>
+            <button class="filter" data-filter="BOX">BOX</button>
+            <button class="filter" data-filter="カード">カード</button>
+            <button class="filter" data-filter="パック">パック</button>
+          </div>
+          <div id="inventory-list" class="inventory-list"></div>
+        </section>
+      </div>
+
+      <div id="calendar-view" class="view-panel" hidden>
+        <section class="calendar-section">
+          <div class="section-heading">
+            <div><p class="eyebrow">SCHEDULE</p><h2>予定カレンダー</h2></div>
+          </div>
+          <div class="calendar-toolbar">
+            <button id="calendar-prev" class="month-button" aria-label="前の月">‹</button>
+            <strong id="calendar-month"></strong>
+            <button id="calendar-next" class="month-button" aria-label="次の月">›</button>
+            <button id="calendar-today" class="today-button">今月</button>
+          </div>
+          <div class="calendar-legend" aria-label="予定の種類">
+            <span><i class="dot application"></i>応募</span>
+            <span><i class="dot deadline"></i>締切</span>
+            <span><i class="dot result"></i>発表</span>
+            <span><i class="dot receipt"></i>受取</span>
+            <span><i class="dot transaction"></i>取引</span>
+            <span><i class="dot won"></i>当選</span>
+            <span><i class="dot lost"></i>落選</span>
+          </div>
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+          </div>
+          <div id="calendar-grid" class="calendar-grid" role="grid" aria-label="月間カレンダー"></div>
+          <section class="selected-day">
+            <div class="section-heading">
+              <h3 id="selected-date"></h3>
+              <span id="selected-count" class="stock-count"></span>
+            </div>
+            <div id="calendar-events" class="inventory-list"></div>
+          </section>
+        </section>
+      </div>
+
+      <div id="income-view" class="view-panel" hidden>
+        <section class="inventory-section">
+          <div class="section-heading"><div><p class="eyebrow">INCOME & PROFIT</p><h2>収支</h2></div></div>
+          <article class="hero-card profit-card">
+            <span class="label">実現損益</span>
+            <strong id="income-realized-profit" class="hero-value">—</strong>
+            <span class="delta">売却済みのみ</span>
+          </article>
+          <div class="metric-grid">
+            <article class="metric-card"><span>累計購入額</span><strong id="income-purchases-total">—</strong></article>
+            <article class="metric-card"><span>売却累計</span><strong id="income-sales-total">—</strong></article>
+          </div>
+        </section>
+      </div>
+
+      <div id="activity-view" class="view-panel" hidden>
+        <section class="inventory-section">
+          <div class="section-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>取引履歴</h2></div></div>
+          <div id="activity-list" class="inventory-list"></div>
+        </section>
+      </div>
+
+      <p class="data-note">読み取り専用 · staging · revision <span id="revision"></span></p>
+    </section>
+  </main>
+
+  <nav id="bottom-nav" class="bottom-nav" aria-label="メインメニュー" hidden>
+    <button class="nav-item active" data-view="assets"><span aria-hidden="true">⌂</span>資産</button>
+    <button class="nav-item" data-view="calendar"><span aria-hidden="true">▦</span>予定</button>
+    <button class="nav-item" data-view="income"><span aria-hidden="true">¥</span>収支</button>
+    <button class="nav-item" data-view="activity"><span aria-hidden="true">↗</span>履歴</button>
+  </nav>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="/app-config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

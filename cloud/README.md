@@ -155,3 +155,22 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 - The 2026-11-06 30th CELEBRATION purchase is accepted as `pending`; `processed=false` and `canonicalReadbackVerified=false`. The 2026-11-07 ORIGINAL ARTWORK DUEL SET remains `review/needs-review` to prevent duplicate cost accounting.
 - This proves staging intake and queue-status readback only. It does not mean inventory or cost has been applied to canonical V2. Normal Chat's full text/image-to-row operation and final V2 readback are not yet verified. PR #105 remains Draft/open/unmerged. No old V2 write, legacy queue processing, pending sale replay, Gmail connection, or production migration occurred.
 - GitHub Actions v2-ci #843 passed after the latest handover changes (test/check and Firestore Emulator). CI is not a live-service test.
+
+
+## Mobile asset dashboard (2026-11-13)
+
+PR #106 contains the read-only mobile dashboard source at `/`: asset summary, inventory list, income/expense totals, recent activity, and a monthly calendar under the four tabs `資産`, `予定`, `収支`, and `履歴`. Calendar dates come only from existing lottery fields (`applicationDate`, `deadline`, `resultDate`, `receiveDeadline`, `receivedDate`) and dated purchase/sale/opening transactions. Missing dates are omitted; the calendar never invents dates or creates lottery rows. Tapping a day shows its dated events and available details.
+
+**The PR dashboard has not yet been deployed to the live staging service.** Cloud Run is private, so a normal unauthenticated browser request is rejected before the page loads. The dashboard API verifies a Google ID token, requires a verified email, and compares it to the exact permitted viewer address. The browser receives no `TV2_API_TOKEN`; the API returns a dashboard-specific read model rather than internal IDs or the raw canonical payload. Calendar event data includes any lottery memo present in the source data.
+
+### Private browser access plan
+
+Use direct Identity-Aware Proxy (IAP) on Cloud Run. Keep Cloud Run authentication required and do not grant `allUsers` the Cloud Run Invoker role or disable the Invoker IAM check. IAP protects the `run.app` URL and other ingress paths while allowing only explicitly authorized Google identities. The dashboard's Google ID token verification and exact viewer-email check remain an additional data-access gate.
+
+Before enabling IAP, inspect the staging service's existing callers, including the 15-minute Cloud Scheduler OIDC request and any worker endpoints. IAP is applied to all incoming paths, so preserve required service-to-service access with narrowly scoped IAP authorization or separate the affected route/service if necessary. Do not assume the existing Scheduler OIDC permission alone will satisfy IAP.
+
+The OAuth web client ID and permitted viewer email still need to be configured. After IAP is enabled and authorized for the intended account, deploy PR #106 to staging, retrieve the exact service URL from Cloud Run, and verify both the mobile screen and the post-login dashboard data. If the project has no Google organization, configure IAP's external OAuth client path as required. Do not use unauthenticated public invocation as a shortcut.
+
+The dashboard is read-only. It does not change inventory, run queued commands, or alter the 15-minute intake schedule. Deployment and live login/data verification remain pending.
+
+**Execution blocker (2026-11-13):** The current ChatGPT Work execution has no Google Cloud/Cloud Run connector, `gcloud` access, or repository workflow that can deploy to Cloud Run. The Cloud Console URL was unavailable from the available browser. GitHub Actions exposes no workflow-dispatch trigger in this environment. No Cloud Run IAM, IAP, service, or production data was changed. Continue only when a GCP-authorized execution path is attached; do not make the service public to work around this blocker.
