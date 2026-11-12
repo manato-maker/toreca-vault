@@ -26,7 +26,7 @@ if (!filePath || !/^\d+$/.test(String(expectedRevisionArg || ''))) {
       || Number(envelope.data.revision) !== expectedRevision) {
       throw new Error('export must be a matching Toreca Vault schemaVersion 2 envelope and expected revision');
     }
-    const report = inspectV2Snapshot(envelope, sourceBytes);
+    const report = inspectV2Snapshot(envelope.data, sourceBytes);
     if (!report.firestoreSnapshotFitsSafetyLimit) {
       throw new Error('snapshot exceeds the staging Firestore safety limits');
     }
