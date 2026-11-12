@@ -51,3 +51,6 @@ h1{font-size:26px;margin:0;font-weight:800;letter-spacing:.01em}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 [hidden]{display:none!important}
 @media(min-width:700px){.app-shell{padding-top:32px}.hero-card{padding:30px}.metric-card{min-height:130px}.metric-grid{gap:16px}.inventory-list{grid-template-columns:repeat(2,minmax(0,1fr))}.bottom-nav{left:50%;right:auto;transform:translateX(-50%);width:min(100%,760px);border-radius:20px 20px 0 0}}
+
+.status-line.error{color:var(--danger)}
+.show-all{width:100%;padding:14px;border:1px solid var(--line);border-radius:16px;background:#111d2a;color:var(--accent);font-weight:700}
