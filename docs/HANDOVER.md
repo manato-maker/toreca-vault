@@ -1297,3 +1297,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - ユーザー実行のstaging importer結果で `ok=true`、target=`project-8ff0bbc4-675d-4596-a8a / torecaVaultStaging/canonical`、sourceRevision=2924、storagePlan=chunked、5 segments、readbackVerified=trueを確認。対象は最新exportであり旧V2には書き込んでいない。
 - 新アプリ専用IntakeのA2はrequestId `normalchat:2026-11-06:30th-celebration-arion-yao`、status=queued/accepted。最新snapshotに同日購入が無いため、staging worker有効化後の処理対象とする。A3 ORIGINAL ARTWORK DUEL SETはreview/needs-reviewのままで原価・在庫を処理しない。
 - 次はstaging `TV2_ENABLE_WRITES=true` / `TV2_ENABLE_COMMAND_WORKER=true`を設定し、既存scheduler service accountで15分間隔のprivate command worker jobを作成/更新して初回実行する。その後A2のsheet receiptが`v2-applied` / `canonical-readback-verified`になることを確認する。旧V2、旧queue、未処理売却8件、本番切替は対象外。
+
+
+### 2026-11-12 JST — staging購入1件の処理と最終readback確認
+
+- staging Firestore canonicalは最新のV2 export revision 2924（schemaVersion 2、chunked 5 segments）から初期化済み。対象は専用project `project-8ff0bbc4-675d-4596-a8a` / document `torecaVaultStaging/canonical`。初期化readbackVerified=true。
+- staging Cloud Run `toreca-vault-staging`でcommand worker/V2 writesを有効化し、15分間隔のstaging Scheduler経路を実行。購入requestId `normalchat:2026-11-06:30th-celebration-arion-yao` はstatus `done`、`processed=true`、resultCode `v2-applied`、`canonicalReadbackVerified=true`。Intake!A2:G2を再読込し、D=`v2-applied`、E=`canonical-readback-verified`、F=requestIdを確認。
+- ORIGINAL ARTWORK DUEL SET（A3）は`review` / `needs-review`を維持。過去支払済みの原価照合が済むまで登録しない。
+- stagingにおける専用Intake → Firestore queue → worker → canonical適用 → readback確認の購入1件は完了し、同経路での限定的なstaging運用を開始できる。自然文/画像からIntake行を完全自動生成するE2E、Gmail/OAuth・相場更新・全取引種別、backup/restore、実費の無料枠確認は未検証。アプリ全機能の完成や本番cutoverとは区別する。
+- 旧V2本番、旧queue、未処理売却8件、旧Apps Script、本番データ、billing設定は変更なし。本番移行は未実施。
