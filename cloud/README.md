@@ -155,3 +155,12 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 - The 2026-11-06 30th CELEBRATION purchase is accepted as `pending`; `processed=false` and `canonicalReadbackVerified=false`. The 2026-11-07 ORIGINAL ARTWORK DUEL SET remains `review/needs-review` to prevent duplicate cost accounting.
 - This proves staging intake and queue-status readback only. It does not mean inventory or cost has been applied to canonical V2. Normal Chat's full text/image-to-row operation and final V2 readback are not yet verified. PR #105 remains Draft/open/unmerged. No old V2 write, legacy queue processing, pending sale replay, Gmail connection, or production migration occurred.
 - GitHub Actions v2-ci #843 passed after the latest handover changes (test/check and Firestore Emulator). CI is not a live-service test.
+
+
+## Staging inventory view (2026-11-12)
+
+A separate `在庫一覧` tab can be synchronized into the private `Toreca Vault New App Intake` spreadsheet. It is a read-only view of positive Firestore inventory lots grouped by product, category, condition, and card/set identity. It shows quantity, known acquisition cost total, and a review marker when any lot cost is unknown. The Intake tab and its append-only A:G rows are not modified by this view.
+
+The sync uses the existing Cloud Run service identity and Google Sheets access. It never puts an API token in the browser or makes the spreadsheet public. To enable it in staging, set `TV2_ENABLE_INVENTORY_VIEW=true` alongside the existing Sheets intake configuration, then deploy the service. The existing 15-minute staging intake worker updates the view after processing intake/status receipts. The view refuses to overwrite the sheet if the canonical Firestore snapshot is not initialized. A failed write/readback causes that worker tick to fail so the next scheduled tick can retry.
+
+The tab is a generated report; do not edit its cells. Open the dedicated spreadsheet in Google Sheets and choose `在庫一覧`. The timestamp and Firestore revision are shown at the top. This report is not the legacy GitHub Pages app and does not change production V2, the legacy queue, or inventory mutations.
