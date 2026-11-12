@@ -1,6 +1,6 @@
 # Toreca Vault Cloud API foundation
 
-This is an isolated migration target for replacing the Apps Script V2 persistence/API bottleneck. It is not deployed and does not read or write production data.
+This repository contains the migration target for replacing the Apps Script V2 persistence/API bottleneck. **As of 2026-11-12 JST, a private staging deployment is live; it does not read or write production V2.** The original prototype notes below are historical where marked.
 
 ## First slice
 
@@ -11,7 +11,7 @@ This is an isolated migration target for replacing the Apps Script V2 persistenc
 - Writes default to disabled. The service rejects every non-read request before it reaches Firestore unless a later, separately reviewed migration step explicitly enables them.
 - Firestore-backed, create-once command queue accepts only the existing nine command types, verifies stable `requestId`, hashes canonical payloads to recognize exact retries, and rejects same-ID/different-payload collisions.
 - The authenticated `/api/v2` `enqueueCommand` action is disabled by default (`TV2_ENABLE_COMMAND_QUEUE=false`). When enabled it returns only status metadata; it does not run the command or send email.
-- No Gmail reader, Apps Script/Sheets bridge, Cloud Scheduler, or production migration is enabled in this slice.
+- Historical first-slice note: Gmail and production migration are not enabled. A dedicated new-app Google Sheets intake bridge and 15-minute Cloud Scheduler job are now deployed in staging; see the dated staging status below.
 
 ## Command execution prototype
 
@@ -42,7 +42,7 @@ Completed ledger rows carry an `expireAt` timestamp for a future Firestore TTL p
 
 ## Planned operations
 
-- Keep ChatGPT's current Google Sheets command queue as the input bridge until a secure Chat ingress is confirmed. The new API queue is only a tested receiving boundary; no dual processing or production bridge is enabled. Do not point the current Sheets producer at it until an audited one-way adapter and cutover/rollback procedure exist.
+- Current staging path: ordinary ChatGPT reporting is intended to append to the separate `Toreca Vault New App Intake` sheet; the 15-minute Cloud Run intake worker places validated rows into the staging Firestore queue and writes a bounded receipt. It is not the legacy V2 command queue, and there is no dual processing.
 - Scan Gmail lottery messages hourly from 07:00 through 24:00 JST (24:00 is next-day 00:00). Keep the focused result check at 12:30. Merge the 19:00 focus into its hourly Gmail job. Use Gmail message IDs and durable overlapping checkpoints for deduplication and late delivery.
 - Run one Cloud Scheduler dispatcher every 15 minutes. It dispatches due queue, Gmail, result-check, and daily market jobs, so the schedule does not need separate Scheduler resources.
 - Keep price quotes with source, checked time, freshness, and outcome. Failed or ambiguous lookups preserve the last confirmed quote and record a stale/review state.
@@ -137,10 +137,19 @@ The adapter requires all of these gates: `TV2_ENABLE_GOOGLE_SHEETS_INTAKE=true`,
 
 The intake sheet is append-only. A Firestore cursor stores only a hashed spreadsheet ID, the next row number, a generation, and update time. Each tick reads the next contiguous page (20 rows by default) and advances only after every row in that page has a receipt; enqueue or receipt failures leave the cursor in place so stable request IDs make the retry idempotent. Do not insert, sort, delete, or edit older rows after the cursor has passed them; submit a corrected report as a new row with a new request ID.
 
-This is a code-level bridge candidate, not an end-to-end ChatGPT integration. It has not been verified that the Google Drive app can reliably append the required rows from standard ChatGPT on the user's Android Plus client. Until that surface test and Cloud Run connection are complete, a normal Chat report is not considered queued. Do not share tokens or use the existing V2 command queue spreadsheet.
+Basic Google Drive write/read from normal Chat on Android has been smoke-tested. The complete normal Chat report-to-row flow, including text/image parsing and end-to-end user confirmation, is still unverified. Do not share tokens or use the existing V2 command queue spreadsheet.
 
 ### Intake queue completion receipts
 
 Accepted sheet commands store only a SHA-256 of the dedicated spreadsheet ID, the source row number, and a receipt state alongside the existing queue row. The raw spreadsheet ID is not duplicated in the queue. A reconciliation pass runs with the same Scheduler intake tick. While the command is pending or claimed, the sheet remains `queued`; the reconciler writes a final `v2-applied` receipt only after the command worker has confirmed the canonical revision and mutation ID on store readback. It then rereads D:G and verifies all four receipt values before marking the queue's receipt link final. Failed sheet writes/readbacks remain retryable and never relabel a command as verified. Review commands receive a `review` receipt; previously applied duplicates remain explicitly `duplicate`.
 
 The worker does not write a separate `processing` status to Sheets, avoiding stale concurrent status writes. The queue itself tracks `pending` and `processing`; the sheet shows `queued` until a final result is verified. The regular Chat Android smoke test verified only a harmless single-cell write/read and cleanup. Real transaction report-to-queue/worker/result E2E and screenshot input remain unverified; all production flags remain off.
+
+
+## Current staging and operator boundary — 2026-11-12 JST
+
+- Cloud Run `toreca-vault-staging` in `asia-northeast1` is private and Ready. The Scheduler OIDC job invokes the Sheets intake every 15 minutes (Asia/Tokyo). Sheets intake and Firestore queue are enabled in staging; V2 writes and command worker are disabled.
+- The intake sheet columns are: A `requestId`, B `commandJson`, C `businessEventIdentityJson` (lottery commands only), D `status`, E `resultCode`, F `acceptedRequestId`, G `processedAtMs`. Append rows only. For a valid new command, set D to `new` and leave E:G empty; the worker owns D:G receipts. For uncertain facts or duplicate/cost questions, set D to `review` and do not submit it as `new`. Never sort, edit, or resubmit old rows.
+- The 2026-11-06 30th CELEBRATION purchase is accepted as `pending`; `processed=false` and `canonicalReadbackVerified=false`. The 2026-11-07 ORIGINAL ARTWORK DUEL SET remains `review/needs-review` to prevent duplicate cost accounting.
+- This proves staging intake and queue-status readback only. It does not mean inventory or cost has been applied to canonical V2. Normal Chat's full text/image-to-row operation and final V2 readback are not yet verified. PR #105 remains Draft/open/unmerged. No old V2 write, legacy queue processing, pending sale replay, Gmail connection, or production migration occurred.
+- GitHub Actions v2-ci #843 passed after the latest handover changes (test/check and Firestore Emulator). CI is not a live-service test.
