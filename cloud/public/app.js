@@ -27,33 +27,36 @@ function renderInventory(){
  const filtered=state.filter==='all'?all:all.filter(row=>row.category===state.filter);
  $('stock-count').textContent=filtered.length+'種類';
  if(!filtered.length){$('inventory-list').innerHTML='<div class="empty-state">この種別の在庫はありません</div>';return}
- $('inventory-list').innerHTML=filtered.map(row=>{
+ const visible=state.view==='assets'?filtered.slice(0,5):filtered;
+ $('inventory-list').innerHTML=visible.map(row=>{
    const price=row.marketPrice==null?'価格未取得':money.format(row.marketPrice)+' / 個';
    const cost=row.unitCost==null?'原価要確認':money.format(row.unitCost)+' / 個';
    return '<article class="stock-card"><div class="stock-top"><div class="stock-name">'+esc(row.product+(row.set?' · '+row.set:''))+'</div><div class="stock-qty">× '+esc(row.quantity)+'</div></div><div class="stock-meta"><span class="pill">'+esc(row.category)+'</span><span class="pill">'+esc(row.condition||'状態未設定')+'</span>'+(row.identityNeedsReview?'<span class="pill">要確認</span>':'')+'</div><div class="stock-bottom"><span>取得原価 '+esc(cost)+'</span><span>'+esc(price)+'</span></div></article>'
  }).join('');
+ if(state.view==='assets'&&filtered.length>5)$('inventory-list').insertAdjacentHTML('beforeend','<button class="show-all" id="show-all-inventory">在庫をすべて見る ›</button>');
+ document.getElementById('show-all-inventory')?.addEventListener('click',()=>{state.view='inventory';renderView()});
+}
+function renderActivity(){
+ const rows=state.data?.transactions||[];
+ $('activity-list').innerHTML=rows.length?rows.map(row=>'<article class="stock-card activity-card" data-type="'+esc(row.type)+'"><div class="stock-top"><div class="stock-name">'+esc(row.product||'商品未設定')+'</div><div class="activity-amount">'+(row.type==='売却'?'+':'')+money.format(row.amount)+'</div></div><div class="stock-meta"><span class="pill">'+esc(row.type)+'</span><span class="pill">'+esc(row.date||'日付未設定')+'</span><span class="pill">× '+esc(row.quantity)+'</span></div></article>').join(''):'<div class="empty-state">取引履歴はありません</div>';
 }
 function renderView(){
  document.querySelectorAll('.nav-item').forEach(button=>button.classList.toggle('active',button.dataset.view===state.view));
- const inventorySection=document.querySelector('.inventory-section');
+ const inventorySection=$('inventory-section');
+ const activitySection=$('activity-section');
  const metrics=document.querySelector('.metric-grid');
  const heroes=document.querySelectorAll('.hero-card');
  if(state.view==='inventory'){
-   heroes.forEach(element=>element.hidden=true);metrics.hidden=true;inventorySection.hidden=false;
-   window.scrollTo({top:0,behavior:'smooth'});
+   heroes.forEach(element=>element.hidden=true);metrics.hidden=true;inventorySection.hidden=false;activitySection.hidden=true;
  }else if(state.view==='income'){
-   heroes.forEach(element=>element.hidden=element.classList.contains('hero-card')&&!element.classList.contains('profit-card'));
-   metrics.hidden=false;inventorySection.hidden=true;window.scrollTo({top:0,behavior:'smooth'});
+   heroes.forEach(element=>element.hidden=!element.classList.contains('profit-card'));
+   metrics.hidden=false;inventorySection.hidden=true;activitySection.hidden=true;
  }else if(state.view==='activity'){
-   heroes.forEach(element=>element.hidden=true);metrics.hidden=true;inventorySection.hidden=false;
-   inventorySection.querySelector('h2').textContent='在庫の更新';
-   inventorySection.querySelector('.eyebrow').textContent='LATEST SNAPSHOT';
-   window.scrollTo({top:0,behavior:'smooth'});
+   heroes.forEach(element=>element.hidden=true);metrics.hidden=true;inventorySection.hidden=true;activitySection.hidden=false;renderActivity();
  }else{
-   heroes.forEach(element=>element.hidden=false);metrics.hidden=false;inventorySection.hidden=false;
-   inventorySection.querySelector('h2').textContent='在庫';
-   inventorySection.querySelector('.eyebrow').textContent='CURRENT STOCK';
+   heroes.forEach(element=>element.hidden=false);metrics.hidden=false;inventorySection.hidden=false;activitySection.hidden=true;
  }
+ window.scrollTo({top:0,behavior:'smooth'});
 }
 async function loadData(credential=state.credential){
  if(!credential)return;
