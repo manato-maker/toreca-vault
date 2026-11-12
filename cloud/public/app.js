@@ -130,16 +130,20 @@ function renderActivity() {
   }).join('');
 }
 
-const calendarTypeClass = (type) => ({
-  '応募': 'application',
-  '応募締切': 'deadline',
-  '当選発表': 'result',
-  '受取': 'receipt',
-  '受取期限': 'receipt',
-  '購入': 'transaction',
-  '売却': 'transaction',
-  '開封': 'transaction'
-}[type] || 'transaction');
+const calendarTypeClass = (event) => {
+  if (event.status === '当選') return 'won';
+  if (event.status === '落選') return 'lost';
+  return ({
+    '応募': 'application',
+    '応募締切': 'deadline',
+    '当選発表': 'result',
+    '受取': 'receipt',
+    '受取期限': 'receipt',
+    '購入': 'transaction',
+    '売却': 'transaction',
+    '開封': 'transaction'
+  }[event.type] || 'transaction');
+};
 
 function renderCalendar() {
   const events = state.data?.calendarEvents || [];
@@ -165,7 +169,7 @@ function renderCalendar() {
     if (key === dateKey(new Date())) classes.push('today');
     if (dayEvents.length) classes.push('has-events');
     const dots = dayEvents.slice(0, 4).map((event) =>
-      '<i class="calendar-dot ' + calendarTypeClass(event.type) + '"></i>'
+      '<i class="calendar-dot ' + calendarTypeClass(event) + '"></i>'
     ).join('');
     const more = dayEvents.length > 4 ? '<span class="calendar-more">+' + (dayEvents.length - 4) + '</span>' : '';
     cells.push(
@@ -202,7 +206,7 @@ function calendarEventCard(event) {
   const source = event.sourceUrl
     ? '<a href="' + escapeHtml(event.sourceUrl) + '" target="_blank" rel="noopener noreferrer">参考リンクを開く ↗</a>'
     : '';
-  return '<article class="stock-card calendar-event" data-kind="' + escapeHtml(event.type) + '">' +
+  return '<article class="stock-card calendar-event" data-kind="' + escapeHtml(event.type) + '" data-status="' + escapeHtml(event.status) + '" data-receipt="' + escapeHtml(event.receiptStatus) + '">' +
     '<div class="calendar-event-title">' + escapeHtml(event.type) + ' · ' + escapeHtml(event.title) + '</div>' +
     (details.length ? '<div class="calendar-event-meta">' + details.join(' · ') + '</div>' : '') +
     source + '</article>';
