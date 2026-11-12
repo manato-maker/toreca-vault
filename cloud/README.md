@@ -157,10 +157,12 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 - GitHub Actions v2-ci #843 passed after the latest handover changes (test/check and Firestore Emulator). CI is not a live-service test.
 
 
-## Staging inventory view (2026-11-12)
+## Mobile asset dashboard (2026-11-12)
 
-A separate `在庫一覧` tab can be synchronized into the private `Toreca Vault New App Intake` spreadsheet. It is a read-only view of positive Firestore inventory lots grouped by product, category, condition, and card/set identity. For phone readability, the view has four columns: product/set, quantity, type/condition, and cost total. The product column and top two rows stay fixed. A review marker replaces the cost total when any lot cost is unknown. The Intake tab and its append-only A:G rows are not modified by this view.
+The staging Cloud Run service now includes a read-only mobile dashboard at `/`. It uses the same compact asset summary, inventory list, income/expense totals, and recent activity shown in the legacy GitHub Pages app, with a bottom navigation bar for phone screens.
 
-The sync uses the existing Cloud Run service identity and Google Sheets access. It never puts an API token in the browser or makes the spreadsheet public. To enable it in staging, set `TV2_ENABLE_INVENTORY_VIEW=true` alongside the existing Sheets intake configuration, then deploy the service. The existing 15-minute staging intake worker updates the view after processing intake/status receipts. The view refuses to overwrite the sheet if the canonical Firestore snapshot is not initialized. A failed write/readback causes that worker tick to fail so the next scheduled tick can retry.
+The browser receives no `TV2_API_TOKEN`. Configure `TV2_GOOGLE_OAUTH_CLIENT_ID` with a Google OAuth web client ID and `TV2_DASHBOARD_VIEWER_EMAIL` with the one permitted Google account. The dashboard API verifies the Google ID token, requires a verified email, and compares it to that exact viewer address. The response omits internal IDs, memos, and raw payload data.
 
-The tab is a generated report; do not edit its cells. Open the dedicated spreadsheet in Google Sheets and choose `在庫一覧`. The timestamp and Firestore revision are shown at the top. This report is not the legacy GitHub Pages app and does not change production V2, the legacy queue, or inventory mutations.
+To open the UI directly from the Cloud Run URL, the Cloud Run service needs unauthenticated invocation so browsers can load its static HTML, CSS, and JavaScript. Keep inventory data behind the dashboard Google sign-in check. Existing V2 API reads and writes still require the server-side API token, and command/write gates remain unchanged. Do not configure a public GitHub Pages API connection or place credentials in browser code.
+
+The dashboard is read-only. It does not change inventory, run queued commands, or alter the 15-minute intake schedule. A live rollout still requires the OAuth client ID/viewer email to be configured and the staging service deployed with the chosen Cloud Run invocation policy.
