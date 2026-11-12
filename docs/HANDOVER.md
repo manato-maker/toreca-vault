@@ -1260,3 +1260,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 認証付きGET `/api/v2/commands/{requestId}` が成功し、30th CELEBRATION requestIdのqueue状態を `pending`、`processed=false`、`canonicalReadbackVerified=false` と確認。キューに存在するがworkerはOFFのため、V2適用済みではない。A2 receipt/readbackの受付状態とも矛盾なし。
 - V2 writes/command workerはOFF。canonical V2 import、旧V2、既存queue、未処理売却8件、本番migrationに変更なし。PR #105はDraft/open/unmerged。
 - 前回handover CI v2-ci #842は成功。今回のhandover docs更新後のCI結果は次のfollow-upで記録する。
+
+
+### 2026-11-12 JST — 通常Chat Intake運用境界の明文化
+
+- `cloud/README.md`の古い「未deploy/bridge未接続」記述を現在のstaging状態で補正し、Intake A:Gの列と安全な行ルールを追記。A=requestId、B=commandJson、C=抽選識別子JSON、D=status、E:G=receipt。正常な新規行だけD=`new`、曖昧/重複/原価未確認はD=`review`。既存行の並替え・修正・再送は禁止。
+- normal Chat Androidの単一セルSheets write/readは確認済み。自然文/画像を自動解析して完全なrowを作成するE2E、およびV2 canonical readbackは未確認。A2はstaging queueでpendingのまま。V2 writes/workerはOFF、PR #105はDraft/open/unmerged。
+- README変更commit `8b12bae00969d1bfe57314c35454ebba76a9dcdf`後のCIを確認する。
