@@ -852,3 +852,16 @@ CI follow-up (2026-11-10 JST): GitHub Actions v2-ci #834 passed on commit 7e169d
 - 実行前に既存手順と構成を確認。GitHubのcloud/README.mdでは未配備、Firestore接続・Cloud Run・Cloud Scheduler・production runtimeは未接続と記載。PR #105のflagsは既定でoff。
 - 操作環境にGCP provisioning connectorがなく、作業用workspaceにもgcloud/firebase CLIがない。承認されたCloud Console URLを開いて再読込したが、両方とも「Site Unavailable」。アカウント/project/既存billing状態を確認できず、作成・課金・deploymentは一切行っていない。
 - 次はConsole/適切なGCP APIアクセスが利用可能な環境で、ステージング専用project/region、最小API/identity/IAM、予算通知を確認し、syntheticデータだけでdeploymentとintake→Firestore→worker→readbackを検証する。旧V2書込み、本番移行、既存queue処理、billing範囲拡大は含めない。
+
+### 2026-11-12 JST — ステージングCloud RunとIntake取込を実測
+
+- ユーザー承認を受け、新アプリ専用Cloud Run/Firestoreステージングを作成・デプロイ。Cloud Run service `toreca-vault-staging`（asia-northeast1）はReadyで100% traffic、未認証アクセスは不可。ビルド時にCloud Build実行SAへroles/run.builderを付与し、Dockerfileがリポジトリroot相対のv2/core.jsとcloud/を参照するため、デプロイ用一時ビルドcontextを組み立てて修正。アプリコードは変更せず、PRのコードSHAはデプロイ時点で5e04ab8e436a555db67775e0122729a3d00369b0。
+- 非公開の認証付きGET /healthはHTTP 200。応答は canonicalInitialized=false / writesEnabled=false。FirestoreのV2 canonical snapshotはまだ初期化しておらず、インポートもしていない。
+- 専用「Toreca Vault New App Intake」だけをstaging runtime service accountへwriter共有。Cloud RunはSheets intakeとFirestore command queueだけ有効。TV2_ENABLE_WRITES=false、TV2_ENABLE_COMMAND_WORKER=falseのまま。専用Scheduler SAに当該Cloud Run serviceのrun.invokerだけを付与し、Asia/Tokyoで15分ごとのintake Scheduler jobをenabledにした。
+- Intake!A2の2026-11-06 30th CELEBRATION購入報告（商品原価7,200円、袋代5円除外）はFirestore staging queueへ一度受理され、Sheets receiptを読み戻してstatus=queued / resultCode=accepted / acceptedRequestId一致を確認。これは受付・queue readback確認であり、V2反映ではない。
+- Intake!A3の2026-11-07 ORIGINAL ARTWORK DUEL SETはstatus=review / needs-reviewのまま。新たなpurchase/receipt commandは作っておらず、二重原価計上を防いでいる。
+- 旧V2、本番データ、既存queue、未処理売却8件、Gmail、旧Apps Scriptは未変更。V2 canonical import、command worker、V2 writes、本番移行は未実施。
+- 確認できたのは専用Sheet→Cloud Scheduler OIDC→Cloud Run intake→Firestore queue→Sheet receipt readbackまで。通常Chatの自然文/画像からcommandJsonを作るend-to-end、queue status polling、canonical V2への適用/readbackは未確認。通常Chat Androidの単一セルwrite/read smoke testは別途確認済み。
+- PR #105はDraft/open/unmerged。今回のhandover更新でCIを再実行し、結果を追記する。実装・テスト進捗約94%は本番運用可能率ではない。
+
+次工程: private APIのqueue statusを読み取り確認し、通常Chatからの画像/文章報告→専用sheet→staging queueの経路を安全な合成報告で検証。その後もcommand workerはcanonical schemaVersion 2の最新exportを確定・照合し、移行が別途承認されるまでoffに保つ。
