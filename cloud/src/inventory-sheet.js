@@ -45,20 +45,17 @@ function stockRows(payload, updatedAt) {
     .sort((a, b) => a.category.localeCompare(b.category, 'ja') || a.product.localeCompare(b.product, 'ja')
       || a.condition.localeCompare(b.condition, 'ja') || a.cardSet.localeCompare(b.cardSet, 'ja'))
     .map((item) => [
-      item.product,
-      item.category,
-      item.condition,
-      item.cardSet,
+      item.cardSet ? item.product + ' / ' + item.cardSet : item.product,
       item.quantity,
-      item.unknownCost ? '' : item.costTotal,
-      item.unknownCost ? '要確認' : '確認済み'
+      [item.category, item.condition].filter(Boolean).join(' / '),
+      item.unknownCost ? '要確認' : item.costTotal
     ]);
   const jst = new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo', dateStyle: 'medium', timeStyle: 'short'
   }).format(updatedAt);
   return [
-    ['在庫一覧', '最終同期: ' + jst, 'Firestore revision: ' + Number(payload.revision)],
-    ['商品名', 'カテゴリ', '状態', 'カード/セット', '数量', '在庫原価合計（円）', '原価状況'],
+    ['在庫一覧', '同期: ' + jst, 'revision ' + Number(payload.revision)],
+    ['商品 / セット', '数量', '種別 / 状態', '原価合計（円）'],
     ...rows
   ];
 }
