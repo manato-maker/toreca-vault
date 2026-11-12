@@ -1290,3 +1290,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - read-only duplicate scanで2026-11-06の30th CELEBRATION購入はtransactions/inventoryLotsに見つからず、ORIGINAL ARTWORK DUEL SET表記も見つからない。既存A2 commandはstaging queue pendingのままなので、このsnapshotをstaging canonicalへ入れた後のstaging worker処理候補とする。A3はreview/needs-reviewのまま。
 - import CLIのsnapshot validation呼出しを修正。v2-ci #856（commit `00acde974267325a42d61354b1cee39248e97a0d`）成功。
 - このChatGPT実行環境のCloud ShellページはSite Unavailableで、GCP provision/deploy connectorもないため、snapshot importやworker有効化は未実施。latest exportはChatGPT workspaceへ添付済みだが、Cloud Shellホームへは未配置。canonicalは前回のhealth確認時点で未初期化、command worker/V2 writesはOFF。実操作はCloud Shellでのimport・readback確認後に限る。旧V2/旧queue/未処理売却には変更なし。
+
+
+### 2026-11-12 JST — staging canonical初期化成功
+
+- ユーザー実行のstaging importer結果で `ok=true`、target=`project-8ff0bbc4-675d-4596-a8a / torecaVaultStaging/canonical`、sourceRevision=2924、storagePlan=chunked、5 segments、readbackVerified=trueを確認。対象は最新exportであり旧V2には書き込んでいない。
+- 新アプリ専用IntakeのA2はrequestId `normalchat:2026-11-06:30th-celebration-arion-yao`、status=queued/accepted。最新snapshotに同日購入が無いため、staging worker有効化後の処理対象とする。A3 ORIGINAL ARTWORK DUEL SETはreview/needs-reviewのままで原価・在庫を処理しない。
+- 次はstaging `TV2_ENABLE_WRITES=true` / `TV2_ENABLE_COMMAND_WORKER=true`を設定し、既存scheduler service accountで15分間隔のprivate command worker jobを作成/更新して初回実行する。その後A2のsheet receiptが`v2-applied` / `canonical-readback-verified`になることを確認する。旧V2、旧queue、未処理売却8件、本番切替は対象外。
