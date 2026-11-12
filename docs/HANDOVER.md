@@ -1244,3 +1244,8 @@ CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762
 - 旧V2、旧queue、未処理売却8件、Gmail/Apps Script、本番migrationは不変更。Cloud Run deploy時はCloud Build SAにroles/run.builderを追加し、repo-root相対COPYに合わせた一時build contextで成功。アプリコードは変更なし。
 - まだ未完了: 普通Chat自然文/画像→commandJson→Sheetの完全E2E、API status確認、canonical V2 import/readback、worker実行。本番運用可能とは扱わない。PR #105はDraft/open/unmerged。詳細はdocs/NEW_DESIGN_HANDOVER.mdを参照。
 - 次: staging queue statusのread-only確認と通常Chat経路の合成データE2E。command workerはV2 canonical snapshotのrevision/hash/件数を照合し、本番移行の別途承認が完了するまでOFFを維持する。
+
+### CI follow-up — 2026-11-12 JST
+
+- GitHub Actions v2-ci #839 for commit `f5185dbfb1298d1c25362bfb237b7932b97bb47c` completed successfully. Test/check and Firestore Emulator jobs passed. This is CI verification only; staging queue acceptance did not apply the report to V2.
+- Current staging: Cloud Run `toreca-vault-staging` is private and Ready; A2 is queued/accepted with receipt readback, A3 remains review/needs-review. V2 writes and command worker are disabled. PR #105 remains Draft/open/unmerged.
