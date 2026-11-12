@@ -25,6 +25,26 @@ export function dashboardReadModel(state, updatedAt = new Date().toISOString()) 
   const salesTotal = sales.reduce((sum, row) =>
     sum + yen(row.price) * quantity(row) - yen(row.fee), 0);
   const unknownCostLots = inventory.filter(row => row.unitCost === null).length;
+  const transactions = (state.transactions || [])
+    .slice()
+    .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))
+    .slice(0, 30)
+    .map(row => {
+      const rowQuantity = Math.max(1, quantity(row));
+      const type = String(row.type || '');
+      const amount = type === 'sale'
+        ? yen(row.price) * rowQuantity - yen(row.fee)
+        : type === 'purchase'
+          ? yen(row.total) || yen(row.price) * rowQuantity
+          : 0;
+      return {
+        type: type === 'purchase' ? '購入' : type === 'sale' ? '売却' : type === 'opening' ? '開封' : '記録',
+        date: String(row.date || ''),
+        product: String(row.product || ''),
+        quantity: rowQuantity,
+        amount
+      };
+    });
 
   return {
     ok: true,
@@ -44,6 +64,7 @@ export function dashboardReadModel(state, updatedAt = new Date().toISOString()) 
     stockKinds: inventory.length,
     stockQuantity: inventory.reduce((sum, row) => sum + row.quantity, 0),
     unknownCostLots,
-    inventory
+    inventory,
+    transactions
   };
 }
