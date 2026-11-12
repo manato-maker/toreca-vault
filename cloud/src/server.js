@@ -8,7 +8,6 @@ import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
 import { createGoogleSheetsIntakeStatusProcessor } from './google-sheets-intake-status.js';
-import { createInventorySheetSync } from './inventory-sheet.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
 import { createFirestoreGoogleSheetsIntakeCursorStore } from './firestore-google-sheets-intake-cursor.js';
 import {
@@ -188,8 +187,6 @@ export function createServer({
           }
         }
         if (result?.inventory && typeof result.inventory === 'object') {
-          body.inventoryRows = Number.isSafeInteger(result.inventory.rowCount) ? result.inventory.rowCount : 0;
-          body.inventoryRevision = Number.isSafeInteger(result.inventory.revision) ? result.inventory.revision : null;
         }
         return send(response, 200, body);
       } catch {
@@ -500,10 +497,6 @@ export async function start() {
     };
   }
   const sheetsIntakeEnabled = process.env.TV2_ENABLE_GOOGLE_SHEETS_INTAKE === 'true';
-  const inventoryViewEnabled = process.env.TV2_ENABLE_INVENTORY_VIEW === 'true';
-  if (inventoryViewEnabled && !sheetsIntakeEnabled) {
-    throw new Error('inventory view requires Google Sheets intake to be explicitly enabled');
-  }
   if (commandWorkerEnabled && (!writesEnabled || !commandsEnabled)) {
     throw new Error('command worker requires both writes and command queue to be explicitly enabled');
   }
@@ -543,14 +536,10 @@ export async function start() {
       provider, queue: commandQueue, cursorStore, spreadsheetId, maxRowsPerRun: 20
     });
     const statusWorker = createGoogleSheetsIntakeStatusProcessor({ provider, queue: commandQueue, spreadsheetId, maxRowsPerRun: 20 });
-    const inventorySync = inventoryViewEnabled
-      ? createInventorySheetSync({ store, spreadsheetId, getAccessToken: async () => (await sheetsClient.getAccessToken()).token })
-      : null;
     sheetsIntakeWorker = async (input) => {
       const intake = await intakeWorker(input);
       const statusReconciliation = await statusWorker(input);
-      const inventory = inventorySync ? await inventorySync.sync() : null;
-      return { ...intake, statusReconciliation, inventory };
+      return { ...intake, statusReconciliation };
     };
   }
   const server = createServer({
