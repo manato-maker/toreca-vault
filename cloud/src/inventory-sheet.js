@@ -136,12 +136,21 @@ export function createInventorySheetSync({
       }
       const rows = stockRows(current.payload, new Date());
       const sheetId = await ensureTab();
-      const values = rows.map((row) => ({
-        values: row.map((value) => {
+      const existingRange = encodeURIComponent(INVENTORY_TAB + '!A1:G5000');
+      const existing = await request(API_ROOT + '/' + encodeURIComponent(spreadsheetId)
+        + '/values/' + existingRange + '?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE',
+      { method: 'GET' }, 'Google Sheets inventory prior-state read');
+      if (Array.isArray(existing.values) && existing.values.length >= 5000) {
+        throw new Error('inventory sheet exceeds the safe row limit');
+      }
+      const rowCount = Math.max(rows.length, Array.isArray(existing.values) ? existing.values.length : 0);
+      const values = Array.from({ length: rowCount }, (_, rowIndex) => ({
+        values: Array.from({ length: 7 }, (_, columnIndex) => {
+          const value = rows[rowIndex]?.[columnIndex] ?? '';
           if (typeof value === 'number' && Number.isFinite(value)) {
             return { userEnteredValue: { numberValue: value } };
           }
-          return { userEnteredValue: { stringValue: String(value) } };
+          return value === '' ? {} : { userEnteredValue: { stringValue: String(value) } };
         })
       }));
       await request(API_ROOT + '/' + encodeURIComponent(spreadsheetId) + ':batchUpdate', {
@@ -157,7 +166,7 @@ export function createInventorySheetSync({
         })
       }, 'Google Sheets inventory update');
 
-      const endRow = rows.length;
+      const endRow = Math.max(rows.length, 2);
       const range = encodeURIComponent(INVENTORY_TAB + '!A1:G' + endRow);
       const result = await request(API_ROOT + '/' + encodeURIComponent(spreadsheetId)
         + '/values/' + range + '?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE',
