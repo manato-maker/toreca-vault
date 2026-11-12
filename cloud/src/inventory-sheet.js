@@ -22,7 +22,7 @@ function stockRows(payload, updatedAt) {
     const quantity = Number(lot?.quantity);
     if (!Number.isSafeInteger(quantity) || quantity <= 0) continue;
     const product = String(lot.product || lot.productKey || '').trim();
-    const productKey = String(lot.productKey || product).normalize('NFKC').toLocaleLowerCase('ja').replace(/[\\s\\u3000]/g, '');
+    const productKey = String(lot.productKey || product).normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\u3000]/g, '');
     const category = String(lot.category || '');
     const condition = String(lot.condition || '');
     const cardSet = String(lot.set || '');
@@ -84,7 +84,7 @@ export function createInventorySheetSync({
 
   async function request(url, init, label) {
     const token = await getAccessToken();
-    if (typeof token !== 'string' || token.length < 16 || /\\s/.test(token)) {
+    if (typeof token !== 'string' || token.length < 16 || /\s/.test(token)) {
       throw new Error('Google Sheets access token is unavailable');
     }
     const response = await fetchImpl(url, {
