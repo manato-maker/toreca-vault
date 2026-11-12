@@ -1252,3 +1252,11 @@ CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762
 
 
 CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/handover status update) both completed successfully. Test/check and Firestore Emulator jobs passed. The staging configuration and data-path status above are unchanged; V2 writes/command worker remain disabled.
+
+
+### 2026-11-12 JST — staging API認証とキュー状態のread-only確認
+
+- staging API Secretの内容は65 bytesで末尾LF付きと確認。Cloud Shellのcommand substitutionがLFを落とすため、Authorization Bearer値がCloud Run環境変数と不一致になり401となっていた。Secret本文は出力せず、LFを除いたsecret version 2を追加し、Cloud Run `toreca-vault-staging` を再deploy。revision `toreca-vault-staging-00003-a54` がReady/100% traffic。
+- 認証付きGET `/api/v2/commands/{requestId}` が成功し、30th CELEBRATION requestIdのqueue状態を `pending`、`processed=false`、`canonicalReadbackVerified=false` と確認。キューに存在するがworkerはOFFのため、V2適用済みではない。A2 receipt/readbackの受付状態とも矛盾なし。
+- V2 writes/command workerはOFF。canonical V2 import、旧V2、既存queue、未処理売却8件、本番migrationに変更なし。PR #105はDraft/open/unmerged。
+- 前回handover CI v2-ci #842は成功。今回のhandover docs更新後のCI結果は次のfollow-upで記録する。
