@@ -166,13 +166,16 @@ export function createInventorySheetSync({
         })
       }, 'Google Sheets inventory update');
 
-      const endRow = Math.max(rows.length, 2);
+      const endRow = Math.max(rows.length, 2, rowCount);
       const range = encodeURIComponent(INVENTORY_TAB + '!A1:G' + endRow);
       const result = await request(API_ROOT + '/' + encodeURIComponent(spreadsheetId)
         + '/values/' + range + '?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE',
       { method: 'GET' }, 'Google Sheets inventory readback');
-      const actual = normalized(result.values, rows.length, 7);
-      if (actual.some((row, rowIndex) => row.some((value, columnIndex) => value !== rows[rowIndex][columnIndex]))) {
+      const actual = normalized(result.values, endRow, 7);
+      const expected = Array.from({ length: endRow }, (_, rowIndex) =>
+        Array.from({ length: 7 }, (_, columnIndex) => rows[rowIndex]?.[columnIndex] ?? '')
+      );
+      if (actual.some((row, rowIndex) => row.some((value, columnIndex) => value !== expected[rowIndex][columnIndex]))) {
         throw new Error('Google Sheets inventory readback did not match');
       }
       return { rowCount: rows.length - 2, revision: Number(current.revision) };
