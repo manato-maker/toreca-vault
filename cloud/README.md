@@ -159,7 +159,7 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 
 ## Staging inventory view (2026-11-12)
 
-A separate `在庫一覧` tab can be synchronized into the private `Toreca Vault New App Intake` spreadsheet. It is a read-only view of positive Firestore inventory lots grouped by product, category, condition, and card/set identity. It shows quantity, known acquisition cost total, and a review marker when any lot cost is unknown. The Intake tab and its append-only A:G rows are not modified by this view.
+A separate `在庫一覧` tab can be synchronized into the private `Toreca Vault New App Intake` spreadsheet. It is a read-only view of positive Firestore inventory lots grouped by product, category, condition, and card/set identity. For phone readability, the view has four columns: product/set, quantity, type/condition, and cost total. The product column and top two rows stay fixed. A review marker replaces the cost total when any lot cost is unknown. The Intake tab and its append-only A:G rows are not modified by this view.
 
 The sync uses the existing Cloud Run service identity and Google Sheets access. It never puts an API token in the browser or makes the spreadsheet public. To enable it in staging, set `TV2_ENABLE_INVENTORY_VIEW=true` alongside the existing Sheets intake configuration, then deploy the service. The existing 15-minute staging intake worker updates the view after processing intake/status receipts. The view refuses to overwrite the sheet if the canonical Firestore snapshot is not initialized. A failed write/readback causes that worker tick to fail so the next scheduled tick can retry.
 
