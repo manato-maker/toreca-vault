@@ -1,6 +1,8 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { readFile } from 'node:fs/promises';
+import { dashboardReadModel } from './dashboard-data.js';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
@@ -87,6 +89,8 @@ export function createServer({
   schedulerTick = null,
   schedulerAuthorize = null,
   apiToken,
+  dashboardAuthorize = null,
+  dashboardGoogleClientId = '',
   allowedOrigins = new Set(),
   writesEnabled = false,
   commandsEnabled = false
@@ -100,6 +104,55 @@ export function createServer({
     const path = new URL(request.url || '/', 'http://localhost').pathname;
     const requestOrigin = String(request.headers.origin || '');
     const allowedOrigin = requestOrigin && origins.has(requestOrigin) ? requestOrigin : '';
+
+    const staticFiles = new Map([
+      ['/', ['index.html', 'text/html; charset=utf-8']],
+      ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+      ['/styles.css', ['styles.css', 'text/css; charset=utf-8']]
+    ]);
+    if (request.method === 'GET' && staticFiles.has(path)) {
+      const [file, contentType] = staticFiles.get(path);
+      try {
+        const body = await readFile(new URL('../public/' + file, import.meta.url));
+        response.writeHead(200, {
+          'content-type': contentType,
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer'
+        });
+        response.end(body);
+      } catch {
+        send(response, 503, { ok: false, error: 'dashboard files are unavailable' });
+      }
+      return;
+    }
+    if (request.method === 'GET' && path === '/app-config.js') {
+      const body = 'window.TV2_APP_CONFIG = ' + JSON.stringify({ googleClientId: dashboardGoogleClientId }) + ';';
+      response.writeHead(200, {
+        'content-type': 'text/javascript; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer'
+      });
+      response.end(body);
+      return;
+    }
+
+    if (path === '/api/v2/dashboard') {
+      if (request.method !== 'GET') return send(response, 405, { ok: false, error: 'method not allowed' }, allowedOrigin);
+      if (typeof dashboardAuthorize !== 'function') {
+        return send(response, 503, { ok: false, error: 'dashboard sign-in is not configured' }, allowedOrigin);
+      }
+      try {
+        if (!await dashboardAuthorize(request)) return send(response, 401, { ok: false, error: 'sign-in required' }, allowedOrigin);
+        const current = await store.read();
+        if (!current) throw new CanonicalNotInitialized();
+        return send(response, 200, dashboardReadModel(current.payload), allowedOrigin);
+      } catch (error) {
+        const result = errorResponse(error);
+        return send(response, result.status, result.body, allowedOrigin);
+      }
+    }
 
     if (path === '/internal/worker/sheets-intake') {
       if (request.method !== 'POST') return send(response, 405, { ok: false, error: 'method not allowed' });
@@ -423,6 +476,29 @@ export async function start() {
   const writesEnabled = process.env.TV2_ENABLE_WRITES === 'true';
   const commandsEnabled = process.env.TV2_ENABLE_COMMAND_QUEUE === 'true';
   const commandWorkerEnabled = process.env.TV2_ENABLE_COMMAND_WORKER === 'true';
+  const dashboardGoogleClientId = process.env.TV2_GOOGLE_OAUTH_CLIENT_ID || '';
+  const dashboardViewerEmail = String(process.env.TV2_DASHBOARD_VIEWER_EMAIL || '').trim().toLowerCase();
+  let dashboardAuthorize = null;
+  if (dashboardGoogleClientId && dashboardViewerEmail) {
+    const { OAuth2Client } = await import('google-auth-library');
+    const dashboardOAuthClient = new OAuth2Client(dashboardGoogleClientId);
+    dashboardAuthorize = async (request) => {
+      const header = String(request.headers.authorization || '');
+      const credential = header.startsWith('Bearer ') ? header.slice(7) : '';
+      if (!credential) return false;
+      try {
+        const ticket = await dashboardOAuthClient.verifyIdToken({
+          idToken: credential,
+          audience: dashboardGoogleClientId
+        });
+        const claims = ticket.getPayload();
+        return claims?.email_verified === true
+          && String(claims.email || '').trim().toLowerCase() === dashboardViewerEmail;
+      } catch {
+        return false;
+      }
+    };
+  }
   const sheetsIntakeEnabled = process.env.TV2_ENABLE_GOOGLE_SHEETS_INTAKE === 'true';
   const inventoryViewEnabled = process.env.TV2_ENABLE_INVENTORY_VIEW === 'true';
   if (inventoryViewEnabled && !sheetsIntakeEnabled) {
@@ -487,6 +563,8 @@ export async function start() {
     sheetsIntakeEnabled,
     schedulerHealth: async () => evaluateSchedulerHealth(await heartbeatStore.read()),
     apiToken: token,
+    dashboardAuthorize,
+    dashboardGoogleClientId,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),
     writesEnabled,
     commandsEnabled
