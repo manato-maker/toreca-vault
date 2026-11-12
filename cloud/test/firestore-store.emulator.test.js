@@ -128,7 +128,10 @@ test('Firestore Emulator initializes a missing staging snapshot atomically and r
     id: 'lottery-' + index, title: 'Test event ' + index,
     status: '応募済', memo: 'x'.repeat(1900)
   }));
-  payload.auditLog = [{ mutationId, transactionId: 'snapshot-import', revision: 2789 }];
+  payload.auditLog = Array.from({ length: 1800 }, (_, index) => ({
+    mutationId: 'prior-' + index, transactionId: 'tx-' + index, revision: index
+  }));
+  payload.auditLog.push({ mutationId, transactionId: 'snapshot-import', revision: 2789 });
 
   try {
     const imported = await store.initializeFromSnapshot(payload);
