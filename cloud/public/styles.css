@@ -215,3 +215,9 @@ h1 { margin: 0; font-size: 25px; font-weight: 820; letter-spacing: .01em; }
 .calendar-event-title { font-size: 14px; font-weight: 750; line-height: 1.4; }
 .calendar-event-meta { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .calendar-event a { display: inline-block; margin-top: 9px; color: var(--accent); font-size: 12px; }
+
+.dot.won, .calendar-dot.won { background: #61d7a8; }
+.dot.lost, .calendar-dot.lost { background: #ff7786; }
+.calendar-event[data-status="当選"] { border-left-color: #61d7a8; }
+.calendar-event[data-status="落選"] { border-left-color: #ff7786; }
+.calendar-event[data-receipt="未受取"] { border-left-color: #ffb461; }
