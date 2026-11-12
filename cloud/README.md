@@ -157,12 +157,18 @@ The worker does not write a separate `processing` status to Sheets, avoiding sta
 - GitHub Actions v2-ci #843 passed after the latest handover changes (test/check and Firestore Emulator). CI is not a live-service test.
 
 
-## Mobile asset dashboard (2026-11-12)
+## Mobile asset dashboard (2026-11-13)
 
 PR #106 contains the read-only mobile dashboard source at `/`: asset summary, inventory list, income/expense totals, recent activity, and a monthly calendar under the four tabs `資産`, `予定`, `収支`, and `履歴`. Calendar dates come only from existing lottery fields (`applicationDate`, `deadline`, `resultDate`, `receiveDeadline`, `receivedDate`) and dated purchase/sale/opening transactions. Missing dates are omitted; the calendar never invents dates or creates lottery rows. Tapping a day shows its dated events and available details.
 
-**The PR dashboard has not yet been deployed to the live staging service.** The current Cloud Run service is private, so opening its `run.app` URL in a normal browser returns an access error before the dashboard can load. The source serves static HTML/CSS/JavaScript at `/`; the dashboard API verifies a Google ID token, requires a verified email, and compares it to the exact permitted viewer address. The browser receives no `TV2_API_TOKEN`, and the response omits internal IDs, memos, and raw payload data.
+**The PR dashboard has not yet been deployed to the live staging service.** Cloud Run is private, so a normal unauthenticated browser request is rejected before the page loads. The dashboard API verifies a Google ID token, requires a verified email, and compares it to the exact permitted viewer address. The browser receives no `TV2_API_TOKEN`; the API returns a dashboard-specific read model rather than internal IDs or the raw canonical payload. Calendar event data includes any lottery memo present in the source data.
 
-For a direct browser URL, Cloud Run needs unauthenticated invocation to serve the static files; inventory data remains behind the dashboard Google sign-in check. This changes the service-level access policy, so staging must remain private until that choice is explicitly changed. The OAuth web client ID and permitted viewer email also need configuration before the data screen can load.
+### Private browser access plan
 
-The dashboard is read-only. It does not change inventory, run queued commands, or alter the 15-minute intake schedule. Deploying the PR and configuring the browser access path are still pending.
+Use direct Identity-Aware Proxy (IAP) on Cloud Run. Keep Cloud Run authentication required and do not grant `allUsers` the Cloud Run Invoker role or disable the Invoker IAM check. IAP protects the `run.app` URL and other ingress paths while allowing only explicitly authorized Google identities. The dashboard's Google ID token verification and exact viewer-email check remain an additional data-access gate.
+
+Before enabling IAP, inspect the staging service's existing callers, including the 15-minute Cloud Scheduler OIDC request and any worker endpoints. IAP is applied to all incoming paths, so preserve required service-to-service access with narrowly scoped IAP authorization or separate the affected route/service if necessary. Do not assume the existing Scheduler OIDC permission alone will satisfy IAP.
+
+The OAuth web client ID and permitted viewer email still need to be configured. After IAP is enabled and authorized for the intended account, deploy PR #106 to staging, retrieve the exact service URL from Cloud Run, and verify both the mobile screen and the post-login dashboard data. If the project has no Google organization, configure IAP's external OAuth client path as required. Do not use unauthenticated public invocation as a shortcut.
+
+The dashboard is read-only. It does not change inventory, run queued commands, or alter the 15-minute intake schedule. Deployment and live login/data verification remain pending.
