@@ -29,6 +29,11 @@ function fakeFirestore(initial) {
           return { exists: value !== undefined && !deletes.has(ref.path), data: () => clone(value) };
         },
         set(ref, value) { writes.set(ref.path, clone(value)); deletes.delete(ref.path); },
+        create(ref, value) {
+          const exists = writes.has(ref.path) || (docs.has(ref.path) && !deletes.has(ref.path));
+          if (exists) throw new Error('document already exists');
+          writes.set(ref.path, clone(value)); deletes.delete(ref.path);
+        },
         delete(ref) { writes.delete(ref.path); deletes.add(ref.path); }
       };
       const result = await callback(transaction);
@@ -72,6 +77,30 @@ test('Firestore store refuses to initialize a missing canonical state', async ()
   const store = createFirestoreStore(fakeFirestore());
   assert.equal(await store.read(), null);
   await assert.rejects(store.save(purchaseMutation('m1')), CanonicalNotInitialized);
+});
+
+test('Firestore store initializes a validated snapshot only when canonical state is absent', async () => {
+  const payload = emptyV2();
+  payload.revision = 2789;
+  payload.lastMutationId = 'export-mutation-2789';
+  const db = fakeFirestore();
+  const store = createFirestoreStore(db);
+  const initialized = await store.initializeFromSnapshot(payload);
+  assert.equal(initialized.revision, 2789);
+  assert.deepEqual(initialized.payload, payload);
+  assert.equal(initialized.duplicate, false);
+  await assert.rejects(store.initializeFromSnapshot(payload), /already initialized/);
+  assert.equal((await store.read()).revision, 2789);
+});
+
+test('Firestore store initializes and reads back a large chunked snapshot', async () => {
+  const db = fakeFirestore();
+  const store = createFirestoreStore(db);
+  const payload = largeMutation('staging-import').payload;
+  const initialized = await store.initializeFromSnapshot(payload);
+  assert.equal(initialized.revision, 1);
+  assert.deepEqual(initialized.payload, payload);
+  assert.equal(db.dump().get('torecaVaultV2/canonical').storageFormat, 'chunked-v1');
 });
 
 test('Firestore store writes legacy-sized snapshots and verifies readback', async () => {
