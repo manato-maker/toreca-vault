@@ -18,7 +18,7 @@ function reply(response, status, content, contentType = 'text/plain; charset=utf
   response.end(content);
 }
 
-export function createDashboardServer({ store, verifyIap, now = () => new Date() }) {
+export function createDashboardServer({ store, verifyIap, now = () => new Date(), handoverDocId = '' }) {
   if (typeof store?.read !== 'function') throw new TypeError('read-only store is required');
   if (typeof verifyIap !== 'function') throw new TypeError('signed IAP verifier is required');
 
@@ -36,7 +36,7 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     try {
       const snapshot = await store.read();
       if (!snapshot?.payload) return reply(response, 503, 'Staging data is not initialized');
-      const html = renderDashboard(snapshot.payload, snapshot.revision, url.searchParams.get('month') || '', now(), url.searchParams.get('type') || 'all');
+      const html = renderDashboard(snapshot.payload, snapshot.revision, url.searchParams.get('month') || '', now(), url.searchParams.get('type') || 'all', handoverDocId);
       if (request.method === 'HEAD') {
         response.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8' });
         return response.end();
@@ -64,7 +64,7 @@ export async function startDashboard() {
     audience: process.env.TV2_DASHBOARD_IAP_AUDIENCE,
     allowedEmails: process.env.TV2_DASHBOARD_ALLOWED_EMAILS
   });
-  const server = createDashboardServer({ store, verifyIap });
+  const server = createDashboardServer({ store, verifyIap, handoverDocId: process.env.TV2_HANDOVER_DOC_ID || '' });
   const port = Number(process.env.PORT) || 8080;
   server.listen(port, '0.0.0.0', () => console.log('Toreca Vault staging dashboard listening'));
 }
