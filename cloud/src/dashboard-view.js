@@ -94,7 +94,7 @@ function inventoryCard(lot, quote) {
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
 
-export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date()) {
+export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all') {
   if (!snapshot || Number(snapshot.schemaVersion) !== 2) throw new Error('invalid snapshot');
   const lots = Array.isArray(snapshot.inventoryLots) ? snapshot.inventoryLots.filter(l => num(l?.quantity) > 0) : [];
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
@@ -124,7 +124,27 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(monthOverride) ? monthOverride : today.slice(0, 7);
   const events = eventsFor(lotteries);
   const relevantEvents = events.filter(e => e.date.slice(0, 7) === month).slice(0, 30);
-  const recent = [...transactions].sort((a,b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 12);
+  // Keep the overview short; category-specific views must not hide older sales.
+  const types = ['all', 'purchase', 'sale', 'opening'];
+  const selectedType = types.includes(historyType) ? historyType : 'all';
+  const sorted = [...transactions].sort((a,b) =>
+    String(b.date || '').localeCompare(String(a.date || '')) ||
+    String(b.id || '').localeCompare(String(a.id || '')));
+  const visibleTransactions = selectedType === 'all'
+    ? sorted.slice(0, 12)
+    : sorted.filter(t => t.type === selectedType);
+  const counts = Object.fromEntries(types.map(type => [
+    type, type === 'all' ? transactions.length : transactions.filter(t => t.type === type).length
+  ]));
+  const historyFilters = '<nav class="history-filters" aria-label="取引履歴の絞り込み">' +
+    [['all','すべて'], ['purchase','購入'], ['sale','売却'], ['opening','開封']]
+      .map(([type,label]) => '<a class="history-filter' + (selectedType === type ? ' selected' : '') +
+        '" href="/app?month=' + month + '&type=' + type + '#history"' +
+        (selectedType === type ? ' aria-current="page"' : '') + '>' +
+        label + ' ' + counts[type] + '</a>').join('') + '</nav>';
+  const historyCountLabel = selectedType === 'all'
+    ? counts.all + '件中 直近' + visibleTransactions.length + '件'
+    : counts[selectedType] + '件すべて';
   const metric = (name, value, sub) => '<div class="metric"><div>' + esc(name) + '</div><strong>' + esc(value) + '</strong><small>' + esc(sub) + '</small></div>';
   const rows = [...lots].sort((a,b) => String(b.acquiredAt || '').localeCompare(String(a.acquiredAt || ''))).slice(0, 80);
   const eventRows = relevantEvents.length ? relevantEvents.map(e =>
@@ -132,12 +152,19 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '</span><span class="event-kind">' + esc(e.kind) + '</span><span class="event-description">' +
     esc(e.label) + (e.store ? '<small>' + esc(e.store) + '</small>' : '') + '</span></div>').join('')
     : '<p class="empty">この月の登録済み予定はありません。</p>';
-  const transactionRows = recent.length ? recent.map(t =>
-    '<div class="history-row"><div><b>' + esc(t.product || t.productKey || '取引') +
-    '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small></div><span class="' +
-    (t.type === 'sale' ? 'positive' : '') + '">' + esc(t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封') +
-    ' · ' + esc(money(known(t.total) ? t.total : num(t.price) * num(t.quantity))) + '</span></div>').join('')
-    : '<p class="empty">取引履歴がありません。</p>';
+  const transactionRows = visibleTransactions.length ? visibleTransactions.map(t => {
+    const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
+    const amount = t.type === 'sale'
+      ? num(t.price) * num(t.quantity) - num(t.fee)
+      : known(t.total) ? num(t.total) : num(t.price) * num(t.quantity);
+    const profit = t.type === 'sale' && known(t.acquisitionCost) ? amount - num(t.acquisitionCost) : null;
+    return '<div class="history-row"><div><b>' + esc(t.product || t.productKey || '取引') +
+      '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small></div>' +
+      '<div class="history-money"><span class="' + (t.type === 'sale' ? 'positive' : '') + '">' +
+      esc(kind) + ' · ' + esc(money(amount)) + '</span>' +
+      (profit !== null ? '<small>確定利益 ' + esc(money(profit)) + '</small>' :
+        t.type === 'sale' ? '<small>原価未確認</small>' : '') + '</div></div>';
+  }).join('') : '<p class="empty">この種別の取引記録はありません。</p>';
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#93a5bc;--aqua:#70e4d2;--purple:#9888ff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.5}
@@ -149,7 +176,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .warning{border:1px solid #5c4d39;background:#29261f;color:#f7d79f;border-radius:10px;padding:12px;margin-top:14px;font-size:12px}.stock-row,.event,.history-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.stock-row:last-child,.event:last-child,.history-row:last-child{border:0}
 .stock-main{min-width:0;flex:1}.stock-name{font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px}
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day small{color:var(--aqua);font-size:10px}
-.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
+.history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
 footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:8px 11px;border-radius:9px}
 @media(min-width:750px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}main{padding-bottom:60px}.bottom{position:static;max-width:1040px;margin:auto;border:1px solid var(--line);border-radius:15px 15px 0 0}.day{min-height:80px}}
@@ -175,7 +202,7 @@ ${rows.length ? rows.map(l => inventoryCard(l, quoteFor(quotes,l))).join('') : '
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
 ${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
 </section>
-<section class="panel" id="history"><div class="panel-top"><h2>最近の取引</h2><span class="minor">${transactions.length}件中 直近12件</span></div>${transactionRows}</section>
+<section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>
 <footer>読み取り専用 · Toreca Vault staging · データの登録・修正はできません</footer>
 </main>
 <nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a></nav></body></html>`;
