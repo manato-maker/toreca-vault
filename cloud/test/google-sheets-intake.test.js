@@ -115,3 +115,57 @@ test('a queue failure leaves the row retryable and does not mark it processed', 
   assert.deepEqual(provider.receipts, []);
   assert.equal(cursorStore.current(), 2);
 });
+
+
+test('confirmed Chat lottery without external application ID has a conservative fingerprint and can enqueue once', async () => {
+  const common = {
+    type: 'lottery', title: '公式商品A 抽選', store: '店舗A',
+    owner: '本人分', applicationDate: '2026-11-14',
+    status: '応募済', evidenceType: 'screenshot', quantity: 2
+  };
+  const first = { ...common, requestId: 'chat:confirmed:lottery:1' };
+  const second = { ...common, requestId: 'chat:confirmed:lottery:2', quantity: 1 };
+  const inputs = [];
+  const existing = new Map();
+  const provider = fakeProvider([
+    row(first.requestId, first, '', 'new', 2),
+    row(second.requestId, second, '', 'new', 3)
+  ]);
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 123,
+    queue: { async enqueue(input) {
+      inputs.push(input);
+      if (existing.has(input.businessEventKey)) {
+        return { businessDuplicate: true, existingRequestId: existing.get(input.businessEventKey) };
+      }
+      existing.set(input.businessEventKey, input.requestId);
+      return { accepted: true };
+    } }
+  });
+  assert.deepEqual(await run(), { seen: 2, enqueued: 1, duplicate: 1, review: 0, skipped: 0 });
+  assert.match(inputs[0].businessEventKey, /^lottery:confirmed-report:v1:[a-f0-9]{64}$/);
+  assert.equal(inputs[0].businessEventKey, inputs[1].businessEventKey);
+  assert.equal(provider.receipts[1].status, 'duplicate');
+  assert.deepEqual(provider.sourceIds, [first.requestId, second.requestId]);
+});
+
+test('unconfirmed or insufficiently identified Chat lottery never gets a fingerprint', async () => {
+  const base = { requestId: 'chat:lottery:no-evidence', type: 'lottery',
+    title: '商品A', store: '店舗A', owner: '本人分',
+    applicationDate: '2026-11-14', status: '応募済' };
+  const invalid = [
+    { ...base },
+    { ...base, evidenceType: 'screenshot', owner: '' },
+    { ...base, evidenceType: 'chat-report', applicationDate: '' },
+    { ...base, evidenceType: 'chat-report', status: '応募前' }
+  ];
+  const provider = fakeProvider(invalid.map((command, index) => row(command.requestId, command, '', 'new', index + 2)));
+  let queueCalls = 0;
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 4,
+    queue: { async enqueue() { queueCalls++; } }
+  });
+  assert.deepEqual(await run(), { seen: 4, enqueued: 0, duplicate: 0, review: 4, skipped: 0 });
+  assert.equal(queueCalls, 0);
+  assert.ok(provider.receipts.every(x => x.resultCode === 'lottery-identity-missing'));
+});
