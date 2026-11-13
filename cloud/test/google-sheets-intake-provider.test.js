@@ -149,3 +149,61 @@ test('provider rejects unsafe token, row bounds, invalid receipt, and API errors
     return true;
   });
 });
+
+
+test('review receipt allows blank accepted ID but still verifies the original source ID', async () => {
+  let n = 0;
+  const calls = [];
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init });
+      ++n;
+      if (n === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      if (n === 2) return ok({ values: [['chat:lottery:noid', '{"type":"lottery"}', '', 'new']] });
+      if (n === 3) return ok({ updatedCells: 4 });
+      return ok({ values: [['review', 'lottery-identity-missing', '', 500]] });
+    }
+  });
+  assert.deepEqual(await provider.writeReceipt(10, {
+    status: 'review', resultCode: 'lottery-identity-missing', acceptedRequestId: '', processedAtMs: 500
+  }, 'chat:lottery:noid'), { updated: true });
+  assert.equal(calls[2].init.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls[2].init.body).values, [['review', 'lottery-identity-missing', '', 500]]);
+});
+
+test('business duplicate receipt can point to another already accepted request', async () => {
+  let n = 0;
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async () => {
+      ++n;
+      if (n === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      if (n === 2) return ok({ values: [['chat:duplicate:2', '{"type":"lottery"}', '', 'new']] });
+      if (n === 3) return ok({ updatedCells: 4 });
+      return ok({ values: [['duplicate', 'business-duplicate', 'gmail:original:1', 999]] });
+    }
+  });
+  assert.deepEqual(await provider.writeReceipt(11, {
+    status: 'duplicate', resultCode: 'business-duplicate', acceptedRequestId: 'gmail:original:1', processedAtMs: 999
+  }, 'chat:duplicate:2'), { updated: true });
+});
+
+test('review/duplicate receipt fails closed on source row replacement', async () => {
+  let n = 0;
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async () => {
+      ++n;
+      if (n === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      return ok({ values: [['chat:other:2', '', '', 'new']] });
+    }
+  });
+  await assert.rejects(provider.writeReceipt(12, {
+    status: 'review', resultCode: 'invalid-input', acceptedRequestId: '', processedAtMs: 10
+  }, 'chat:old:1'), /request ID changed/);
+  assert.equal(n, 2);
+});
