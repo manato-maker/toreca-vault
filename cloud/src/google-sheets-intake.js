@@ -18,9 +18,38 @@ function parseJsonCell(value, label, optional = false) {
   }
 }
 
+/**
+ * A Chat or screenshot may prove a lottery was submitted even if the retailer
+ * shows no externally issued application ID. Create a conservative source-
+ * independent fingerprint only for a fully specified, confirmed application.
+ * It is NOT an applicationId and must never be copied into the retailer-ID field.
+ */
+function confirmedChatLotteryFingerprint(command) {
+  if (command.type !== 'lottery' || command.status !== '応募済'
+    || !['screenshot', 'chat-report'].includes(command.evidenceType)) return null;
+  const canonical = (value) => String(value || '').normalize('NFKC').trim()
+    .toLocaleLowerCase('ja').replace(/[\\s\\u3000]+/g, ' ');
+  const store = canonical(command.store);
+  const title = canonical(command.title || command.product);
+  const owner = canonical(command.owner);
+  const applicationDate = String(command.applicationDate || '');
+  if (!store || !title || !owner || store.length > 120 || title.length > 180
+    || owner.length > 100 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(applicationDate)
+    || Number.isNaN(Date.parse(applicationDate + 'T00:00:00Z'))) return null;
+  // Deliberately do not include quantity/price: a corrected quantity must not
+  // create another distinct application. Subsequent edits use the original ID.
+  const payload = JSON.stringify(['toreca-vault-chat-verified-lottery-application', 1,
+    store, title, owner, applicationDate]);
+  return 'lottery:confirmed-report:v1:' + createHash('sha256').update(payload).digest('hex');
+}
+
 function parseIdentity(value, command) {
   const kind = EVENT_KINDS.get(String(command.type || ''));
   if (value === null) {
+    if (kind === 'application') {
+      const fingerprint = confirmedChatLotteryFingerprint(command);
+      if (fingerprint) return { businessEventKey: fingerprint };
+    }
     if (kind) throw Object.assign(new Error('lottery identity is required'), { reasonCode: 'lottery-identity-missing' });
     return { businessEventKey: undefined };
   }
