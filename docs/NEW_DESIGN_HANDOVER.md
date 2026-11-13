@@ -1068,3 +1068,17 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **運用ルール**: 通常ChatとWorkの重要な決定/最新状況は共通Google Docに実際に追記してから「引き継ぎ更新済み」と報告。技術の変更はGitHubドキュメントにも反映し、Google Docに参照/検証状況を残す。自動登録や履歴処理は別の機能であり、文書ダウンロードができてもデータのアプリ反映済みを意味しない。
 - **作業状況**: PR #105ブランチの `dashboard-view.js`、`dashboard-server.js`、`deploy-dashboard-staging.sh` に機能追加、`dashboard.test.js` にリンクID検証とIAP保護のテストを追加。**GitHubへのコード反映まで。Cloud Runの再デプロイ/実機ダウンロード検証は未実施**。Google Docを更新した場合、外部リンクを開いた時に最新内容が取れる方式であり、アプリ内に編集時刻や本文が自動表示される訳ではない。
 - **変更理由**: ChatとWorkの作業領域を分けつつ、人手で.mdファイルをコピーし直す負担と二重正本の不整合を減らすため。ユーザー情報を公開ソースへ置かないことを優先。
+
+
+### 2026-11-14 JST — 通常Chat日常報告の受付基盤改善（CI成功、未デプロイ）
+
+- **依頼**: 通常Chatに抽選・購入・受取・開封・売却を報告するだけで新アプリに実反映できる段階まで進める。Chatは報告用、Workは開発/運用用。共通Google Docsを正本にする。
+- **再利用する仕組み**: 接続済み `Toreca Vault New App Intake` → Firestore command queue → Cloud Run command worker → staging canonical readback → SheetのD:G receipt。既存経路に新しい第二のキューを作らない。通常Chatは接続済みGoogle Sheets編集アクションが利用可能な場合だけ、既存行との重複照合後、新規行A:Dへ`new`を追加する。受付とFirestore適用は別ステータス。
+- **実測確認**: 2026-11-14 JST、専用Google Sheetsの購入1行は`v2-applied / canonical-readback-verified`、他に`queued`や`new`の行があり、現行本番として全件処理済みではない。受付workerの実稼働・Scheduler・Sheets権限はCloud Shell/Workから要検証。旧売却8件は再投入禁止。
+- **修正**: `cloud/src/google-sheets-intake.js` / `google-sheets-intake-provider.js` のreview・業務重複receiptの比較対象を原本sourceRequestIdへ修正（acceptedRequestIdが空または別IDでもD:Gを正しく書ける）。A:Cの入力原本と既存requestIdは不変。
+- **抽選の改善**: 応募完了の明示Chat報告・スクリーンショットで`status=応募済`、`evidenceType=chat-report|screenshot`、`title/store/owner/applicationDate`が揃う場合に限り、外部応募番号なしでも専用の内部指紋で受付できる。これは発行元の応募IDの代用・捏造ではない。同一応募と考えられる別IDの再申込を正本側でreviewに止める。確証のない応募、結果・受取の曖昧さはreview継続。
+- **商品の保存**: `cloud/src/v2-command.js` の抽選レコードに商品/商品ID、申込数/単位/シュリンク条件、応募表示価格、メーカー税込定価/公式URL/確認日、支払ステータスを加えた。抽選だけでは購入/在庫/実原価を増やさない。
+- **手順**: `docs/CHAT_DAILY_REPORTING_RUNBOOK.md` に通常Chat側の操作ルールを記録。公式商品ページ・パッケージ・定価の照合、Sheet照合、重複回避、状態報告、確認待ちの扱いを明示。通常Chatからの自動writeはこの文書を共有するだけでは起動せず、実際のコネクタ呼び出しが必要。
+- **検証**: GitHub Actions [v2-ci #43527682483](https://github.com/manato-maker/toreca-vault/actions/runs/43527682483) が`test`および`firestore-emulator`ともにsuccess。receiptの空ID/別ID、確定済みスクリーンショット、重複報告、未確定・日付不正報告、抽選原価非計上のテストを追加。
+- **未完了**: `toreca-vault-staging`への改修デプロイ、15分間隔のprivate Sheets intake workerの最新稼働確認、新Chatの報告→Sheet追加→Queue→canonical→スマホ画面の実E2E、外部応募IDが無い結果・受取の取り扱い。GCPの認証付き操作経路がこのチャットにないため、Firestore実データ、旧キュー、旧売却8件、staging UIは変更していない。
+- **次工程**: Work/Cloud Shellで既存環境設定を読み取り、デプロイ前後の構成比較→APIだけ更新→Intake Scheduler/IAM/Sheets accessを安全に検証→既存`new`の重複/状態を確認→新規の実報告1件でE2E readback。必要な所有者操作があれば権限確認を求める。旧V2本番/IAPを変更しない。
