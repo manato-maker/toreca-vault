@@ -123,3 +123,58 @@ test('unknown command variants remain review-only and invalid payloads fail clos
   assert.throws(() => run(emptyV2(), { type: 'purchase', requestId: 'p-open', product: 'シングル', category: 'カード', quantity: 1, unitCost: 500, cardSet: 'M6a 001/100', openingBoxProduct: 'BOX', date: '2026-11-03' }), /zero cost/);
   assert.throws(() => run(emptyV2(), { type: 'lottery', requestId: 'lot-1', title: 'x', store: 'y', status: '当選', applicationDate: '2026-11-03' }), /lottery application/);
 });
+
+
+test('chat lottery retains official product reference and quantity but does not create purchase or stock', () => {
+  const input = {
+    type: 'lottery', requestId: 'lot-product-1',
+    title: '公式商品A 抽選', product: '公式商品A',
+    productId: 'official:example-001', store: '店舗A', status: '応募済',
+    applicationDate: '2026-11-13', owner: '本人', quantity: 2, category: 'BOX',
+    shrinkStatus: 'シュリンクなし', unitPrice: 6000, expectedPurchaseTotal: 12000,
+    paymentStatus: '未購入・未支出', officialMsrpYen: 6000,
+    officialProductUrl: 'https://example.com/products/001',
+    officialMsrpCheckedAt: '2026-11-14', evidenceType: 'screenshot'
+  };
+  const state = run(emptyV2(), input).state;
+  assert.equal(state.lotteries.length, 1);
+  const lottery = state.lotteries[0];
+  assert.equal(lottery.product, '公式商品A');
+  assert.equal(lottery.productId, 'official:example-001');
+  assert.equal(lottery.quantity, 2);
+  assert.equal(lottery.category, 'BOX');
+  assert.equal(lottery.shrinkStatus, 'シュリンクなし');
+  assert.equal(lottery.officialMsrpYen, 6000);
+  assert.equal(lottery.officialProductUrl, 'https://example.com/products/001');
+  assert.equal(lottery.unitPrice, 6000);
+  assert.equal(lottery.paymentStatus, '未購入・未支出');
+  assert.equal(state.transactions.length, 0);
+  assert.equal(state.inventoryLots.length, 0);
+  assert.equal(run(state, input).duplicate, true);
+});
+
+test('same-day matching lottery application with a new ID is held for review', () => {
+  const common = { type: 'lottery', title: '商品B', store: '同一店', status: '応募済',
+    applicationDate: '2026-11-13', owner: '本人', deadline: '2026-11-15' };
+  const state = run(emptyV2(), { ...common, requestId: 'lottery-original' }).state;
+  const before = structuredClone(state);
+  assert.throws(
+    () => run(state, { ...common, requestId: 'lottery-another-id' }),
+    /manual review required/
+  );
+  assert.deepEqual(state, before);
+  const anotherOwner = run(state, { ...common, owner: '家族分', requestId: 'lottery-family' });
+  assert.equal(anotherOwner.state.lotteries.length, 2);
+});
+
+test('invalid lottery quantity, reference prices and official URLs are rejected', () => {
+  const common = { type: 'lottery', requestId: 'lot-invalid', title: '商品B', store: '店',
+    status: '応募済', applicationDate: '2026-11-13' };
+  for (const extra of [
+    { quantity: -1 }, { quantity: 0 }, { quantity: 1.5 },
+    { unitPrice: -1 }, { officialMsrpYen: -100 },
+    { officialProductUrl: 'http://example.com/unsafe' }
+  ]) {
+    assert.throws(() => run(emptyV2(), { ...common, ...extra }), /lottery/);
+  }
+});
