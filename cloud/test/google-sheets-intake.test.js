@@ -9,11 +9,14 @@ function row(requestId, command, identity = '', status = 'new', rowNumber = 2) {
 }
 
 function fakeProvider(rows) {
-  const receipts = [];
+  const receipts = [], sourceIds = [];
   return {
-    receipts,
+    receipts, sourceIds,
     async readRows() { return rows; },
-    async writeReceipt(rowNumber, receipt) { receipts.push({ rowNumber, ...receipt }); }
+    async writeReceipt(rowNumber, receipt, sourceRequestId) {
+      receipts.push({ rowNumber, ...receipt });
+      sourceIds.push(sourceRequestId);
+    }
   };
 }
 
@@ -72,6 +75,7 @@ test('retries use the same durable request ID and a repeated explicit lottery id
   assert.equal(cursorStore.current(), 4);
   assert.match(provider.receipts[1].resultCode, /duplicate/);
   assert.equal(provider.receipts[1].acceptedRequestId, first.requestId);
+  assert.deepEqual(provider.sourceIds, [first.requestId, second.requestId]);
 });
 
 test('malformed commands, mismatched IDs, and missing lottery IDs route to review without queue calls', async () => {
@@ -88,6 +92,9 @@ test('malformed commands, mismatched IDs, and missing lottery IDs route to revie
   assert.equal(queueCalls, 0);
   assert.deepEqual(provider.receipts.map((item) => item.status), ['review', 'review', 'review', 'review']);
   assert.ok(provider.receipts.every((item) => !JSON.stringify(item).includes('entry ID')));
+  assert.deepEqual(provider.sourceIds, [
+    'sheet:bad:json', 'sheet:bad:mismatch', 'sheet:lottery:noid', 'sheet:lottery:missing'
+  ]);
 });
 
 test('only explicit new rows are processed and batch bounds are enforced', async () => {
