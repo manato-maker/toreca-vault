@@ -938,3 +938,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト**: 新画面・署名IAP拒否/許可・文字列エスケープ・書込み拒否をテスト追加。GitHub Actions v2-ci #867はコードテストとFirestore Emulatorの両方が成功。後続のnon-root化、Cloud Shell環境変数明示、スクロール修正後のCIは別途確認。
 - **未実施**: Cloud Shellからの別サービスdeploy、IAP有効化とWeb App User権限設定、実機でGoogleログイン→在庫/資産/予定の表示確認、実費検証。コード実装と実運用開始を混同しない。元APIにIAPはまだ設定しない。
 - **次工程**: 新サービスだけをCloud Shellからデプロイ→UIサービスのIAPとアクセス許可設定→スマホ表示テスト→元のScheduler/command-worker動作確認。GitHub PR #105はDraft/openのまま、本番移行や旧V2への書込みは対象外。
+
+
+### 2026-11-13 JST — スマホでの閲覧画面/IAP動作確認
+
+- ユーザー提供スクリーンショットから、専用 Cloud Run サービス `toreca-vault-ui-staging` のモバイル画面に Google アカウントのIAP認証を通ってアクセスできたことを確認。初回は `You don't have access` が表示されたが、再度開いた画面で閲覧成功。403解消理由の断定は避ける。
+- 画面に `STAGING · 閲覧専用`、`資産ダッシュボード`、`V2 revision 2926`、資産・在庫評価カード、在庫一覧、下部ナビ（資産/在庫/予定/履歴）を確認。個別の金額、商品名、メールアドレスは公開リポジトリの記録に転記しない。
+- **検証済み**: スマホ実機からIAPを経由して閲覧専用ダッシュボードの初期画面を表示し、staging Firestore snapshotを基に集計表示。
+- **未検証**: カレンダー/履歴への実際の画面遷移、データの新鮮性・金額照合、全取引種別と通常Chatの登録、Gmail実接続、バックアップ復旧、本番移行。旧V2本番に関する完了とは区別する。
+- 元のCloud Run `toreca-vault-staging` のIAP設定には触れず、閲覧画面だけを別サービスとして維持する。追加の変更やデプロイはなし。
