@@ -28,13 +28,13 @@ function confirmedChatLotteryFingerprint(command) {
   if (command.type !== 'lottery' || command.status !== '応募済'
     || !['screenshot', 'chat-report'].includes(command.evidenceType)) return null;
   const canonical = (value) => String(value || '').normalize('NFKC').trim()
-    .toLocaleLowerCase('ja').replace(/[\\s\\u3000]+/g, ' ');
+    .toLocaleLowerCase('ja').replace(/[\s\u3000]+/g, ' ');
   const store = canonical(command.store);
   const title = canonical(command.title || command.product);
   const owner = canonical(command.owner);
   const applicationDate = String(command.applicationDate || '');
   if (!store || !title || !owner || store.length > 120 || title.length > 180
-    || owner.length > 100 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(applicationDate)
+    || owner.length > 100 || !/^\d{4}-\d{2}-\d{2}$/.test(applicationDate)
     || Number.isNaN(Date.parse(applicationDate + 'T00:00:00Z'))
     || new Date(applicationDate + 'T00:00:00Z').toISOString().slice(0, 10) !== applicationDate) return null;
   // Deliberately do not include quantity/price: a corrected quantity must not
