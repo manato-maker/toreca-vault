@@ -1306,3 +1306,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - ORIGINAL ARTWORK DUEL SET（A3）は`review` / `needs-review`を維持。過去支払済みの原価照合が済むまで登録しない。
 - stagingにおける専用Intake → Firestore queue → worker → canonical適用 → readback確認の購入1件は完了し、同経路での限定的なstaging運用を開始できる。自然文/画像からIntake行を完全自動生成するE2E、Gmail/OAuth・相場更新・全取引種別、backup/restore、実費の無料枠確認は未検証。アプリ全機能の完成や本番cutoverとは区別する。
 - 旧V2本番、旧queue、未処理売却8件、旧Apps Script、本番データ、billing設定は変更なし。本番移行は未実施。
+
+
+### 2026-11-14 JST — 買取ミミの画像形式（ポケカ/ONE PIECE）を仕様に追加
+
+- ユーザー提供の買取表画像2枚に基づき、買取ミミ `https://x.com/mimi_kaitori` の画像レイアウトを具体化。ポケカ表は11/13 12:00更新表示、ONE PIECE表は11/12 12:00更新表示。元投稿URL・postIdは未照合であり、最新相場としてFirestoreには取り込んでいない。
+- **旧仕様**: 店舗横断でOCR／商品パッケージを照合する方針のみ。**新仕様**: ポケカは上段赤＝シュリンク有1BOX、下段青＝シュリンク無1BOX。ONE PIECEはテープ付きのみで上段赤＝1BOX、下段青＝1ケース/カートン。青欄のハイフン・欠落を0円としない、青い「段ボール未開封」等は金額でなく条件注記、ケース総額はBOX単価に割らない。
+- **変更理由**: 同じ2段赤青でも商品の状態と単位の意味が異なるため、誤った買取相場・在庫評価を防ぐ必要がある。11/12 ONE PIECE左上枠は33,000円/BOXと402,000円/ケースという別価格の具体例。
+- 正本は `docs/X_BUYBACK_QUOTES_SPEC.md` v1.1と `docs/NEW_DESIGN_HANDOVER.md`。画像やユーザー固有の保有データは公開GitHubに転記しない。
+- **完了した作業**: 文書仕様追記のみ。**未実装/未検証**: X元ポストの真正性・最新性検証、公式画像マスタでの商品ID付与、OCR・視覚解析、自動quote保存、Cloud Runデプロイ。売却8件・在庫・旧キュー・Firestore正本には未変更。
