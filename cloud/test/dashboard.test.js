@@ -109,3 +109,66 @@ test('IAP verifier rejects missing allowlist or audience at startup', () => {
   assert.throws(() => createIapVerifier({ audience: '', allowedEmails: 'user@example.com' }), /audience/);
   assert.throws(() => createIapVerifier({ audience: '/projects/1/locations/asia-northeast1/services/app', allowedEmails: '' }), /ALLOWED_EMAILS/);
 });
+
+test('sales filter lists every older sale even when mixed overview contains only purchases', () => {
+  const manyPurchases = Array.from({length: 20}, (_, n) => ({
+    id: 'p' + n, type: 'purchase', product: '新しい購入品' + n,
+    date: '2026-11-12', quantity: 1, price: 100
+  }));
+  const oldSale = {
+    id: 'old-sale', type: 'sale', product: '過去の売却商品',
+    date: '2026-01-01', quantity: 2, price: 9000, fee: 1000, acquisitionCost: 12000
+  };
+  const sample = { ...SNAPSHOT, transactions: [...manyPurchases, oldSale] };
+  const overview = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'));
+  assert.match(overview, /21件中 直近12件/);
+  assert.doesNotMatch(overview, /過去の売却商品/);
+  assert.match(overview, /売却 1/);
+  assert.match(overview, /type=sale#history/);
+
+  const sales = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale');
+  assert.match(sales, /1件すべて/);
+  assert.match(sales, /過去の売却商品/);
+  assert.match(sales, /売却 · ￥17,000|売却 · ¥17,000/);
+  assert.match(sales, /確定利益 [¥￥]5,000/);
+  assert.doesNotMatch(sales, /新しい購入品/);
+});
+test('history filters only accept known types and escape transaction descriptions', () => {
+  const sample = {
+    ...SNAPSHOT,
+    transactions: [
+      { type: 'opening', id: 'o1', product: '<svg/onload=alert(1)>', quantity: 1, price: 0, date: '2026-11-10' },
+      { type: 'sale', id: 's1', product: '利益原価未確認', quantity: 1, price: 100, acquisitionCost: null, date: '2026-11-11' }
+    ]
+  };
+  const opening = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'opening');
+  assert.match(opening, /&lt;svg\/onload=alert\(1\)&gt;/);
+  assert.doesNotMatch(opening, /<svg\/onload/);
+  assert.doesNotMatch(opening, /利益原価未確認/);
+  const sale = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale');
+  assert.match(sale, /原価未確認/);
+  const unknown = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale"><script>');
+  assert.match(unknown, /すべて 2/);
+  assert.doesNotMatch(unknown, /<script>/);
+});
+test('signed IAP request can safely view older sales through GET history filter', async () => {
+  const record = { ...CURRENT, payload: {
+    ...SNAPSHOT, transactions: [
+      ...Array.from({ length: 15 }, (_, n) => ({
+        id: 'p' + n, type: 'purchase', product: 'recent ' + n,
+        date: '2026-11-12', quantity: 1, price: 50
+      })),
+      { id: 's1', type: 'sale', product: 'historic sale', date: '2026-05-01', quantity: 1,
+        price: 5000, acquisitionCost: 3000, fee: 0 }
+    ]
+  }};
+  let reads = 0;
+  await withDashboard({ async read() { reads++; return record; } }, async () => true, async base => {
+    const response = await fetch(base + '/app?type=sale', { headers: { 'x-goog-iap-jwt-assertion': 'signed' } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /historic sale/);
+    assert.doesNotMatch(html, /recent 0/);
+    assert.equal(reads, 1);
+  });
+});
