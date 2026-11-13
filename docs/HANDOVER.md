@@ -1342,3 +1342,14 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **コード変更済み**: `cloud/src/dashboard-view.js`、`cloud/src/dashboard-server.js`、`cloud/scripts/deploy-dashboard-staging.sh`、`cloud/test/dashboard.test.js`。Doc IDは環境変数に設定しHTMLでは正規表現で検証。IAP保護・閲覧専用・元API分離を維持。Google Docsのアクセス権は別途必要で、「リンクを知っている全員」にしない。
 - **実装と未実施の区別**: GitHub作業ブランチにコードを反映。CI結果とCloud Runへの再デプロイは別途確認が必要。既存のスマホ画面には未表示、実機ダウンロード未確認。Google Docを開く/ダウンロードするとその時点の内容になるが、アプリ内部に本文や最終編集時刻は表示していない。Google Docsへ実際に書き込まれない変更は自動反映されない。
 - **次工程**: CI成功確認→Cloud Shellで専用UIのみ安全にデプロイ→IAPログイン/Doc表示/更新後のTXT再ダウンロード/既存画面維持を実機検証。売却8件・在庫・正本・旧キュー・元API/workerは今回未変更。
+
+
+### 2026-11-14 JST — 通常Chat日常報告をIntake→Firestoreへ流す実装準備とCI完了
+
+- **目的**: 普段の抽選・購入・受取・売却は通常Chat、アプリ開発はWork。共通Google Docsが双方の正本。ユーザーは自然文/スクリーンショットで報告し、公式商品画像/パッケージ・販売単位・税込定価を公式情報と照合する。
+- **旧状態→新実装**: Sheets`Intake`は存在し購入1件の`v2-applied/canonical-readback-verified`実績あり。ただし`queued`/`new`も残る。review受付の空`acceptedRequestId`、businessDuplicateで異なる`acceptedRequestId`がD:G書込時にA列と不一致になるバグを修正し、別のsourceRequestIdでcompare-before-writeする。原本A:Cは改変しない。
+- **抽選**: 発行元の応募IDがなくても、明示的な応募済み報告/スクショ、店舗・商品・応募者・申込日が揃えば専用の内部冪等キーで受付可能にした。これは実応募番号ではなく同一報告の重複防止用。曖昧なケースはreview。追加の同日同店同商品/本人の抽選はV2正本で重複レビュー。商品公式ID/参考定価/URL、BOX数量、シュリンク、支払状況を保存し、申込で在庫・原価は増えない。
+- **コード実装**: `cloud/src/google-sheets-intake.js`、`cloud/src/google-sheets-intake-provider.js`、`cloud/src/v2-command.js`、関連テスト3ファイル。通常Chat運用手順 `docs/CHAT_DAILY_REPORTING_RUNBOOK.md` を作成。
+- **CI結果**: [Actions #43527682483](https://github.com/manato-maker/toreca-vault/actions/runs/43527682483) にてコードテストとFirestore Emulator両方success（途中失敗したテストは修正済み）。
+- **まだ実施していない**: Cloud Run APIへのコード配備、Google Sheetsの受付編集経路を通常Chatから新規実取引でE2E試験すること、Scheduler/IAM実動作検証、FireStore canonical readback、アプリ画面での実取引反映。既存`new`行や旧売却8件を再発行しない。一般利用開始を完成としない。
+- **次工程**: GCP権限を持つWork/Cloud Shellでstaging APIの設定・Cloud Schedulerの15分triggerとサービスアカウントのSheets権限を安全に照合、コードデプロイ、新規報告1件の同一IDエンドツーエンド検証。元APIにIAP追加・旧V2移行・無関係な正本更新は禁止。
