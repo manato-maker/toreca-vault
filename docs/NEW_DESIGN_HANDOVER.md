@@ -927,3 +927,14 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - ORIGINAL ARTWORK DUEL SET（A3）は`review` / `needs-review`を維持。過去支払済みの原価照合が済むまで登録しない。
 - stagingにおける専用Intake → Firestore queue → worker → canonical適用 → readback確認の購入1件は完了し、同経路での限定的なstaging運用を開始できる。自然文/画像からIntake行を完全自動生成するE2E、Gmail/OAuth・相場更新・全取引種別、backup/restore、実費の無料枠確認は未検証。アプリ全機能の完成や本番cutoverとは区別する。
 - 旧V2本番、旧queue、未処理売却8件、旧Apps Script、本番データ、billing設定は変更なし。本番移行は未実施。
+
+
+### 2026-11-13 JST — スマホ閲覧UIの分離実装（コード段階）
+
+- **現状の問題**: Cloud Run `toreca-vault-staging` はAPI/workerであり、認証付き `GET /` がHTTP 404になるのは画面ルートがないため。既存サービスで直接IAPを有効にすると、OIDC認証のCloud Scheduler intake/command-workerに影響する可能性がある。
+- **設計変更**: 元APIを触らず、別の `toreca-vault-ui-staging` を新設する方針に変更。理由は自動登録の継続性とアクセス権分離。旧方式（APIにIAPとUIを同居）は採用せず、別サービスIAP、最小権限の閲覧専用Firestore SAとする。変更日2026-11-13。
+- **実装済（GitHub PR #105ブランチ）**: `cloud/src/dashboard-view.js`（資産サマリー、在庫、抽選予定カレンダー、直近取引のモバイル表示）、`dashboard-auth.js`（Google署名付きIAP JWT/対象audience/許可メール検証）、`dashboard-server.js`（GET/HEADのみ、ステージングFirestore正本の読み取り、キャッシュ禁止/CSP）、`cloud/Dockerfile.dashboard`（非root起動）、`cloud/test/dashboard.test.js`、専用Cloud Shellデプロイスクリプト、`docs/STAGING_DASHBOARD_ROLLOUT.md`。
+- **安全措置**: 署名なしのIAP identityヘッダーを信頼しない。IAP未設定で画面を見せない。APIトークンをブラウザへ露出しない。対象は専用projectと `torecaVaultStaging/canonical` に限定、旧V2/元Cloud RunのAPI/worker、売却8件、既存Sheet queueを変更しない。
+- **テスト**: 新画面・署名IAP拒否/許可・文字列エスケープ・書込み拒否をテスト追加。GitHub Actions v2-ci #867はコードテストとFirestore Emulatorの両方が成功。後続のnon-root化、Cloud Shell環境変数明示、スクロール修正後のCIは別途確認。
+- **未実施**: Cloud Shellからの別サービスdeploy、IAP有効化とWeb App User権限設定、実機でGoogleログイン→在庫/資産/予定の表示確認、実費検証。コード実装と実運用開始を混同しない。元APIにIAPはまだ設定しない。
+- **次工程**: 新サービスだけをCloud Shellからデプロイ→UIサービスのIAPとアクセス許可設定→スマホ表示テスト→元のScheduler/command-worker動作確認。GitHub PR #105はDraft/openのまま、本番移行や旧V2への書込みは対象外。
