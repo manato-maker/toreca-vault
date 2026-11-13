@@ -158,7 +158,7 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1220"><title>Toreca Vault · ステージング</title><style>${css}</style></head><body>
 <header><div class="brand"><span class="brand-mark">TV</span><span>Toreca Vault</span></div><span class="tag">STAGING · 閲覧専用</span></header>
-<main><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
+<main id="top"><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
 <p class="meta">更新 ${esc(today)} · V2 revision ${esc(revision)}</p></section>
 <div class="metrics">
 ${metric('参考資産額',money(assetEstimate),'一部は原価を代用・未取得価格を含む')}
