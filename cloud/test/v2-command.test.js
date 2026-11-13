@@ -173,6 +173,7 @@ test('invalid lottery quantity, reference prices and official URLs are rejected'
   for (const extra of [
     { quantity: -1 }, { quantity: 0 }, { quantity: 1.5 },
     { unitPrice: -1 }, { officialMsrpYen: -100 },
+    { expectedPurchaseTotal: -1 }, { expectedPurchaseTotal: 1.5 },
     { officialProductUrl: 'http://example.com/unsafe' }
   ]) {
     assert.throws(() => run(emptyV2(), { ...common, ...extra }), /lottery|official product/);
