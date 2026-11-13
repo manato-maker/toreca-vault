@@ -81,7 +81,7 @@ export function createGoogleSheetsIntakeProvider({
       });
     },
 
-    async writeReceipt(rowNumber, receipt) {
+    async writeReceipt(rowNumber, receipt, sourceRequestId = receipt?.acceptedRequestId) {
       if (!Number.isSafeInteger(rowNumber) || rowNumber < 2 || rowNumber > 100_001) {
         throw new RangeError('rowNumber is outside the allowed intake range');
       }
@@ -93,7 +93,12 @@ export function createGoogleSheetsIntakeProvider({
       }
       await verifyTarget();
       const sourceRows = await this.readRows({ startRow: rowNumber, limit: 1 });
-      if (sourceRows.length !== 1 || sourceRows[0].rowNumber !== rowNumber || sourceRows[0].values[0] !== receipt.acceptedRequestId) {
+      // For review rows, acceptedRequestId is blank; for cross-source business
+      // duplicates it belongs to another request. Neither identifies source A.
+      // The source ID is only used as a compare-before-write guard, never written.
+      if (typeof sourceRequestId !== 'string' || sourceRequestId.length > 200
+        || sourceRows.length !== 1 || sourceRows[0].rowNumber !== rowNumber
+        || String(sourceRows[0].values[0] ?? '') !== sourceRequestId) {
         throw new Error('intake row request ID changed before receipt write');
       }
       const range = encodeURIComponent(`${SHEET_NAME}!D${rowNumber}:G${rowNumber}`);
