@@ -217,6 +217,32 @@ function applyLottery(state, command, requestId, mutationId, now) {
   for (const field of ['deadline', 'resultDate', 'receiveDeadline']) {
     if (command[field] && !isoDate(command[field])) throw new TypeError(`${field} must be a valid YYYY-MM-DD date`);
   }
+  const quantity = command.quantity == null || command.quantity === '' ? null : Number(command.quantity);
+  if (quantity !== null && (!Number.isSafeInteger(quantity) || quantity <= 0)) {
+    throw new TypeError('lottery quantity must be a positive integer');
+  }
+  // Advertised lottery price and manufacturer MSRP are reference-only: neither
+  // implies payment, acquisition cost, purchase, or inventory.
+  const announcedUnitPrice = command.unitPrice == null || command.unitPrice === '' ? null : Number(command.unitPrice);
+  const officialMsrpYen = command.officialMsrpYen == null || command.officialMsrpYen === '' ? null : Number(command.officialMsrpYen);
+  if ((announcedUnitPrice !== null && (!Number.isSafeInteger(announcedUnitPrice) || announcedUnitPrice < 0))
+    || (officialMsrpYen !== null && (!Number.isSafeInteger(officialMsrpYen) || officialMsrpYen < 0))) {
+    throw new TypeError('lottery reference prices must be non-negative integers');
+  }
+  const officialProductUrl = String(command.officialProductUrl || '').trim();
+  if (officialProductUrl && (!/^https:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/.test(officialProductUrl) || officialProductUrl.length > 1024)) {
+    throw new TypeError('official product URL must be HTTPS');
+  }
+  const owner = String(command.owner || '').trim();
+  // An independent screenshot can accidentally be replayed with a new request
+  // ID. Require review if it looks like an existing same-day application.
+  const similar = state.lotteries.some((item) =>
+    norm(item.title) === norm(title) && norm(item.store) === norm(store) &&
+    String(item.applicationDate || '') === applicationDate &&
+    (!owner || !String(item.owner || '').trim() || norm(item.owner) === norm(owner)) &&
+    (!String(command.deadline || '') || !String(item.deadline || '') || String(item.deadline) === String(command.deadline))
+  );
+  if (similar) throw new Error('lottery application may already exist; manual review required');
   const id = `chat-lottery-${requestId}`;
   const existing = state.lotteries.filter((item) => String(item.id || '') === id);
   if (existing.length) {
@@ -230,6 +256,13 @@ function applyLottery(state, command, requestId, mutationId, now) {
     receiptStatus: status === '当選' ? '未受取' : status === '購入済' ? '受取済み' : '対象外',
     receivedDate: '', shrinkStatus: '未選択', memo: String(command.memo || ''), owner: String(command.owner || ''),
     applicationDate, source: 'chat', requestId, evidenceType: command.evidenceType === 'screenshot' ? 'screenshot' : 'chat-report',
+    product: String(command.product || title), productId: String(command.productId || ''),
+    category: String(command.category || ''), quantity,
+    shrinkStatus: String(command.shrinkStatus || '未選択'),
+    unitPrice: announcedUnitPrice, officialMsrpYen,
+    officialProductUrl, officialMsrpCheckedAt: String(command.officialMsrpCheckedAt || ''),
+    expectedPurchaseTotal: command.expectedPurchaseTotal == null ? null : Number(command.expectedPurchaseTotal),
+    paymentStatus: String(command.paymentStatus || '未購入・未支出'),
     createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString()
   });
   finishMutation(next, mutationId, []);
