@@ -966,3 +966,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト済み**: 古い売却レコードが通常の直近12件に埋もれても「売却」タブでは表示されること、種別外の取引を表示しないこと、表示文字列がHTMLエスケープされること、原価の有無と利益表示、認証付きGETの表示を検証。GitHub Actions v2-ci #875 のコードとEmulatorジョブは成功。開発側の合成データに対する描画チェックも成功。
 - **未反映/未検証**: 現在のCloud Run `toreca-vault-ui-staging` にはまだ新しいコードを再デプロイしていない。Googleログイン/IAP維持と実機画面から「売却」タブの全件表示を確認する必要あり。
 - **次工程**: Cloud Shellで既存 `~/tv-ui-staging` のブランチを `git pull --ff-only` で更新し、`cloud/scripts/deploy-dashboard-staging.sh` で画面専用サービスだけ再デプロイ。元API、旧V2、旧キュー、未処理売却には触れない。再デプロイ後にGoogleログインで売却履歴を確認する。
+
+
+### 2026-11-13 — 未処理売却8件の重複防止付き照合
+
+- 通常Chatでユーザーが「二重登録だけ避けてあとは登録して」と明示的に依頼。原本キューの再投入をしないこと、同一売却の二重減算・二重利益計上を防ぐことが最優先。
+- Google Sheets「Toreca Vault V2 Command Queue」の `Queue!A1:H10` を読み取り専用で確認。旧売却8行（3〜10行）の `status=pending`、`attempts=0`、`processedAt` は空白。別の抽選キュー1行が先頭にある。8件を新しい requestId で再送しない。
+- Google Sheets「Toreca Vault New App Intake」の `Intake!A1:G6` を確認。旧売却8件はこの新App受付行にはなく、既存の別の報告だけが存在。ユーザーが指定した売却4件は2026-11-12の旧V2 export（revision 2924）の `transactions` に存在し、新たに書き込まない。
+- revision 2924 の旧正本JSONを読み取り専用で照合した結果、8件のうち、商品名・condition・数量が一致する当時の在庫lotがあるのは、10/25の2個セット、11/1のMEGAドリームex、11/1のメガシンフォニア。残り（11/1の9種セット1件、スターターセット3件、30th BOX1件）は、元の売却と同日までの時系列で単純処理すると在庫lotが一致せず、原価/商品名/既払照合の修復が必要。10/25の2個セットは過去の割引反映前のunitCostとの差があるため、正しい原価での利益計上を先に確定する必要あり。
+- **未実施**: 旧キューからの処理、Firestore stagingへの転送・販売適用、旧キューの状態変更、既存在庫や原価の変更、旧V2正本変更。ChatセッションからCloud Run/Firestoreの認証済み書込みツールがなく、現在のstaging revision 2926を直接transaction ID/lot毎にreadbackする手段もないため、現時点で書込みを伴う重複防止確認を完了できない。
+- **次工程（Work/Cloud Shell）**: staging最新snapshotを read-only 検証 → 現行のtransaction / auditLog / queue / lot単位で8個の旧`requestId`を照合 → 補正が必要な在庫・割引原価を確認 → 原本のrequestIdをそのまま利用して、在庫が足りていて旧V2にも未反映のものだけを一度実行 → 1件ごとにcanonical readback・revision・残在庫・利益・キュー処理結果を照合。旧キューと新App intakeの二重消化は禁止。未確認の5件はレビューのまま。通常Chatによる金額報告と照合記録は新アプリへの適用完了を意味しない。
