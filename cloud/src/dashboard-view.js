@@ -94,7 +94,7 @@ function inventoryCard(lot, quote) {
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
 
-export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all') {
+export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all', handoverDocId = '') {
   if (!snapshot || Number(snapshot.schemaVersion) !== 2) throw new Error('invalid snapshot');
   const lots = Array.isArray(snapshot.inventoryLots) ? snapshot.inventoryLots.filter(l => num(l?.quantity) > 0) : [];
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
@@ -165,6 +165,19 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       (profit !== null ? '<small>確定利益 ' + esc(money(profit)) + '</small>' :
         t.type === 'sale' ? '<small>原価未確認</small>' : '') + '</div></div>';
   }).join('') : '<p class="empty">この種別の取引記録はありません。</p>';
+  // The Google Docs document is the single private handover source. Export on
+  // click, rather than caching or copying sensitive text into Firestore or GitHub.
+  const validHandoverId = typeof handoverDocId === 'string' &&
+    /^[A-Za-z0-9_-]{20,120}$/.test(handoverDocId) ? handoverDocId : '';
+  const handoverBase = validHandoverId
+    ? 'https://docs.google.com/document/d/' + validHandoverId : '';
+  const handoverSection = handoverBase
+    ? '<section class="panel" id="handover"><div class="panel-top"><h2>引き継ぎ</h2><span class="minor">Chat / Work 共通</span></div>' +
+      '<p class="meta">共通正本はGoogle Docsに保存されています。更新後は、リンクを開くかダウンロードするとその時点の内容を取得できます。</p>' +
+      '<div class="handover-actions"><a class="btn" href="' + handoverBase + '/edit" target="_blank" rel="noopener noreferrer">最新版を開く</a>' +
+      '<a class="btn" href="' + handoverBase + '/export?format=txt" target="_blank" rel="noopener noreferrer">引き継ぎをダウンロード (.txt)</a></div>' +
+      '<p class="meta">Googleアカウントで文書の閲覧権限が必要です。ダウンロードしたファイルは機密情報として扱ってください。ここからは編集・自動登録しません。</p></section>'
+    : '';
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#93a5bc;--aqua:#70e4d2;--purple:#9888ff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.5}
@@ -178,7 +191,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day small{color:var(--aqua);font-size:10px}
 .history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
-footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:8px 11px;border-radius:9px}
+footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:10px 12px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}.btn:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}.handover-actions{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
 @media(min-width:750px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}main{padding-bottom:60px}.bottom{position:static;max-width:1040px;margin:auto;border:1px solid var(--line);border-radius:15px 15px 0 0}.day{min-height:80px}}
 @media(max-width:380px){.stock-money{min-width:88px}.day{padding:4px}.metric{padding:12px}.metric strong{font-size:18px}}
 `;
@@ -203,7 +216,8 @@ ${rows.length ? rows.map(l => inventoryCard(l, quoteFor(quotes,l))).join('') : '
 ${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
 </section>
 <section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>
+${handoverSection}
 <footer>読み取り専用 · Toreca Vault staging · データの登録・修正はできません</footer>
 </main>
-<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a></nav></body></html>`;
+<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a>${handoverSection ? '<a href="#handover"><span>☷</span>引継ぎ</a>' : ''}</nav></body></html>`;
 }
