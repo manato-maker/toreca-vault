@@ -10,5 +10,6 @@ WORKDIR /app/cloud
 RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY cloud/src ./src
+USER node
 EXPOSE 8080
 CMD ["node", "src/dashboard-server.js"]
