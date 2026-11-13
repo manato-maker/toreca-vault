@@ -46,7 +46,7 @@ gcloud run deploy "$SERVICE" --source="$CONTEXT" \
   --project="$PROJECT" --region="$REGION" \
   --service-account="$SA" --no-allow-unauthenticated \
   --min-instances=0 --max-instances=1 --cpu=1 --memory=512Mi \
-  --set-env-vars="TV2_FIRESTORE_DOCUMENT=$DOCUMENT,TV2_DASHBOARD_IAP_AUDIENCE=/projects/$NUMBER/locations/$REGION/services/$SERVICE,TV2_DASHBOARD_ALLOWED_EMAILS=$OWNER_EMAIL" \
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT,TV2_FIRESTORE_DOCUMENT=$DOCUMENT,TV2_DASHBOARD_IAP_AUDIENCE=/projects/$NUMBER/locations/$REGION/services/$SERVICE,TV2_DASHBOARD_ALLOWED_EMAILS=$OWNER_EMAIL" \
   --quiet
 
 echo
