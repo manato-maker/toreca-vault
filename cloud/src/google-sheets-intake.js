@@ -35,7 +35,8 @@ function confirmedChatLotteryFingerprint(command) {
   const applicationDate = String(command.applicationDate || '');
   if (!store || !title || !owner || store.length > 120 || title.length > 180
     || owner.length > 100 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(applicationDate)
-    || Number.isNaN(Date.parse(applicationDate + 'T00:00:00Z'))) return null;
+    || Number.isNaN(Date.parse(applicationDate + 'T00:00:00Z'))
+    || new Date(applicationDate + 'T00:00:00Z').toISOString().slice(0, 10) !== applicationDate) return null;
   // Deliberately do not include quantity/price: a corrected quantity must not
   // create another distinct application. Subsequent edits use the original ID.
   const payload = JSON.stringify(['toreca-vault-chat-verified-lottery-application', 1,
