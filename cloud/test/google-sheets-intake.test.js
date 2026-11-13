@@ -157,6 +157,7 @@ test('unconfirmed or insufficiently identified Chat lottery never gets a fingerp
     { ...base },
     { ...base, evidenceType: 'screenshot', owner: '' },
     { ...base, evidenceType: 'chat-report', applicationDate: '' },
+    { ...base, evidenceType: 'screenshot', applicationDate: '2026-02-31' },
     { ...base, evidenceType: 'chat-report', status: '応募前' }
   ];
   const provider = fakeProvider(invalid.map((command, index) => row(command.requestId, command, '', 'new', index + 2)));
@@ -165,7 +166,7 @@ test('unconfirmed or insufficiently identified Chat lottery never gets a fingerp
     provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 4,
     queue: { async enqueue() { queueCalls++; } }
   });
-  assert.deepEqual(await run(), { seen: 4, enqueued: 0, duplicate: 0, review: 4, skipped: 0 });
+  assert.deepEqual(await run(), { seen: 5, enqueued: 0, duplicate: 0, review: 5, skipped: 0 });
   assert.equal(queueCalls, 0);
   assert.ok(provider.receipts.every(x => x.resultCode === 'lottery-identity-missing'));
 });
