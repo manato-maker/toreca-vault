@@ -175,6 +175,6 @@ test('invalid lottery quantity, reference prices and official URLs are rejected'
     { unitPrice: -1 }, { officialMsrpYen: -100 },
     { officialProductUrl: 'http://example.com/unsafe' }
   ]) {
-    assert.throws(() => run(emptyV2(), { ...common, ...extra }), /lottery/);
+    assert.throws(() => run(emptyV2(), { ...common, ...extra }), /lottery|official product/);
   }
 });
