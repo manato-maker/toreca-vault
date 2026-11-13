@@ -229,6 +229,11 @@ function applyLottery(state, command, requestId, mutationId, now) {
     || (officialMsrpYen !== null && (!Number.isSafeInteger(officialMsrpYen) || officialMsrpYen < 0))) {
     throw new TypeError('lottery reference prices must be non-negative integers');
   }
+  const expectedPurchaseTotal = command.expectedPurchaseTotal == null || command.expectedPurchaseTotal === ''
+    ? null : Number(command.expectedPurchaseTotal);
+  if (expectedPurchaseTotal !== null && (!Number.isSafeInteger(expectedPurchaseTotal) || expectedPurchaseTotal < 0)) {
+    throw new TypeError('lottery expectedPurchaseTotal must be a non-negative integer');
+  }
   const officialProductUrl = String(command.officialProductUrl || '').trim();
   if (officialProductUrl && (!/^https:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/.test(officialProductUrl) || officialProductUrl.length > 1024)) {
     throw new TypeError('official product URL must be HTTPS');
@@ -261,7 +266,7 @@ function applyLottery(state, command, requestId, mutationId, now) {
     shrinkStatus: String(command.shrinkStatus || '未選択'),
     unitPrice: announcedUnitPrice, officialMsrpYen,
     officialProductUrl, officialMsrpCheckedAt: String(command.officialMsrpCheckedAt || ''),
-    expectedPurchaseTotal: command.expectedPurchaseTotal == null ? null : Number(command.expectedPurchaseTotal),
+    expectedPurchaseTotal,
     paymentStatus: String(command.paymentStatus || '未購入・未支出'),
     createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString()
   });
