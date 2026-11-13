@@ -106,7 +106,7 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
           resultCode: /^[a-z0-9-]{1,48}$/.test(String(error?.reasonCode || '')) ? error.reasonCode : 'invalid-input',
           acceptedRequestId: '',
           processedAtMs: now()
-        });
+        }, String(row.values?.[0] ?? ''));
         result.review++;
         continue;
       }
@@ -128,7 +128,7 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
         await provider.writeReceipt(row.rowNumber, {
           status: 'duplicate', resultCode: 'business-duplicate',
           acceptedRequestId: String(queued.existingRequestId || ''), processedAtMs: now()
-        });
+        }, parsed.requestId);
         result.duplicate++;
       } else if (queued?.accepted) {
         await provider.writeReceipt(row.rowNumber, {
@@ -136,7 +136,7 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
           resultCode: queued.duplicate ? 'request-duplicate' : 'accepted',
           acceptedRequestId: parsed.requestId,
           processedAtMs: now()
-        });
+        }, parsed.requestId);
         if (queued.duplicate) result.duplicate++;
         else result.enqueued++;
       } else {
@@ -145,7 +145,7 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
         await provider.writeReceipt(row.rowNumber, {
           status: 'review', resultCode: collision,
           acceptedRequestId: '', processedAtMs: now()
-        });
+        }, parsed.requestId);
         result.review++;
       }
     }
