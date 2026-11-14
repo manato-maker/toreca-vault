@@ -81,6 +81,23 @@ export function createGoogleSheetsIntakeProvider({
       });
     },
 
+    /**
+     * Read-only readiness probe: verify the dedicated sheet and its header row.
+     * It deliberately does not read any intake command or receipt row.
+     */
+    async probeRead() {
+      await verifyTarget();
+      const range = encodeURIComponent(`${SHEET_NAME}!A1:G1`);
+      const url = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+      const body = await request(url, { method: 'GET' }, 'Google Sheets intake header read');
+      const headers = Array.isArray(body.values) && Array.isArray(body.values[0]) ? body.values[0] : [];
+      const expected = googleSheetsIntakeSchema.headers;
+      if (headers.length !== expected.length || headers.some((value, index) => value !== expected[index])) {
+        throw new Error('Google Sheets intake header does not match the dedicated schema');
+      }
+      return { readable: true };
+    },
+
     async writeReceipt(rowNumber, receipt, sourceRequestId = receipt?.acceptedRequestId) {
       if (!Number.isSafeInteger(rowNumber) || rowNumber < 2 || rowNumber > 100_001) {
         throw new RangeError('rowNumber is outside the allowed intake range');

@@ -83,6 +83,8 @@ export function createServer({
   sheetsIntakeWorker = null,
   sheetsIntakeAuthorize = null,
   sheetsIntakeEnabled = false,
+  sheetsIntakeDiagnostics = null,
+  intakeDiagnosticLogger = console.error,
   schedulerHealth = null,
   schedulerTick = null,
   schedulerAuthorize = null,
@@ -242,6 +244,24 @@ export function createServer({
           canonicalInitialized: false,
           writesEnabled: Boolean(writesEnabled)
         });
+      }
+    }
+
+    if (path === '/health/intake') {
+      if (request.method !== 'GET') return send(response, 405, { ok: false, error: 'method not allowed' });
+      if (!sheetsIntakeEnabled || typeof sheetsIntakeDiagnostics !== 'function') {
+        return send(response, 503, { ok: false, error: 'intake diagnostics are not configured' });
+      }
+      try {
+        await sheetsIntakeDiagnostics();
+        return send(response, 200, {
+          ok: true,
+          sheetsReadable: true,
+          cursorReadable: true
+        });
+      } catch (error) {
+        const diagnostic = logIntakeFailure(intakeDiagnosticLogger, error?.intakeStage || 'intake', error);
+        return send(response, 503, { ok: false, ...diagnostic });
       }
     }
 
@@ -447,6 +467,7 @@ export async function start() {
     ? createCommandBatchWorker({ queue: commandQueue, store })
     : null;
   let sheetsIntakeWorker = null;
+  let sheetsIntakeDiagnostics = null;
   if (sheetsIntakeEnabled) {
     const spreadsheetId = process.env.TV2_NEW_APP_INTAKE_SPREADSHEET_ID || '';
     if (!spreadsheetId) throw new Error('TV2_NEW_APP_INTAKE_SPREADSHEET_ID is required when Sheets intake is enabled');
@@ -458,6 +479,14 @@ export async function start() {
       getAccessToken: async () => (await sheetsClient.getAccessToken()).token
     });
     const cursorStore = createFirestoreGoogleSheetsIntakeCursorStore(firestore, spreadsheetId);
+    sheetsIntakeDiagnostics = async () => {
+      try {
+        await provider.probeRead();
+        await cursorStore.read();
+      } catch (error) {
+        throw Object.assign(new Error('read-only intake probe failed', { cause: error }), { intakeStage: 'intake' });
+      }
+    };
     const intakeWorker = createGoogleSheetsIntakeProcessor({
       provider, queue: commandQueue, cursorStore, spreadsheetId, maxRowsPerRun: 20
     });
@@ -488,6 +517,7 @@ export async function start() {
     sheetsIntakeWorker,
     sheetsIntakeAuthorize: sheetsIntakeEnabled ? scheduledWorkerAuthorize : null,
     sheetsIntakeEnabled,
+    sheetsIntakeDiagnostics,
     schedulerHealth: async () => evaluateSchedulerHealth(await heartbeatStore.read()),
     apiToken: token,
     allowedOrigins: parseOrigins(process.env.TV2_ALLOWED_ORIGINS),

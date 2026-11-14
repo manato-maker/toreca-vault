@@ -86,6 +86,45 @@ test('scheduler route is disabled by default and requires injected authorization
   });
 });
 
+test('read-only intake health probes are GET-only, bounded, and never call the worker', async () => {
+  let diagnosticCalls = 0;
+  let workerCalls = 0;
+  await withServer(createFakeStore(emptyV2()), async (base) => {
+    const response = await fetch(`${base}/health/intake`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, sheetsReadable: true, cursorReadable: true });
+    const post = await fetch(`${base}/health/intake`, { method: 'POST' });
+    assert.equal(post.status, 405);
+  }, {
+    sheetsIntakeEnabled: true,
+    sheetsIntakeDiagnostics: async () => { diagnosticCalls++; },
+    sheetsIntakeAuthorize: async () => true,
+    sheetsIntakeWorker: async () => { workerCalls++; }
+  });
+  assert.equal(diagnosticCalls, 1);
+  assert.equal(workerCalls, 0);
+});
+
+test('read-only intake health exposes only fixed error categories', async () => {
+  const logs = [];
+  const root = new Error('Google Sheets metadata lookup failed with HTTP 403; private details must not leak');
+  const failure = Object.assign(new Error('read-only intake probe failed', { cause: root }), { intakeStage: 'intake' });
+  await withServer(createFakeStore(emptyV2()), async (base) => {
+    const response = await fetch(`${base}/health/intake`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, stage: 'intake', reasonCode: 'sheets-permission' });
+  }, {
+    sheetsIntakeEnabled: true,
+    sheetsIntakeDiagnostics: async () => { throw failure; },
+    intakeDiagnosticLogger: (line) => logs.push(line)
+  });
+  assert.equal(logs.length, 1);
+  assert.deepEqual(JSON.parse(logs[0]), {
+    event: 'toreca-vault-intake-failure', stage: 'intake', reasonCode: 'sheets-permission'
+  });
+  assert.doesNotMatch(logs[0], /private details|HTTP 403/);
+});
+
 test('scheduler health endpoint exposes only bounded heartbeat state and marks unhealthy ticks with 503', async () => {
   const healthy = {
     healthy: true, stale: false, lastScheduledAtMs: 1_000, lastCompletedAtMs: 1_010,

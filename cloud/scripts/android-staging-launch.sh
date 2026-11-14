@@ -7,6 +7,9 @@ set -euo pipefail
 
 MODE="${1:-check}"
 BRANCH="build/cloudrun-firestore-foundation-20261103"
+STAGING_PROJECT_ID="project-8ff0bbc4-675d-4596-a8a"
+STAGING_REGION="asia-northeast1"
+STAGING_SERVICE="toreca-vault-staging"
 if [[ "$MODE" != "check" && "$MODE" != "stage" ]]; then
   echo "Usage: bash cloud/scripts/android-staging-launch.sh check|stage" >&2
   exit 2
@@ -47,4 +50,20 @@ fi
 echo "Building and staging the reviewed code at ZERO percent API traffic..."
 bash cloud/scripts/release-chat-staging.sh stage
 echo "STAGED: current active API traffic remains untouched."
-echo "NEXT: independently verify candidate auth, worker, Scheduler, canonical and mobile UI before promote."
+echo "Read-only candidate Intake probe (GET only; does not process Intake rows)..."
+CANDIDATE_JSON="$(gcloud run services describe "$STAGING_SERVICE" --project="$STAGING_PROJECT_ID" --region="$STAGING_REGION" --format=json)"
+CANDIDATE_URL="$(printf '%s' "$CANDIDATE_JSON" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next((item.get("url", "") for item in data.get("status", {}).get("traffic", []) if item.get("tag") == "chat-candidate"), ""))')"
+if [[ -z "$CANDIDATE_URL" ]]; then
+  echo "READ-ONLY-PROBE-BLOCKED: chat-candidate URL was not returned."
+else
+  ID_TOKEN="$(gcloud auth print-identity-token)"
+  set +e
+  curl -sS --max-time 20 -H "Authorization: Bearer ${ID_TOKEN}" "${CANDIDATE_URL}/health/intake" -w '\nHTTP %{http_code}\n'
+  PROBE_STATUS=$?
+  set -e
+  unset ID_TOKEN
+  if [[ "$PROBE_STATUS" -ne 0 ]]; then
+    echo "READ-ONLY-PROBE-BLOCKED: candidate request failed."
+  fi
+fi
+echo "NEXT: review the fixed probe result before any promotion; no worker or Scheduler run was triggered."

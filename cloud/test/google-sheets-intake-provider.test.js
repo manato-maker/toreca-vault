@@ -28,6 +28,37 @@ test('provider verifies dedicated spreadsheet title and tab before reading pendi
   assert.equal(requests.some((request) => JSON.stringify(request).includes(token)), true);
 });
 
+test('read-only intake probe verifies only metadata and the dedicated header row', async () => {
+  const requests = [];
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async (url, init) => {
+      requests.push({ url: String(url), method: init.method });
+      if (requests.length === 1) return ok({
+        properties: { title: googleSheetsIntakeSchema.title },
+        sheets: [{ properties: { title: 'Intake' } }]
+      });
+      return ok({ values: [googleSheetsIntakeSchema.headers] });
+    }
+  });
+  assert.deepEqual(await provider.probeRead(), { readable: true });
+  assert.deepEqual(requests.map((request) => request.method), ['GET', 'GET']);
+  assert.match(requests[1].url, /Intake!A1%3AG1/);
+  assert.doesNotMatch(requests[1].url, /A2|D2|G2/);
+});
+
+test('read-only intake probe rejects a mismatched header without returning sheet values', async () => {
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID,
+    getAccessToken: async () => token,
+    fetchImpl: async (_url, init) => init.method === 'GET'
+      ? ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] })
+      : ok({ values: [['requestId', 'wrong-header']] })
+  });
+  await assert.rejects(provider.probeRead(), /header does not match the dedicated schema/);
+});
+
 test('wrong spreadsheet title or missing intake tab fails closed before reading cells', async () => {
   for (const metadata of [
     { properties: { title: 'Toreca Vault V2 Command Queue' }, sheets: [{ properties: { title: 'Queue' } }] },

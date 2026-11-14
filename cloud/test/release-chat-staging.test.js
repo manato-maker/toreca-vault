@@ -55,5 +55,8 @@ test('Android staging launch defaults to read-only checks and requires explicit 
   assert.match(script, /release-chat-staging\.sh check/);
   assert.ok(script.includes('if [[ "$MODE" == "check" ]]'));
   assert.match(script, /release-chat-staging\.sh stage/);
+  assert.match(script, /gcloud auth print-identity-token/);
+  assert.ok(script.includes('health/intake'));
+  assert.ok(!script.includes('internal/worker/sheets-intake'));
   assert.doesNotMatch(script, /release-chat-staging\.sh promote/);
 });

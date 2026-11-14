@@ -10,7 +10,7 @@ const ERROR_REASONS = Object.freeze({
   'sheets-not-found': /Google Sheets[^]*?HTTP 404/i,
   'sheets-rate-limit': /Google Sheets[^]*?HTTP 429/i,
   'sheets-upstream': /Google Sheets[^]*?HTTP 5\d\d/i,
-  'sheets-wrong-target': /configured spreadsheet is not the dedicated new-app intake sheet/i,
+  'sheets-wrong-target': /(?:configured spreadsheet is not the dedicated new-app intake sheet|Google Sheets intake header does not match the dedicated schema)/i,
   'sheets-response': /(?:Google Sheets returned invalid JSON|Google Sheets returned a malformed row|Google Sheets returned more rows than requested|Google Sheets response is too large)/i,
   'sheets-receipt-conflict': /(?:intake row request ID changed before receipt write|intake receipt transition would overwrite|intake receipt changed since finalization|intake receipt readback did not match)/i,
   'intake-cursor': /(?:Google Sheets intake cursor is invalid|stored Sheets intake cursor|nextRow must advance the cursor)/i,
