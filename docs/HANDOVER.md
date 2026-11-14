@@ -1428,3 +1428,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 同一店の後日の買取終了・期限切れ投稿があれば、古い高価買取提示額を現在の参考価格として復活させない。投稿時刻は時差を考慮して比較、日時不明は過去のverifiedにも表示しない。他店舗の有効提示額は別に採用可能。
 - `cloud/test/buyback-quotes.test.js`に再発防止のテスト追加。CI [#43572888397](https://github.com/manato-maker/toreca-vault/actions/runs/43572888397)でNode testとFirestore Emulator双方success。
 - 実店舗Xの11/14当日価格の全面照合、Cloud Run再デプロイ、Firestore.marketQuotesの実更新、スマホ画面readbackは未実施。GitHubコード・文書・テストのみ。旧V2や在庫/売却原本に変更なし。
+
+
+### 2026-11-14 JST — Android Chromeからの安全なstaging仮配備を一本化
+
+- **ユーザー指示**：「完成させて」。このスレッドが開発Workであり、新しいWorkへ移動しない。FirebaseプラグインはAndroidで接続不可との確認を尊重し、今後必要条件にしない。通常Chatは報告、Workは開発・修正・検証。Cloud Run+Firestore+Google Sheets Intakeを継続利用。
+- **実際の状態**：2026-11-14に接続済みIntakeの処理ステータスを再読。v2-applied/canonical-readback-verified 1件、queued 1件、new 3件、review 3件。**通常Chat→新アプリが実環境で全件自動処理される状態ではない**。既存キュー/取引/売却8件を再投入しない。
+- **新規リリース入口**：`cloud/scripts/android-staging-launch.sh` を追加。認証済みAndroid Chrome Cloud Shellの作業ブランチから`check`（標準モード・読み取り専用）/ `stage`（既存staging APIの新候補を0%トラフィックで配備）を選べる。git remote headとローカルコミット、作業ツリーの一致、GCPプロジェクト番号、無料枠リスク、正本とIntakeのバインド、非公開Invoker IAM、CIテストを検査する。**promoteは自動では行わない**。候補が正しく動き、バックアップ・OIDC・Scheduler・実受付のreadbackを検証してから専用別コマンドで切替。実行はGoogle Cloud認証済みの操作者のみ可能。
+- **Android操作手順**：`docs/ANDROID_STAGING_GO_LIVE.md`。通常の `https://shell.cloud.google.com/` にブラウザでログインし、作業ブランチを`git clone`して`bash cloud/scripts/android-staging-launch.sh stage`を実行する。Google公式の「GitHubのOpen in Cloud Shell」リンクはGoogle以外のリポジトリで認証にアクセスできない一時環境になるため採用しない。PC・Firebaseの接続は不要。
+- **検証**：`cloud/test/release-chat-staging.test.js`にAndroid用スクリプトのbash構文・標準check/0% stage・無断promote禁止の回帰テストを追加。Github Actions v2-ci成功。上記はコード・文書のみであり、**ユーザーのGoogle Cloudへここから認証済みデプロイしたわけではない**。
+- **残りの実環境ゲート**：ユーザーがCloud Shellへログインしstageコマンドを実行→候補サービス健康状態・Scheduler/Sheets IAM/Firestore正本・請求状況を確認→明示的にレビューされた候補だけpromote→UIデプロイ（IAP維持）→新たな実報告1件を通常Chatから投入し`v2-applied/canonical-readback-verified`とスマホ画面まで照合。最新の店舗本人X投稿が未確認の参考買取価格は推測して登録しない。旧V2本番移行は別承認。
