@@ -21,10 +21,12 @@ export function marketTargetKey(target) {
 
 function validQuote(value, target, checkedAt) {
   if (!value || !Number.isSafeInteger(value.price) || value.price <= 0
-    || typeof value.source !== 'string' || value.source.trim().length > 120
-    || (value.category && value.category !== target.category)
-    || (value.productKey && valueKey(value.productKey) !== valueKey(target.productKey || target.product))
-    || (value.condition !== undefined && String(value.condition) !== String(target.condition || target.shrinkStatus || ''))) {
+    || typeof value.source !== 'string' || !value.source.trim() || value.source.trim().length > 120
+    || value.category !== target.category
+    || !String(value.productKey || '').trim()
+    || valueKey(value.productKey) !== valueKey(target.productKey || target.product)
+    || !Object.hasOwn(value, 'condition')
+    || !['box', 'pack', 'card', 'case', 'BOX', 'パック', 'カード', 'カートン'].includes(String(value.unit || ''))) {
     return false;
   }
   // A price without a dated verified shop posting may be MSRP, a selling
