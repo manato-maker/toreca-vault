@@ -1379,3 +1379,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 非公開Driveフォルダ「Toreca Vault Private」内の `toreca-vault-data.json` を読み取り専用で確認。ファイル更新は2026-10-05で、トップレベル`schemaVersion=1`、内部データもV1形式。`data`の集計はlotteries 285、purchases 37、boxes 6、packs 0、cards 13、openings 2、sales 27（内容・個人情報はGitHubに転載しない）。
 - **重要**：これは現在のV2 schemaVersion 2の正本を証明するものではない。2026-10-05以降の記録が欠ける可能性が高いため、これを最新canonicalとしてFirestoreにインポートしてはならない。V2正本のApps Script `TV_V2_DATA_FILE_ID` の実設定、現在のV2 JSONのschemaVersion/revision/hash/更新日を認証付き環境で照合する。
 - 今回の調査ではDrive上の最新V2 JSON正本は未確定。既存canonical・旧Queue・在庫・売却は変更していない。V1→V2変換も実行しない。
+
+
+### 2026-11-14 JST — Intakeの再試行・結果確定とID衝突の不具合を修正
+
+- **問題→解消**：Sheetsのreceipt書込前にenqueueだけ成功して再実行された同一requestIdを、誤って「終了済みduplicate」にしてしまう問題を修正。`accepted:true, duplicate:true`は「既存の受付が処理中」として`queued/accepted`を保ち、別の業務事実の重複`businessDuplicate`のみ「重複」で終了。
+- **結果改ざん防止**：providerはsourceRequestIdだけでなく行の現statusを比較し、D:Gの`v2-applied`/最終`review`/`duplicate`を古い`queued`状態に戻さない。再実行時に同じ最終receiptなら値を再取得して整合性を確認し、上書きせず成功。衝突は調査待ちで停止。
+- **IDの紐付け**：Firestore queueは同じrequestIdのリプレイ時に元受付のSheet ID hashとrow numberが一致することを必須にした。別行またはAPIからの同一IDは衝突として拒否し、ghost receiptを作らない。
+- **テスト**：GitHub Actions https://github.com/manato-maker/toreca-vault/actions/runs/43559680508 で通常コードテストとFirestore Emulatorともに成功。PR #105はdraft/open。**GitHubのみ更新**。Cloud Run実機配備・canonical readback・通常Chatの実登録・スマホUI検証は未完了。既存の取引/在庫/未処理キューは書き換えていない。
