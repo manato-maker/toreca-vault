@@ -1210,3 +1210,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The user's follow-up read-only Cloud Logging command returned only recurring HTTP 503 request rows on revision `toreca-vault-staging-00004-nfr`; every row was `unclassified` because no structured `stage`/`reasonCode` or classifiable application error payload was present in the selected log entries.
 - This is not a root-cause diagnosis. It confirms request-level failures but does not distinguish route authorization, Intake provider, Firestore queue, receipt update, or cursor advance.
 - No worker/Scheduler was invoked by this diagnostic; no Intake row/status, old V2, pending sale, IAM, or active traffic was changed. Do not promote candidate `00006-lug` or manually replay Intake. Further diagnosis requires correlating application logs or a non-mutating failure-stage probe before any data-processing run.
+
+
+## 2026-11-14 JST — retain nested intake failure causes safely
+
+- The failure log review returned only request-level 503 entries and no application stage/reasonCode. Code inspection found an observability gap: the Intake queue-enqueue catch replaced the provider/Firestore error with a generic error, and the fixed-category classifier inspected only one `cause` level.
+- PR #105 branch now preserves the nested cause privately, tags it as the Intake stage, and classifies up to five nested causes into the existing fixed reason-code allowlist. Raw exception messages are still not logged or returned.
+- Commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` is on the development branch. GitHub Actions `v2-ci` run #1026 is in progress; no tests were started manually in this session.
+- Candidate `00006-lug` does not contain this new diagnostic change and remains at 0% traffic. No deploy, worker/Scheduler invocation, Intake row/status change, old V2 write, pending-sale replay, IAM change, or active traffic change was performed. Once CI finishes, the code may be staged at zero traffic; this change alone does not resolve the root cause or authorize processing risky existing rows.
