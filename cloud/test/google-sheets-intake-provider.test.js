@@ -207,3 +207,63 @@ test('review/duplicate receipt fails closed on source row replacement', async ()
   }, 'chat:old:1'), /request ID changed/);
   assert.equal(n, 2);
 });
+
+
+test('a stale queued write cannot downgrade a canonical-readback-verified row', async () => {
+  let requests = 0;
+  let puts = 0;
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID, getAccessToken: async () => token,
+    fetchImpl: async (_url, init) => {
+      requests++;
+      if (init.method === 'PUT') puts++;
+      if (requests === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      return ok({ values: [['chat:purchase:1', '{}', '', 'v2-applied']] });
+    }
+  });
+  await assert.rejects(provider.writeReceipt(7, {
+    status: 'queued', resultCode: 'accepted',
+    acceptedRequestId: 'chat:purchase:1', processedAtMs: 200
+  }), /would overwrite a finalized/);
+  assert.equal(requests, 2);
+  assert.equal(puts, 0);
+});
+
+test('same final receipt retry checks readback without rewriting it', async () => {
+  const calls = [];
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID, getAccessToken: async () => token,
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), method: init.method });
+      if (calls.length === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      if (calls.length === 2) return ok({ values: [['chat:purchase:1', '{}', '', 'v2-applied']] });
+      return ok({ values: [['v2-applied', 'canonical-readback-verified', 'chat:purchase:1', 400]] });
+    }
+  });
+  assert.deepEqual(await provider.writeReceipt(7, {
+    status: 'v2-applied', resultCode: 'canonical-readback-verified',
+    acceptedRequestId: 'chat:purchase:1', processedAtMs: 400
+  }), { updated: true });
+  assert.deepEqual(calls.map(c => c.method), ['GET', 'GET', 'GET']);
+  assert.match(calls[2].url, /D7%3AG7/);
+});
+
+test('same-status receipt with changed evidence is not silently overwritten', async () => {
+  let puts = 0;
+  let n = 0;
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: SHEET_ID, getAccessToken: async () => token,
+    fetchImpl: async (_url, init) => {
+      ++n;
+      if (init.method === 'PUT') puts++;
+      if (n === 1) return ok({ properties: { title: googleSheetsIntakeSchema.title }, sheets: [{ properties: { title: 'Intake' } }] });
+      if (n === 2) return ok({ values: [['chat:purchase:1', '{}', '', 'review']] });
+      return ok({ values: [['review', 'command-invalid', 'chat:purchase:1', 300]] });
+    }
+  });
+  await assert.rejects(provider.writeReceipt(7, {
+    status: 'review', resultCode: 'readback-mismatch',
+    acceptedRequestId: 'chat:purchase:1', processedAtMs: 400
+  }), /changed since finalization/);
+  assert.equal(puts, 0);
+});
