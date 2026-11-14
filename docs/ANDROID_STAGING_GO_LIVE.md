@@ -68,10 +68,10 @@ git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py
 
 ### 2026-11-14 — one-command read-only Intake probe
 
-Run from the existing clone root after CI is green:
+From any Cloud Shell directory after CI is green, paste this single command:
 
 ```bash
-git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage
+TV_TASK_DIR="$(mktemp -d)" && git clone --quiet --depth 1 --single-branch --branch build/cloudrun-firestore-foundation-20261103 https://github.com/manato-maker/toreca-vault.git "$TV_TASK_DIR/toreca-vault" && cd "$TV_TASK_DIR/toreca-vault" && bash cloud/scripts/android-staging-launch.sh stage
 ```
 
 The stage script deploys the reviewed candidate at zero API traffic, then calls its private `GET /health/intake` using the signed-in Cloud Shell account. The endpoint checks only the dedicated spreadsheet title/tab/header and the Firestore intake cursor using the Cloud Run service identity. It returns fixed reason codes and does not read Intake command rows, run the worker, or mutate data. Do not promote based on this probe alone; it does not test receipt writes or end-to-end UI reflection.
