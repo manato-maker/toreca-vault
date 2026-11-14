@@ -1541,3 +1541,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 
 - GitHub Actions `v2-ci` run #1026 for commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` completed successfully. This confirms code and Firestore Emulator workflow checks pass for the nested-cause diagnostic change; it does not identify the live 503 cause or validate the deployed runtime.
 - The code is not yet in the deployed zero-traffic candidate: current candidate remains `00006-lug`. Staging the new code requires the existing single Cloud Shell stage command. No worker run or traffic promotion is authorized by CI success.
+
+
+## 2026-11-14 JST — classify Intake authorization 503s safely
+
+- Extended fixed-category logging to the Sheets Intake Scheduler authorization exception path. It records only `stage=authorization` and an allowlisted reasonCode; it never logs the bearer token, raw verifier message, or stack. Combined with nested enqueue-cause retention, the code can distinguish authorization-stage failures from Intake/reconciliation failures once the updated revision receives a safe authenticated diagnostic request.
+- Commit `7dc468f40d2756dfff168edb565bec0453110484`; GitHub Actions `v2-ci` #1029 completed successfully (test and Firestore Emulator jobs).
+- The deployed zero-traffic candidate is still `00006-lug`; this commit is not deployed. No worker/Scheduler request, row mutation, old V2 write, pending-sale replay, IAM change, or traffic promotion occurred. Live HTTP 503 root cause and Chat-to-UI end-to-end reflection remain unverified.
