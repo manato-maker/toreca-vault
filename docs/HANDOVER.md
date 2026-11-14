@@ -1362,3 +1362,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **新規監査ツール**：`cloud/scripts/audit-free-tier-staging.py`（読み取り専用）。Cloud Shellの対象リポジトリで`python3 cloud/scripts/audit-free-tier-staging.py`を実行し、プロジェクト番号、両Cloud Runサービスのmin/max/CPU課金方式、Firestoreデータベース、東京Schedulerのジョブ数、Billing有効状態を点検。請求詳細/予算設定/他リージョンや他プロジェクトは未確認として残す。プロジェクトのリソース/権限/機密情報を変更しない。
 - **設計判断**：Schedulerは請求先アカウントにつき3ジョブまで無料（停止中含む）、Firestoreの無料枠は対象DBに限定、Artifact Registryは月0.5GiBまで無料。X有料API/画像AIを自動有効化しない。Google Cloud Budget通知だけでは課金を止められない。
 - **価格出典と全工程**：`docs/FREE_TIER_STAGING_COST_PLAN.md`。次は実際のCloud Shell監査、当月の請求明細照合、既存Worker/Scheduler/IAMを保護したstaging配備、Chat→Intake→Firestore正本→UIの1件E2Eを行う。旧売却8件の新ID再送は禁止。
+
+
+### 2026-11-14 JST — Chat報告→新アプリ反映の通し検証と安全なstagingリリース経路
+
+- 日常Chat報告は自然文/画像→公式商品デザイン/税込定価照合→専用Intake→Firestore受付worker→staging canonical→スマホUIという経路。Workは開発・修復・配備を担当し、双方の運用正本は非公開Google Docs。
+- **コードに追加済み**: `cloud/test/chat-intake-e2e.test.js`（購入/抽選/要確認の通しモック）、`cloud/scripts/preflight-chat-staging.js`（Firestoreと専用Sheetの読み取り専用件数/状態検証、IDは環境渡し）、`cloud/scripts/release-chat-staging.sh`（check/stage/promote、最初は0%トラフィックで候補作成）、`cloud/test/preflight-chat-staging.test.js`、`cloud/test/release-chat-staging.test.js`。 npm test/checkに追加。
+- **既存行との互換性**: 抽選受付identity JSONの`kind`フィールドはコマンドtypeと一致する場合のみ許容。異なる場合は`lottery-kind-mismatch`でreview。実行前の既存queue/Intake同一ID/注文や抽選識別子の照合を省略しない。
+- **費用・権限**: GCPプロジェクト番号・Firestore staging canonicalパス・Cloud Run API非公開IAM・OIDC・専用Sheetをリリース前に検査。Cloud ShellのGoogle認証必須。staging code deployは `--no-traffic`、移行は別モードで明示的な検証済みフラグが必要。API secret値やSheetの生IDは公開コード/出力に含めない。
+- **未実施/ブロッカー**: ChatGPT通常会話がクラウドへ反映したことの実地E2E、Cloud Run API/UIへの反映とGCP IAM/請求の現況確認はこのツール権限では不可。WorkのCloud Browser/Google Cloud Shellなど認証済み環境から順番に検証し、完了後のみ「運用開始可」と報告。旧V2/既存未登録売却8件と旧Queueに触れない。
+- **詳細**: `docs/CHAT_STAGING_RELEASE_RUNBOOK.md`、`docs/CHAT_DAILY_REPORTING_RUNBOOK.md`、`docs/FREE_TIER_STAGING_COST_PLAN.md`。CIは最新のGitHub Actions成功を確かめてからデプロイする。
