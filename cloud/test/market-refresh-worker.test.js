@@ -274,7 +274,7 @@ test('two conflicting offers from one shop are rejected without hiding another s
       return [
         mimi, { ...mimi, price: 1600 },
         { ...mimi, source: 'トレカショップKURO', sourceStore: 'トレカショップKURO',
-          postUrl: 'https://x.com/kuro_tcg/status/1234567890123456787', price: 1450 }
+          postUrl: 'https://x.com/kuro_tcg/status/1234567890123456787', price: 1450, buybackYen: 1450 }
       ];
     } }
   });
