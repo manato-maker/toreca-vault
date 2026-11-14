@@ -55,11 +55,16 @@ function parseIdentity(value, command) {
     return { businessEventKey: undefined };
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).some((key) => !['retailerKey', 'applicationId'].includes(key))) {
+    || Object.keys(value).some((key) => !['retailerKey', 'applicationId', 'kind'].includes(key))) {
     throw Object.assign(new Error('business event identity is invalid'), { reasonCode: 'invalid-event-identity' });
   }
   if (!kind) throw Object.assign(new Error('business event identity is unsupported'), { reasonCode: 'unsupported-event-identity' });
-  const resolved = createLotteryBusinessEventKey({ ...value, kind });
+  // Older intake rows include an explicit kind. Only tolerate it when it
+  // matches the command type; never let user-supplied kind override the type.
+  if (value.kind !== undefined && value.kind !== kind) {
+    throw Object.assign(new Error('lottery event kind does not match command'), { reasonCode: 'lottery-kind-mismatch' });
+  }
+  const resolved = createLotteryBusinessEventKey({ retailerKey: value.retailerKey, applicationId: value.applicationId, kind });
   if (resolved.status !== 'ready') {
     throw Object.assign(new Error('business event identity needs review'), { reasonCode: resolved.reasonCode || 'invalid-event-identity' });
   }
