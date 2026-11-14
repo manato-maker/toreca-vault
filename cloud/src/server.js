@@ -1,10 +1,10 @@
 import http from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createLotteryBusinessEventKey } from './business-event-identity.js';
 import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
-import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
+import { createGoogleSheetsIntakeProcessor, parseGoogleSheetsIntakeRow } from './google-sheets-intake.js';
 import { createGoogleSheetsIntakeStatusProcessor } from './google-sheets-intake-status.js';
 import { logIntakeFailure } from './worker-error-diagnostics.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
@@ -19,6 +19,7 @@ import {
   createFirestoreStore
 } from './firestore-store.js';
 import { parseSchedulerScheduleTime } from './scheduled-runtime.js';
+import { applyChatCommand } from './v2-command.js';
 
 const MAX_BODY_BYTES = 1_100_000;
 
@@ -33,6 +34,33 @@ function isAuthorized(request, expectedToken) {
   const left = Buffer.from(provided);
   const right = Buffer.from(expectedToken);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function safeIntakeDiagnosticResponse(value) {
+  if (!value || typeof value !== 'object') return {};
+  const count = (input) => Number.isSafeInteger(input) && input >= 0 ? input : 0;
+  const safeCode = (input) => /^[a-z0-9-]{1,48}$/.test(String(input || '')) ? String(input) : '';
+  const previews = Array.isArray(value.previews) ? value.previews.slice(0, 20).map((row) => ({
+    rowNumber: Number.isSafeInteger(row?.rowNumber) && row.rowNumber >= 2 && row.rowNumber <= 100_001 ? row.rowNumber : 0,
+    outcome: ['would-apply', 'canonical-duplicate', 'queue-record-present', 'request-id-collision',
+      'business-duplicate', 'business-collision', 'review'].includes(row?.outcome) ? row.outcome : 'review',
+    reasonCode: safeCode(row?.reasonCode)
+  })) : [];
+  const statusCounts = {};
+  for (const key of ['new', 'queued', 'review', 'v2-applied', 'duplicate', 'other']) {
+    statusCounts[key] = count(value.statusCounts?.[key]);
+  }
+  return {
+    intakeRowsRead: count(value.intakeRowsRead),
+    cursorNextRow: count(value.cursorNextRow),
+    statusCounts,
+    queuedReceiptCount: count(value.queuedReceiptCount),
+    correlatedReceiptRows: count(value.correlatedReceiptRows),
+    canonicalInitialized: value.canonicalInitialized === true,
+    canonicalRevision: Number.isSafeInteger(value.canonicalRevision) && value.canonicalRevision >= 0
+      ? value.canonicalRevision : null,
+    previews
+  };
 }
 
 function send(response, status, body, origin = '') {
@@ -256,11 +284,12 @@ export function createServer({
         return send(response, 503, { ok: false, error: 'intake diagnostics are not configured' });
       }
       try {
-        await sheetsIntakeDiagnostics();
+        const diagnostic = await sheetsIntakeDiagnostics();
         return send(response, 200, {
           ok: true,
           sheetsReadable: true,
-          cursorReadable: true
+          cursorReadable: true,
+          ...safeIntakeDiagnosticResponse(diagnostic)
         });
       } catch (error) {
         const diagnostic = logIntakeFailure(intakeDiagnosticLogger, error?.intakeStage || 'intake', error);
@@ -483,12 +512,127 @@ export async function start() {
     });
     const cursorStore = createFirestoreGoogleSheetsIntakeCursorStore(firestore, spreadsheetId);
     sheetsIntakeDiagnostics = async () => {
-      try {
-        await provider.probeRead();
-        await cursorStore.read();
-      } catch (error) {
-        throw Object.assign(new Error('read-only intake probe failed', { cause: error }), { intakeStage: 'intake' });
+      const check = async (stage, label, operation) => {
+        try {
+          return await operation();
+        } catch (error) {
+          throw Object.assign(new Error(label, { cause: error }), { intakeStage: stage });
+        }
+      };
+      await check('intake', 'read-only sheet schema probe failed', () => provider.probeRead());
+      const cursor = await check('intake', 'read-only intake cursor probe failed', () => cursorStore.read());
+      if (!Number.isSafeInteger(cursor?.nextRow) || cursor.nextRow < 2 || cursor.nextRow > 100_002) {
+        throw Object.assign(new Error('read-only intake cursor is invalid'), { intakeStage: 'intake' });
       }
+      const rows = cursor.nextRow < 100_002
+        ? await check('intake', 'read-only intake row probe failed', () => provider.readRows({ startRow: cursor.nextRow, limit: 20 }))
+        : [];
+      if (!Array.isArray(rows) || rows.length > 20) {
+        throw Object.assign(new Error('read-only intake row page is invalid'), { intakeStage: 'intake' });
+      }
+      const statusCounts = { new: 0, queued: 0, review: 0, 'v2-applied': 0, duplicate: 0, other: 0 };
+      const rowsByNumber = new Map();
+      for (const row of rows) {
+        const status = String(row?.values?.[3] || '').trim();
+        statusCounts[Object.hasOwn(statusCounts, status) ? status : 'other']++;
+        rowsByNumber.set(row.rowNumber, status);
+      }
+
+      const queueReceipts = await check('reconciliation', 'read-only queue receipt probe failed',
+        () => commandQueue.listIntakeReceipts({ limit: 50 }));
+      const currentSpreadsheetHash = createHash('sha256').update(spreadsheetId).digest('hex');
+      const correlatedReceipts = queueReceipts.filter((receipt) =>
+        receipt.spreadsheetIdHash === currentSpreadsheetHash
+        && (rowsByNumber.has(receipt.rowNumber) || receipt.rowNumber < cursor.nextRow));
+      const canonical = await check('reconciliation', 'read-only canonical probe failed', () => store.read());
+      let virtualState = canonical?.payload || null;
+
+      // Apply pending, correlated commands to an in-memory copy only. This helps
+      // preview later new rows in order without writing canonical or claiming queue leases.
+      const priorReceipts = correlatedReceipts
+        .filter((receipt) => receipt.rowNumber < cursor.nextRow)
+        .sort((a, b) => a.rowNumber - b.rowNumber);
+      for (const receipt of priorReceipts) {
+        const queued = await check('reconciliation', 'read-only queue command probe failed',
+          () => commandQueue.inspect(receipt.requestId));
+        if (!queued || queued.status !== 'pending' || !queued.command || !virtualState) continue;
+        try {
+          const plan = applyChatCommand(virtualState, queued.command, { now: Number(queued.createdAtMs) || Date.now() });
+          if (!plan.duplicate) virtualState = plan.state;
+        } catch {
+          // A pending command that cannot be previewed is not applied to the virtual state.
+        }
+      }
+
+      const previews = [];
+      for (const row of rows) {
+        if (String(row?.values?.[3] || '').trim() !== 'new') continue;
+        let parsed;
+        try {
+          parsed = parseGoogleSheetsIntakeRow(row);
+        } catch (error) {
+          const reasonCode = /^[a-z0-9-]{1,48}$/.test(String(error?.reasonCode || ''))
+            ? String(error.reasonCode) : 'invalid-input';
+          previews.push({ rowNumber: row.rowNumber, outcome: 'review', reasonCode });
+          continue;
+        }
+        const existing = await check('reconciliation', 'read-only request queue probe failed',
+          () => commandQueue.inspect(parsed.requestId));
+        if (existing) {
+          const receipt = existing.intakeReceipt || null;
+          const sameReceipt = receipt?.spreadsheetIdHash === currentSpreadsheetHash
+            && receipt.rowNumber === row.rowNumber;
+          previews.push({
+            rowNumber: row.rowNumber,
+            outcome: sameReceipt ? 'queue-record-present' : 'request-id-collision',
+            reasonCode: sameReceipt ? 'already-queued' : 'request-collision'
+          });
+          continue;
+        }
+        if (parsed.businessEventKey) {
+          const event = await check('reconciliation', 'read-only business event probe failed',
+            () => commandQueue.inspectBusinessEvent(parsed.businessEventKey, parsed.command));
+          if (event) {
+            const matches = event.keyMatches && event.payloadMatches;
+            previews.push({
+              rowNumber: row.rowNumber,
+              outcome: matches ? 'business-duplicate' : 'business-collision',
+              reasonCode: matches ? 'business-duplicate' : 'business-collision'
+            });
+            continue;
+          }
+        }
+        if (!virtualState) {
+          previews.push({ rowNumber: row.rowNumber, outcome: 'review', reasonCode: 'canonical-not-initialized' });
+          continue;
+        }
+        try {
+          const plan = applyChatCommand(virtualState, parsed.command);
+          previews.push({
+            rowNumber: row.rowNumber,
+            outcome: plan.duplicate ? 'canonical-duplicate' : 'would-apply',
+            reasonCode: plan.duplicate ? 'duplicate-already-applied' : 'preview-clean'
+          });
+          if (!plan.duplicate) virtualState = plan.state;
+        } catch (error) {
+          const message = String(error?.message || '');
+          const reasonCode = /ambiguous/i.test(message) ? 'ambiguous-target'
+            : /not found/i.test(message) ? 'target-not-found'
+            : /insufficient inventory/i.test(message) ? 'insufficient-inventory'
+            : error instanceof TypeError ? 'invalid-command' : 'command-rejected';
+          previews.push({ rowNumber: row.rowNumber, outcome: 'review', reasonCode });
+        }
+      }
+      return {
+        intakeRowsRead: rows.length,
+        cursorNextRow: cursor.nextRow,
+        statusCounts,
+        queuedReceiptCount: queueReceipts.length,
+        correlatedReceiptRows: correlatedReceipts.length,
+        canonicalInitialized: Boolean(canonical),
+        canonicalRevision: canonical?.revision,
+        previews
+      };
     };
     const intakeWorker = createGoogleSheetsIntakeProcessor({
       provider, queue: commandQueue, cursorStore, spreadsheetId, maxRowsPerRun: 20
