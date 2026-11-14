@@ -232,3 +232,102 @@ test('new verified shop offer preserves another shop posting for future comparis
   assert.equal(quotes[1].sourceStore, 'トレカショップKURO');
   assert.equal(quotes[1].price, 1300);
 });
+
+
+test('simultaneous verified buyback offers from three different shops remain independently available', async () => {
+  const state = sampleState();
+  state.marketQuotes = [];
+  const store = memoryStore(state);
+  const result = await refreshMarketQuotes({
+    store, mutationId: 'market-refresh:2026-11-07',
+    runAt: '2026-11-07T04:45:00.000Z',
+    provider: { async lookupMany(targets) {
+      const target = targets[0];
+      return [
+        sourcedBuyback(target, 1300),
+        { ...sourcedBuyback(target, 1450), source: 'カードショップアリウム',
+          sourceStore: 'カードショップアリウム',
+          postUrl: 'https://x.com/cardshop_allium/status/1234567890123456788' },
+        { ...sourcedBuyback(target, 1400), source: 'トレカショップKURO',
+          sourceStore: 'トレカショップKURO',
+          postUrl: 'https://x.com/kuro_tcg/status/1234567890123456787' }
+      ];
+    } }
+  });
+  assert.equal(result.refreshedCount, 3);
+  assert.equal(result.staleCount, 0);
+  const quotes = (await store.read()).payload.marketQuotes;
+  assert.equal(quotes.length, 3);
+  assert.deepEqual(quotes.map(q => q.sourceStore).sort(),
+    ['カードショップアリウム','トレカショップKURO','買取ミミ'].sort());
+});
+
+test('two conflicting offers from one shop are rejected without hiding another shop quote', async () => {
+  const state = sampleState();
+  state.marketQuotes = [];
+  const store = memoryStore(state);
+  const result = await refreshMarketQuotes({
+    store, mutationId: 'market-refresh:2026-11-07',
+    runAt: '2026-11-07T04:45:00.000Z',
+    provider: { async lookupMany(targets) {
+      const mimi = sourcedBuyback(targets[0], 1500);
+      return [
+        mimi, { ...mimi, price: 1600 },
+        { ...mimi, source: 'トレカショップKURO', sourceStore: 'トレカショップKURO',
+          postUrl: 'https://x.com/kuro_tcg/status/1234567890123456787', price: 1450 }
+      ];
+    } }
+  });
+  assert.equal(result.refreshedCount, 1);
+  assert.equal((await store.read()).payload.marketQuotes.length, 1);
+  assert.equal((await store.read()).payload.marketQuotes[0].sourceStore, 'トレカショップKURO');
+});
+
+test('later same-shop price reduction is kept while old high quote becomes superseded', async () => {
+  const state = sampleState();
+  const target = { targetKey: marketTargetKey({ category: 'BOX', productKey: 'box-x', condition: 'あり' }),
+    productKey: 'box-x', category: 'BOX', condition: 'あり' };
+  state.marketQuotes = [{ ...sourcedBuyback(target, 2000),
+    postedAt: '2026-11-07T01:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456701',
+    status: 'verified', fresh: true }];
+  const store = memoryStore(state);
+  const reduction = { ...sourcedBuyback(target, 1500),
+    postedAt: '2026-11-07T02:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456702' };
+  await refreshMarketQuotes({
+    store, mutationId: 'market-refresh:2026-11-07',
+    runAt: '2026-11-07T04:45:00.000Z',
+    provider: { async lookupMany() { return [reduction]; } }
+  });
+  const quotes = (await store.read()).payload.marketQuotes;
+  assert.equal(quotes.length, 2);
+  assert.equal(quotes[0].status, 'superseded');
+  assert.equal(quotes[0].price, 2000);
+  assert.equal(quotes[1].status, 'verified');
+  assert.equal(quotes[1].price, 1500);
+});
+
+test('old cached shop post cannot downgrade a newer already verified buyback amount', async () => {
+  const state = sampleState();
+  const target = { targetKey: marketTargetKey({ category: 'BOX', productKey: 'box-x', condition: 'あり' }),
+    productKey: 'box-x', category: 'BOX', condition: 'あり' };
+  state.marketQuotes = [{ ...sourcedBuyback(target, 1250),
+    postedAt: '2026-11-07T03:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456703',
+    status: 'verified', fresh: true }];
+  const store = memoryStore(state);
+  const staleOffer = { ...sourcedBuyback(target, 4000),
+    postedAt: '2026-11-07T02:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456702' };
+  const result = await refreshMarketQuotes({
+    store, mutationId: 'market-refresh:2026-11-07',
+    runAt: '2026-11-07T04:45:00.000Z',
+    provider: { async lookupMany() { return [staleOffer]; } }
+  });
+  assert.equal(result.refreshedCount, 0);
+  const quotes = (await store.read()).payload.marketQuotes;
+  assert.equal(quotes.length, 1);
+  assert.equal(quotes[0].price, 1250);
+  assert.notEqual(quotes[0].price, 4000);
+});
