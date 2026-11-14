@@ -1111,3 +1111,16 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 非公開Driveフォルダ「Toreca Vault Private」内の `toreca-vault-data.json` を読み取り専用で確認。ファイル更新は2026-10-05で、トップレベル`schemaVersion=1`、内部データもV1形式。`data`の集計はlotteries 285、purchases 37、boxes 6、packs 0、cards 13、openings 2、sales 27（内容・個人情報はGitHubに転載しない）。
 - **重要**：これは現在のV2 schemaVersion 2の正本を証明するものではない。2026-10-05以降の記録が欠ける可能性が高いため、これを最新canonicalとしてFirestoreにインポートしてはならない。V2正本のApps Script `TV_V2_DATA_FILE_ID` の実設定、現在のV2 JSONのschemaVersion/revision/hash/更新日を認証付き環境で照合する。
 - 今回の調査ではDrive上の最新V2 JSON正本は未確定。既存canonical・旧Queue・在庫・売却は変更していない。V1→V2変換も実行しない。
+
+
+### 2026-11-14 JST — Intakeの再試行・最終結果保護とキュー照合の強化
+
+- **旧問題**：Firestoreキューへのenqueueが成功した後にGoogle Sheets D:Gのreceipt更新だけ失敗すると、同じrequestIdによる次のenqueueは`accepted=true, duplicate=true`を返し、旧Intake processorはSheet行を終端の`duplicate/request-duplicate`にしてしまう可能性があった。Queueは実際にはまだ`pending`でも、通常Chatに誤解を招き、以後のreadback運用を不安定にする。
+- **修正**：`cloud/src/google-sheets-intake.js` は同じrequestIdの既存受付を`queued/accepted`のまま保持し、独立した業務事実の重複（`businessDuplicate`）だけを`duplicate/business-duplicate`と扱う。既存処理中のものを完了と誤報しない。
+- **旧問題**：古いScheduler実行が後からD:Gを上書きすると、確定済の`v2-applied/canonical-readback-verified`等を`queued`へ戻せる可能性があった。
+- **修正**：`cloud/src/google-sheets-intake-provider.js` がA列のsourceRequestIdに加え現在のD列statusを読み、`new → queued/review/duplicate`、`queued → v2-applied/review/duplicate`以外の状態遷移を拒否する。既に同一の最終結果が書込済みなら、D:Gを改めて読み戻して完全一致を確認した場合のみノーオペレーション成功。食い違いは改変せずエラー。
+- **旧問題**：別のIntake行/Chat APIで同じrequestIdとcommand JSONが偶然使われていても、Firestore queueは単純に受理済みduplicateと返し、後から来た受付シート行に紐付くreceiptがないため永遠にqueuedになりえた。
+- **修正**：`cloud/src/firestore-command-queue.js` は既存queue recordの`intakeReceipt.spreadsheetIdHash/rowNumber`が今回のIntake行と一致する場合に限り同じrequestIdをリトライ可能とする。別Sheet/別行/元APIからの受付は`collision`として停止し、どの正本/行を上書きもしない。
+- **テスト**：`cloud/test/google-sheets-intake.test.js`、`google-sheets-intake-provider.test.js`、`firestore-command-queue.test.js` に再実行・最終結果保護・衝突・安全なリトライの回帰テストを追加。CI v2-ci #43559680508（test + Firestore Emulator）ともにsuccess。
+- **変更範囲**：GitHub PR #105作業ブランチのみ。実staging Worker/Sheet/Firestore正本/旧V2データ/旧Queueには変更なし。Sheets APIは複数Scheduler実行間で完全なatomic CASではないので、単一定期ジョブ運用とFirestore側の冪等性も必須。
+- **残り**：認証済みGoogle Cloudで費用・Cloud Run・Scheduler・IAM・staging canonicalを監査、対象stagingへ段階的デプロイ後、通常Chat→Intake→正本readback→スマホUIの1件E2Eを確認するまでは運用開始済みとしない。
