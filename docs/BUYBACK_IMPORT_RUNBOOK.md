@@ -93,3 +93,13 @@ TV2_VERIFIED_BUYBACK_IMPORT=YES TV2_BACKUP_VERIFIED=YES \
 - **別商品の混同防止**：`cloud/src/buyback-quotes.js`は`lotId`の一致だけで商品名・カテゴリ・販売単位の矛盾を許可しない。BOXにカード単体の単位が付いた提示は採用しない。
 - **検証**：`cloud/test/market-refresh-worker.test.js` と `cloud/test/buyback-quotes.test.js` に3店舗同時取得、同店舗矛盾/他店のみ採用、値下げ後の旧高値不採用、古いキャッシュ入力の拒否、lotIdのカテゴリ衝突試験を追加。GitHub Actions [#43571906100](https://github.com/manato-maker/toreca-vault/actions/runs/43571906100)のtest/Firestore Emulatorは両方success。
 - **実運用**：これはGitHub開発ブランチ上の実装修正であり、Cloud Run/Firestoreの実サービスへは未デプロイ。11/14本人一次X投稿の金額・単位と期限を検証できていないため、価格の実登録は今回も行っていない。認証済みFirebase/Google Cloudの接続と、実在庫に一致する元投稿を確認した後にstagingからE2E検証する。
+
+
+## 2026-11-14 JST — 買取価格の出典必須化と販売中止後の旧価格復活防止
+
+- **追加したコードの検査**：`cloud/src/buyback-quotes.js` が`lotId`一致だけでは買取価格を結び付けないよう改修。**商品ID/名前・販売単位・カテゴリ・シュリンク状態は必ずそれぞれ一致**し、出典が「公式定価」「販売価格」「MSRP」であれば、店舗名や元投稿の形式だけ正しくても参考買取額として扱わない。
+- **時系列のバグ修正**：買取ミミ等の同一店に新しい「買取終了/提示期限終了」投稿があっても、旧提示がまだ日付上有効であれば高額買取額として再登場してしまう可能性を解消。店舗ごとの元投稿を**期限切れ/買取終了を含め日時の新しい順**に比較し、最新投稿が有効でない場合は古い高値を現在価格に採用しない。矛盾した同時刻の投稿はshopだけreviewにし、他店の価格は守る。JSTとUTCの文字列表記差は絶対時刻で比較。
+- **過去価格の要件**：出典URLと実際の投稿日時（タイムゾーン付き）の両方が証明できないものは「過去の確認済み価格」にも表示しない。月日だけで「元の投稿日時」としない。
+- **テスト**：`cloud/test/buyback-quotes.test.js` にIDだけ一致で商品不明・単位不明、店舗があってもsourceがMSRP、終了投稿後の旧高値再登場、タイムゾーンの比較、日付だけの価格を拒否する回帰ケースを追加。`test` / `firestore-emulator` 両ジョブが成功したActions [#43572888397](https://github.com/manato-maker/toreca-vault/actions/runs/43572888397) を確認した。
+- **外部価格調査**：買取ミミ、アリウム、KUROの公式Xアカウントは公開検索で確認できたが、**2026-11-14の全商品について本人の最新個別ポスト・画像・税込価格・BOX条件・数量制限を確証できる一覧**は得られていない。過去・不確かな転記金額はFirestoreへ投入しない。
+- **反映範囲**：コードと自動テスト、手順書のみ。Cloud Runステージングの認証付き画面はこの接続から閲覧できず、FirestoreのmarketQuotes更新・アプリデプロイは未実行。実際の参考買取金額は変更されていない。今後、元投稿の確証、Google Cloud認証、バックアップ、dry-run、CAS反映後のreadbackが必要。
