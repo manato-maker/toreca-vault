@@ -1411,3 +1411,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - `cloud/src/market-refresh-worker.js` が別店舗のquoteを潰さないよう分離。従来のX自動providerは未接続。
 - 安全な手動取込として `cloud/src/verified-buyback-import.js`と`cloud/scripts/import-verified-buyback.js`を追加。非公開JSONをstagingでpreviewし、rev一致・二重送信・投稿URL/日付・店舗条件を検査。承認とバックアップ確認後にのみFirestore CASで保存しreadback。在庫/原価/抽選/売却履歴は変更しない。実在X原文との照合は外部工程。`docs/BUYBACK_IMPORT_RUNBOOK.md`を参照。
 - 2026-11-14現時点では公式3店の当日原文/X投稿を個別URLと画像で確認できず、11/13の比較表額を11/14の価格としては採用しない。**Firestoreの実marketQuotesと稼働中スマホUIは今回未更新**。認証済みGCPまたは接続済みFirebase等からstaging導入・当日投稿照合・readbackが必要。GitHub PR #105作業ブランチのテスト成功と実運用は区別する。
+
+
+### 2026-11-14 JST — 3店舗同時買取提示と古い高値巻き戻りの不具合修正
+
+- `cloud/src/market-refresh-worker.js`を修正。同じtargetKeyに別店舗の有効quoteが3件あるケースを重複と誤判定せず、(targetKey,店)で受理できるようにした。同店舗の矛盾2件はその店だけ無効にし、他店の有効quoteを巻き込まない。店の新しい投稿が既存の場合、古いキャッシュや同じURLで矛盾する金額を上書きさせず、正しい新投稿で旧投稿はsupersededとして履歴を保持。
+- `cloud/src/buyback-quotes.js` のlotId付き記録も商品・カテゴリ・販売単位が違えば拒否。カード価格をBOXに適用しない。
+- 追加テストは `cloud/test/market-refresh-worker.test.js` と `cloud/test/buyback-quotes.test.js`。Actions [#43571906100](https://github.com/manato-maker/toreca-vault/actions/runs/43571906100)のtestとFirestore Emulatorともにsuccess。
+- 最新店舗X本人投稿の当日買取額を独立に確認できておらず実価格は未書込。Cloud Run staging再デプロイとFirestore readbackも未実施。APIトークン/旧V2本番/原価/在庫/売却履歴へ変更なし。続きは `docs/BUYBACK_IMPORT_RUNBOOK.md`。
