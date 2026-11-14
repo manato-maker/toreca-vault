@@ -17,8 +17,16 @@ SHEET_ID = "1abcdefghijklmnopqrstuvwxyz0123456789"
 
 class TestIntakeDiagnosis(unittest.TestCase):
     def test_cloud_run_config_exact_project_service_identity_and_flags(self):
-        response = {
-            "spec": {"template": {"spec": {
+        service = {
+            "status": {"url": AUDIENCE, "traffic": [
+                {"revisionName": "toreca-vault-staging-00004-nfr", "percent": 100},
+                {"revisionName": "toreca-vault-staging-00005-test", "percent": 0, "tag": "chat-candidate"}
+            ]},
+            # This template belongs to 00005, NOT the 00004 serving users.
+            "spec": {"template": {"spec": {"serviceAccountName": "candidate@other.example.com"}}}
+        }
+        revision = {
+            "spec": {
                 "serviceAccountName": SERVICE_ACCOUNT,
                 "containers": [{"env": [
                     {"name": "TV2_FIRESTORE_DOCUMENT", "value": probe.CANONICAL},
@@ -29,16 +37,28 @@ class TestIntakeDiagnosis(unittest.TestCase):
                         "TV2_ENABLE_WRITES", "TV2_ENABLE_COMMAND_QUEUE",
                         "TV2_ENABLE_COMMAND_WORKER", "TV2_ENABLE_GOOGLE_SHEETS_INTAKE")]
                 ]}]
-            }}},
-            "status": {"url": AUDIENCE}
+            }
         }
         with patch.object(probe, "cli", return_value=probe.NUMBER), patch.object(
-            probe, "cli_json", return_value=response
-        ):
+            probe, "cli_json", side_effect=[service, revision, service, revision]
+        ) as read:
             result = probe.service_config()
             self.assertEqual(result, (SERVICE_ACCOUNT, SHEET_ID, AUDIENCE, SERVICE_ACCOUNT, AUDIENCE))
-            response["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"] = "torecaVaultV2/canonical"
+            self.assertEqual(read.call_args_list[1].args[0:4],
+                             ("run", "revisions", "describe", "toreca-vault-staging-00004-nfr"))
+            revision["spec"]["containers"][0]["env"][0]["value"] = "torecaVaultV2/canonical"
             with self.assertRaises(probe.Blocked):
+                probe.service_config()
+
+    def test_split_traffic_blocks_deployment_identity_guess(self):
+        service = {"status": {"url": AUDIENCE, "traffic": [
+            {"revisionName": "toreca-vault-staging-00004-nfr", "percent": 50},
+            {"revisionName": "toreca-vault-staging-00005-test", "percent": 50}
+        ]}}
+        with patch.object(probe, "cli", return_value=probe.NUMBER), patch.object(
+            probe, "cli_json", return_value=service
+        ):
+            with self.assertRaisesRegex(probe.Blocked, "traffic is split"):
                 probe.service_config()
 
     def test_wrong_scheduler_audience_or_target_is_rejected_without_mutation(self):
