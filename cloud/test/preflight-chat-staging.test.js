@@ -16,6 +16,7 @@ const stubs = (overrides = {}) => ({
     async save() { throw new Error('read-only probe must never write'); }
   }),
   createClient: async () => ({}),
+  spreadsheetId: '1abcdefghijklmnopqrstuvwxyz0123456789',
   readSheet: async (_client, path) => path.includes('?fields=')
     ? metadata : { values: [['queued'], ['review'], ['v2-applied']] },
   output: () => {},
