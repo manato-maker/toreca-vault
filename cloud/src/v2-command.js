@@ -1,0 +1,373 @@
+import { validateState } from '../../v2/core.js';
+
+const CATEGORIES = new Set(['BOX', 'パック', 'カード']);
+const LOTTERY_STATUSES = new Set(['応募前', '応募済', '当選', '落選', '購入済']);
+const clone = (value) => structuredClone(value);
+const qty = (value) => Number(value?.quantity) || 0;
+const norm = (value) => String(value || '').normalize('NFKC').toLocaleLowerCase('ja').replace(/[\s\u3000]/g, '');
+const isoDate = (value) => {
+  const date = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === date;
+};
+
+function requestParts(command) {
+  const requestId = String(command?.requestId || '').trim();
+  if (!/^[A-Za-z0-9._:-]{1,120}$/.test(requestId)) throw new TypeError('requestId is missing or invalid');
+  const type = String(command?.type || '');
+  const mutationId = `chat:${type}:${requestId}`;
+  return { requestId, type, mutationId };
+}
+
+function transactionIdExists(state, id) {
+  return state.transactions.some((row) => String(row.id || '') === id);
+}
+
+function finishMutation(state, mutationId, transactionIds = []) {
+  state.revision = Number(state.revision || 0) + 1;
+  state.lastMutationId = mutationId;
+  state.auditLog.push({ mutationId, transactionIds, revision: state.revision });
+  validateState(state);
+  return state;
+}
+
+function priorMutation(state, mutationId) {
+  return state.lastMutationId === mutationId || state.auditLog.some((row) => row.mutationId === mutationId);
+}
+
+function checkBase(state) {
+  validateState(clone(state));
+  if (!Array.isArray(state.transactions) || !Array.isArray(state.inventoryLots) || !Array.isArray(state.lotteries)) {
+    throw new TypeError('V2 collections are not initialized');
+  }
+}
+
+function consumeLots(state, lots, quantity) {
+  const available = lots.reduce((sum, lot) => sum + qty(lot), 0);
+  if (available < quantity) throw new Error('insufficient inventory');
+  lots.sort((a, b) => String(a.acquiredAt || '').localeCompare(String(b.acquiredAt || '')) || String(a.id || '').localeCompare(String(b.id || '')));
+  let remaining = quantity;
+  let cost = 0;
+  let unknownCost = false;
+  for (const lot of lots) {
+    if (!remaining) break;
+    const take = Math.min(qty(lot), remaining);
+    const unitCost = lot.unitCost;
+    if (unitCost === null || unitCost === undefined || unitCost === '' || !Number.isFinite(Number(unitCost))) unknownCost = true;
+    else cost += take * Number(unitCost);
+    lot.quantity = qty(lot) - take;
+    remaining -= take;
+  }
+  state.inventoryLots = state.inventoryLots.filter((lot) => qty(lot) > 0);
+  return unknownCost ? null : cost;
+}
+
+function commandDate(command, field = 'date') {
+  const date = String(command[field] || '');
+  if (!isoDate(date)) throw new TypeError(`${field} must be a valid YYYY-MM-DD date`);
+  return date;
+}
+
+function applyPurchase(state, command, requestId, mutationId) {
+  const product = String(command.product || '').trim();
+  const category = String(command.category || '').trim();
+  const condition = String(command.condition || '').trim();
+  const store = String(command.store || '').trim();
+  const date = commandDate(command);
+  const quantity = Number(command.quantity);
+  const enteredCost = Number(command.unitCost ?? command.price);
+  const openingBox = String(command.openingBoxProduct || '').trim();
+  const cardSet = String(command.cardSet || command.cardCode || '').trim();
+  if (!product || !CATEGORIES.has(category) || !Number.isSafeInteger(quantity) || quantity <= 0) throw new TypeError('invalid purchase fields');
+  if (!Number.isFinite(enteredCost) || enteredCost < 0) throw new TypeError('purchase unitCost must be explicit and non-negative');
+  if (openingBox && (category !== 'カード' || quantity !== 1 || !cardSet)) throw new TypeError('opened-box card fields are incomplete');
+  if (openingBox && enteredCost !== 0) throw new TypeError('a single acquired from an opened box must have zero cost');
+
+  const purchaseId = `chat-purchase-${requestId}`;
+  const openingId = `chat-opening-${requestId}`;
+  const lotId = `${purchaseId}-lot`;
+  const hasPurchase = transactionIdExists(state, purchaseId);
+  const hasOpening = transactionIdExists(state, openingId);
+  const hasLot = state.inventoryLots.some((lot) => String(lot.id || '') === lotId);
+  if (hasPurchase || hasLot || (openingBox && hasOpening)) {
+    if (hasPurchase && hasLot && (openingBox ? hasOpening : !hasOpening) && priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('partial duplicate purchase detected; manual review required');
+  }
+
+  const next = clone(state);
+  const transactionIds = [];
+  let source = 'chat';
+  let memo = '';
+  let actualUnitCost = enteredCost;
+  if (openingBox) {
+    const wanted = norm(openingBox);
+    let boxes = next.inventoryLots.filter((lot) => lot.category === 'BOX' && qty(lot) > 0 && (norm(lot.productKey || lot.product) === wanted));
+    const requestedSource = String(command.openingBoxPurchaseRequestId || '').trim();
+    if (requestedSource) boxes = boxes.filter((lot) => String(lot.requestId || '') === requestedSource);
+    const specifiedCondition = String(command.openingBoxCondition || '').trim();
+    if (specifiedCondition) boxes = boxes.filter((lot) => String(lot.condition || '') === specifiedCondition);
+    if (!boxes.length) throw new Error('opened box inventory was not found');
+    if (!specifiedCondition && new Set(boxes.map((lot) => String(lot.condition || ''))).size > 1) throw new Error('box condition is ambiguous');
+    const boxCost = consumeLots(next, boxes, 1);
+    next.transactions.push({
+      id: openingId, type: 'opening', product: openingBox, productKey: openingBox, category: 'BOX',
+      condition: specifiedCondition || String(boxes[0]?.condition || ''), quantity: 1, price: 0, total: 0,
+      date, source: 'chat', requestId, memo: `BOX開封｜${openingBox}`, acquisitionCost: boxCost
+    });
+    transactionIds.push(openingId);
+    source = 'opening';
+    memo = `開封獲得｜${openingBox}`;
+    actualUnitCost = 0;
+  }
+
+  const total = actualUnitCost * quantity;
+  const tx = {
+    id: purchaseId, type: 'purchase', product, productKey: product, category, condition,
+    set: category === 'カード' ? cardSet : '', quantity, price: actualUnitCost, total,
+    date, store, source, requestId, memo
+  };
+  const lot = {
+    id: lotId, product, productKey: product, category, condition,
+    set: category === 'カード' ? cardSet : '', quantity, unitCost: actualUnitCost,
+    acquiredAt: date, store, source, sourceTransactionId: purchaseId, requestId, memo
+  };
+  next.transactions.push(tx);
+  next.inventoryLots.push(lot);
+  transactionIds.push(purchaseId);
+  finishMutation(next, mutationId, transactionIds);
+  return { state: next, duplicate: false, mutationId, transactionIds };
+}
+
+function applySale(state, command, requestId, mutationId) {
+  const product = String(command.product || '').trim();
+  const category = String(command.category || '').trim();
+  const condition = String(command.condition || '').trim();
+  const store = String(command.store || command.soldTo || '').trim();
+  const date = commandDate(command);
+  const quantity = Number(command.quantity);
+  const unitPrice = Number(command.unitPrice ?? command.price);
+  const fee = Number(command.fee || 0);
+  if (!product || !store || !CATEGORIES.has(category) || !Number.isSafeInteger(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isFinite(fee) || fee < 0) {
+    throw new TypeError('invalid sale fields');
+  }
+  const id = `chat-sale-${requestId}`;
+  if (transactionIdExists(state, id)) {
+    if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('sale ID exists without its mutation record; manual review required');
+  }
+  const productKey = norm(product);
+  const candidates = state.inventoryLots.filter((lot) => qty(lot) > 0 && lot.category === category && norm(lot.productKey || lot.product) === productKey);
+  const eligible = condition ? candidates.filter((lot) => String(lot.condition || '') === condition) : candidates;
+  if (condition && !eligible.length) throw new Error('sale inventory was not found');
+  if (!condition && new Set(eligible.map((lot) => String(lot.condition || ''))).size > 1) throw new Error('inventory condition is ambiguous');
+  if (!eligible.length) throw new Error('sale inventory was not found');
+  const next = clone(state);
+  const lotIds = new Set(eligible.map((lot) => lot.id));
+  const lots = next.inventoryLots.filter((lot) => lotIds.has(lot.id));
+  const cost = consumeLots(next, lots, quantity);
+  const tx = {
+    id, type: 'sale', product, productKey: product, category, condition: condition || String(lots[0]?.condition || ''),
+    quantity, price: unitPrice, total: unitPrice * quantity, fee, date, store, soldTo: store,
+    source: 'chat', requestId, acquisitionCost: cost
+  };
+  next.transactions.push(tx);
+  finishMutation(next, mutationId, [id]);
+  return { state: next, duplicate: false, mutationId, transactionIds: [id] };
+}
+
+function applyOpening(state, command, requestId, mutationId) {
+  const product = String(command.product || '').trim();
+  const date = commandDate(command);
+  const quantity = Number(command.quantity);
+  const store = String(command.store || '').trim();
+  if (!product || !Number.isSafeInteger(quantity) || quantity <= 0) throw new TypeError('invalid pack opening fields');
+  const id = `chat-opening-${requestId}`;
+  if (transactionIdExists(state, id)) {
+    if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('opening ID exists without its mutation record; manual review required');
+  }
+  let candidates = state.inventoryLots.filter((lot) => qty(lot) > 0 && lot.category === 'パック' && norm(lot.productKey || lot.product) === norm(product));
+  const sourceIds = new Set((Array.isArray(command.sourcePurchaseRequestIds) ? command.sourcePurchaseRequestIds : [command.sourcePurchaseRequestId]).filter(Boolean).map(String));
+  if (sourceIds.size) candidates = candidates.filter((lot) => sourceIds.has(String(lot.requestId || '')));
+  if (store) candidates = candidates.filter((lot) => norm(lot.store) === norm(store));
+  if (!candidates.length) throw new Error('pack inventory was not found');
+  if (candidates.length > 1 && !sourceIds.size) throw new Error('pack source lot is ambiguous; provide sourcePurchaseRequestId');
+  const next = clone(state);
+  const lotIds = new Set(candidates.map((lot) => lot.id));
+  const lots = next.inventoryLots.filter((lot) => lotIds.has(lot.id));
+  const cost = consumeLots(next, lots, quantity);
+  const selectedStore = store || String(lots[0]?.store || '');
+  next.transactions.push({
+    id, type: 'opening', product, productKey: product, category: 'パック', condition: '開封済み',
+    quantity, price: 0, total: 0, date, store: selectedStore, source: 'chat', requestId,
+    memo: String(command.memo || 'パック開封｜シングルは別途報告'), acquisitionCost: cost,
+    acquisitionCostBasis: '購入履歴のみ保持'
+  });
+  finishMutation(next, mutationId, [id]);
+  return { state: next, duplicate: false, mutationId, transactionIds: [id] };
+}
+
+function applyLottery(state, command, requestId, mutationId, now) {
+  const title = String(command.title || command.product || '').trim();
+  const store = String(command.store || '').trim();
+  const status = String(command.status || '応募済').trim();
+  const applicationDate = commandDate(command, 'applicationDate');
+  if (!title || !store || !LOTTERY_STATUSES.has(status) || !['応募前', '応募済'].includes(status)) throw new TypeError('invalid lottery application fields');
+  for (const field of ['deadline', 'resultDate', 'receiveDeadline']) {
+    if (command[field] && !isoDate(command[field])) throw new TypeError(`${field} must be a valid YYYY-MM-DD date`);
+  }
+  const quantity = command.quantity == null || command.quantity === '' ? null : Number(command.quantity);
+  if (quantity !== null && (!Number.isSafeInteger(quantity) || quantity <= 0)) {
+    throw new TypeError('lottery quantity must be a positive integer');
+  }
+  // Advertised lottery price and manufacturer MSRP are reference-only: neither
+  // implies payment, acquisition cost, purchase, or inventory.
+  const announcedUnitPrice = command.unitPrice == null || command.unitPrice === '' ? null : Number(command.unitPrice);
+  const officialMsrpYen = command.officialMsrpYen == null || command.officialMsrpYen === '' ? null : Number(command.officialMsrpYen);
+  if ((announcedUnitPrice !== null && (!Number.isSafeInteger(announcedUnitPrice) || announcedUnitPrice < 0))
+    || (officialMsrpYen !== null && (!Number.isSafeInteger(officialMsrpYen) || officialMsrpYen < 0))) {
+    throw new TypeError('lottery reference prices must be non-negative integers');
+  }
+  const expectedPurchaseTotal = command.expectedPurchaseTotal == null || command.expectedPurchaseTotal === ''
+    ? null : Number(command.expectedPurchaseTotal);
+  if (expectedPurchaseTotal !== null && (!Number.isSafeInteger(expectedPurchaseTotal) || expectedPurchaseTotal < 0)) {
+    throw new TypeError('lottery expectedPurchaseTotal must be a non-negative integer');
+  }
+  const officialProductUrl = String(command.officialProductUrl || '').trim();
+  if (officialProductUrl && (!/^https:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/.test(officialProductUrl) || officialProductUrl.length > 1024)) {
+    throw new TypeError('official product URL must be HTTPS');
+  }
+  const owner = String(command.owner || '').trim();
+  // An independent screenshot can accidentally be replayed with a new request
+  // ID. Require review if it looks like an existing same-day application.
+  const similar = state.lotteries.some((item) =>
+    norm(item.title) === norm(title) && norm(item.store) === norm(store) &&
+    String(item.applicationDate || '') === applicationDate &&
+    (!owner || !String(item.owner || '').trim() || norm(item.owner) === norm(owner)) &&
+    (!String(command.deadline || '') || !String(item.deadline || '') || String(item.deadline) === String(command.deadline))
+  );
+  if (similar) throw new Error('lottery application may already exist; manual review required');
+  const id = `chat-lottery-${requestId}`;
+  const existing = state.lotteries.filter((item) => String(item.id || '') === id);
+  if (existing.length) {
+    if (existing.length === 1 && priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('lottery ID exists without its mutation record; manual review required');
+  }
+  const next = clone(state);
+  next.lotteries.push({
+    id, title, store, status, deadline: String(command.deadline || ''),
+    resultDate: String(command.resultDate || ''), receiveDeadline: String(command.receiveDeadline || ''),
+    receiptStatus: status === '当選' ? '未受取' : status === '購入済' ? '受取済み' : '対象外',
+    receivedDate: '', shrinkStatus: '未選択', memo: String(command.memo || ''), owner: String(command.owner || ''),
+    applicationDate, source: 'chat', requestId, evidenceType: command.evidenceType === 'screenshot' ? 'screenshot' : 'chat-report',
+    product: String(command.product || title), productId: String(command.productId || ''),
+    category: String(command.category || ''), quantity,
+    shrinkStatus: String(command.shrinkStatus || '未選択'),
+    unitPrice: announcedUnitPrice, officialMsrpYen,
+    officialProductUrl, officialMsrpCheckedAt: String(command.officialMsrpCheckedAt || ''),
+    expectedPurchaseTotal,
+    paymentStatus: String(command.paymentStatus || '未購入・未支出'),
+    createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString()
+  });
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, lotteryIds: [id] };
+}
+
+function lotteryIdentity(item, command) {
+  const title = norm(command.title || command.product);
+  const store = norm(command.store);
+  const owner = norm(command.owner);
+  return norm(item.title) === title && norm(item.store) === store && (!owner || !norm(item.owner) || norm(item.owner) === owner);
+}
+
+function appendAutomationRequest(state, key, requestId, limit) {
+  state.automation = state.automation && typeof state.automation === 'object' ? state.automation : {};
+  state.automation[key] = Array.isArray(state.automation[key]) ? state.automation[key] : [];
+  state.automation[key].push(requestId);
+  state.automation[key] = state.automation[key].slice(-limit);
+}
+
+function applyLotteryResult(state, command, requestId, mutationId, now) {
+  const status = String(command.status || '');
+  const resultDate = commandDate(command, 'resultDate');
+  if (!['当選', '落選'].includes(status)) throw new TypeError('lottery result status must be 当選 or 落選');
+  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command)
+    && (!item.resultDate || String(item.resultDate).slice(0, 10) === resultDate));
+  if (matches.length !== 1) throw new Error(matches.length ? 'lottery result match is ambiguous' : 'lottery result target was not found');
+  const next = clone(state);
+  const item = next.lotteries.find((row) => row.id === matches[0].id);
+  if (status === '落選' && (item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('cannot mark a purchased or received lottery as lost');
+  item.status = status;
+  item.resultDate = resultDate;
+  if (status === '落選' && item.receiptStatus !== '受取済み') {
+    item.receiptStatus = '対象外';
+    item.receivedDate = '';
+  } else if (status === '当選' && !['未受取', '受取済み'].includes(String(item.receiptStatus || ''))) {
+    item.receiptStatus = '未受取';
+  }
+  const memo = String(command.memo || '').trim();
+  if (memo && !String(item.memo || '').includes(memo)) item.memo = [String(item.memo || '').trim(), memo].filter(Boolean).join('｜');
+  item.updatedAt = new Date(now).toISOString();
+  appendAutomationRequest(next, 'chatLotteryResultIds', requestId, 500);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, lotteryIds: [item.id] };
+}
+
+function applyLotteryReceipt(state, command, requestId, mutationId, now) {
+  const receivedDate = String(command.receivedDate || command.date || '');
+  if (!isoDate(receivedDate)) throw new TypeError('receivedDate must be a valid YYYY-MM-DD date');
+  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command));
+  if (matches.length !== 1) throw new Error(matches.length ? 'lottery receipt match is ambiguous' : 'lottery receipt target was not found');
+  const next = clone(state);
+  const item = next.lotteries.find((row) => row.id === matches[0].id);
+  if (!['当選', '購入済'].includes(String(item.status || '')) && item.receiptStatus !== '受取済み') throw new Error('only a winning lottery can be received');
+  item.status = '購入済';
+  item.receiptStatus = '受取済み';
+  item.receivedDate = receivedDate;
+  item.updatedAt = new Date(now).toISOString();
+  appendAutomationRequest(next, 'chatLotteryReceiptIds', requestId, 500);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, lotteryIds: [item.id] };
+}
+
+function applyLotteryBulk(state, command, requestId, mutationId, now) {
+  const dates = Array.isArray(command.resultDates) ? [...new Set(command.resultDates.map(String))] : [];
+  const status = String(command.status || '');
+  if (!dates.length || dates.some((date) => !isoDate(date)) || !['当選', '落選'].includes(status)) throw new TypeError('invalid lottery bulk fields');
+  const targets = state.lotteries.filter((item) => dates.includes(String(item.resultDate || '').slice(0, 10)));
+  if (!targets.length) throw new Error('lottery bulk targets were not found');
+  if (targets.some((item) => item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('bulk result includes a purchased or received lottery');
+  const next = clone(state);
+  let updated = 0;
+  for (const item of next.lotteries.filter((row) => targets.some((target) => target.id === row.id))) {
+    const before = JSON.stringify(item);
+    item.status = status;
+    if (status === '落選') { item.receiptStatus = '対象外'; item.receivedDate = ''; }
+    else if (item.receiptStatus !== '受取済み') item.receiptStatus = '未受取';
+    item.updatedAt = new Date(now).toISOString();
+    if (JSON.stringify(item) !== before) updated++;
+  }
+  appendAutomationRequest(next, 'chatLotteryBulkIds', requestId, 200);
+  finishMutation(next, mutationId, []);
+  return { state: next, duplicate: false, mutationId, updated, matched: targets.length };
+}
+
+/** Pure V2 state transition for the first safe command set; it never performs I/O. */
+export function applyChatCommand(currentState, command, { now = Date.now() } = {}) {
+  checkBase(currentState);
+  if (!Number.isFinite(now) || now < 0) throw new TypeError('now must be a non-negative timestamp');
+  if (!command || typeof command !== 'object' || Array.isArray(command)) throw new TypeError('command must be an object');
+  const { requestId, type, mutationId } = requestParts(command);
+  if (priorMutation(currentState, mutationId)) return { state: clone(currentState), duplicate: true, mutationId };
+  switch (type) {
+    case 'purchase': return applyPurchase(currentState, command, requestId, mutationId);
+    case 'sale': return applySale(currentState, command, requestId, mutationId);
+    case 'open-packs': return applyOpening(currentState, command, requestId, mutationId);
+    case 'lottery': return applyLottery(currentState, command, requestId, mutationId, now);
+    case 'lottery-result-exact': return applyLotteryResult(currentState, command, requestId, mutationId, now);
+    case 'lottery-receipt': return applyLotteryReceipt(currentState, command, requestId, mutationId, now);
+    case 'lottery-bulk': return applyLotteryBulk(currentState, command, requestId, mutationId, now);
+    default: throw new Error(`command type ${type || '(empty)'} is not implemented; manual review required`);
+  }
+}

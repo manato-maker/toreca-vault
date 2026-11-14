@@ -1,0 +1,15 @@
+FROM node:22-slim
+
+ENV NODE_ENV=production
+ENV PORT=8080
+WORKDIR /app
+
+COPY v2/core.js ./v2/core.js
+COPY cloud/package*.json ./cloud/
+WORKDIR /app/cloud
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY cloud/src ./src
+USER node
+EXPOSE 8080
+CMD ["node", "src/dashboard-server.js"]

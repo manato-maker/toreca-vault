@@ -500,3 +500,1092 @@ Google Cloud projectの切替は未実施。先に対象projectの権限・必�
 - PR #104 merged (3b01168f66466adbf97234bb2ce0d66764c9ab1e). Its diagnostic hashes `TV2_SCRIPT_ID` and prints only a label. Actions #41462078443 classified it as the `Toreca Vault 抽選自動化` project (ID itself withheld); it did not target the separate V2 API project.
 - The follow-up read-only API probe still failed `function_not_found`; trigger restoration/read-back were skipped. The editor source contains `tv2AutomationStatus`, and an active API executable deployment exists (selected version 204), so target-ID mismatch is ruled out. GCP is still `Default`; project alignment/deployment configuration remains unresolved.
 - No triggers, sales queue rows, inventory, or V2 transactions were modified by the follow-up Action.
+
+
+### 2026-11-03 — Cloud Run / Firestore migration foundation (prototype)
+- Created branch `build/cloudrun-firestore-foundation-20261103` from main. Added an isolated Cloud Run V2 API adapter in `cloud/`, preserving schemaVersion 2, revision compare-and-swap, mutationId deduplication, bearer auth, strict CORS, and post-write canonical readback.
+- Writes default to disabled, empty Firestore is not auto-initialized, and a 900,000-byte document ceiling fails closed. The adapter is not deployed and contains no production credentials.
+- Added a pure JST schedule planner, Firestore lease/idempotency ledger, and independent worker dispatcher. Leases use hashed job IDs, per-claim fencing tokens, bounded retries, and safe error codes; the ledger stores no mail/command content. At 19:00 the hourly Gmail scan carries the focused-results flag to avoid a second Gmail job. Added CI syntax checks and 25 unit tests covering the API, Firestore adapter, migration report, schedules, leases, and dispatch. Local verification: `npm test --prefix cloud` (25 passed), `npm run check --prefix cloud` (passed).
+- GitHub Actions `v2-ci` run #41551268809 for the 13-test migration-report commit and run #41556556602 after schedule planning and #41556918790 after ledger/dispatcher implementation completed successfully.
+- No Cloud resources, Firestore documents, OAuth settings, Apps Script triggers, Sheets queue rows, Drive JSON, sales, or inventory were changed. The eight pending sales were not re-submitted or processed.
+- Next gates: verify the actual canonical data file (the latest read is explicitly named `toreca-vault-v2-staging.json`); add isolated Google Sheets/Gmail worker adapters; test Firestore transactions/lease races in the emulator; verify a 90-day TTL policy for `expireAt`; and obtain Google auth/project access before cutover. The dispatcher has no Google API handlers and no GCP integration or live-price runtime test has been performed. External side effects still require message/request IDs and V2 mutationId protection.
+- Planned schedule only (not live): command queue every 15 minutes; Gmail lottery scan hourly 09:00–23:00 JST; focus checks at 12:30 and 19:00, with 19:00 combined into the hourly Gmail job to avoid a second scan; market refresh once daily at 13:45 JST (first 15-minute tick after 13:30).
+- Continuity rule: after every work turn, update the Google Docs handoff, this `docs/HANDOVER.md`, and a dated portable Markdown handoff with completed work, verification, next steps, and blockers. Keep pending sales/lottery queue rows untouched during this prototype.
+- New architecture handoff: [`docs/NEW_DESIGN_HANDOVER.md`](./NEW_DESIGN_HANDOVER.md) captures the Chat-first design, component boundaries, planned JST schedule, migration gates, and current limitations. Treat this as a plan; no new workers or schedules are live.
+
+
+
+### 2026-11-03 — Idempotent Firestore command intake prototype
+
+- Audited the existing Apps Script queue contract: eight columns (requestId, payloadJson, status, attempts, createdAt, processedAt, result, error), nine allowed command types, duplicate ID/collision checks, and bounded processing.
+- Added an authenticated /api/v2 enqueueCommand action plus Firestore create-once queue storage. Exact request retries return the existing status; same ID with a different payload returns HTTP 409. Queue is disabled by default with TV2_ENABLE_COMMAND_QUEUE=false; accepting a command does not execute it.
+- Added fenced claim leases, a three-attempt default limit, review on exhausted attempts, and tests for resends, collisions, lease expiry, stale workers, API auth, and disabled-by-default behavior. Command payload is retained for retry/audit; no queue TTL/retention policy is configured.
+- Verification: npm test --prefix cloud — 31 passed; npm run check --prefix cloud — passed. This is local/unit-test verification only; no Firestore emulator or live cloud resources were used.
+- Production state: no deployment, trigger change, Sheets/Gmail connection, command execution, V2 mutation, or queue replay. Existing 8 pending sales and TCG193 remain untouched. PR #105 remains draft.
+- Next: run Firestore emulator tests, define payload retention and dead-letter review, implement command-to-V2 domain mutation with the existing invariants, build a one-way shadow adapter without dual execution, then test imported production snapshot in an isolated project before requesting cutover acceptance.
+
+
+### 2026-11-03 — Queue retry review verification
+
+- Follow-up safety refinement: result metadata is restricted to short alphanumeric codes; arbitrary worker text is replaced with a generic code. Exhausting the configured attempt count transitions the command to `review`.
+- Verification now: `npm test --prefix cloud` — 32 passed; `npm run check --prefix cloud` — passed. Latest GitHub Actions check pending for this refinement.
+- No deployment, queue processing, trigger changes, or V2 writes.
+
+
+CI correction (2026-11-03): code commit 588f01b passed GitHub Actions v2-ci run #41578881857 (32 tests). Branch commits after it only changed handoff docs.
+
+
+Environment blocker (2026-11-03): this local workspace has no gcloud or Firebase CLI, so Cloud Run/Firestore provisioning and Emulator startup could not be performed here. GitHub CI success covers code tests only, not deployed API auth/execution or canonical V2 readback.
+
+
+### 2026-11-03 — Initial V2 command transitions and worker prototype
+
+- Added pure V2 transitions for purchase, sale, pack opening, and lottery application. Requires explicit unit cost; opened-box singles are zero-cost; sales remove consumed stock using FIFO; ambiguous inventory matches stop for review.
+- Added queue worker orchestration: claim → transition → revision-CAS snapshot save/readback → queue settlement. The save-before-settlement retry path detects the prior mutation ID and does not duplicate the transaction.
+- Unsupported result/receipt/bulk/spouse/repair variants go to review. Worker is not connected to the runtime/API or existing Apps Script/Sheets queue.
+- Local verification: 44 tests and syntax checks pass. GitHub Actions for this latest code is pending. No Emulator/deployment/production data verification.
+- Existing system and pending sales/lottery rows remain unchanged.
+
+
+CI follow-up (2026-11-03): GitHub Actions v2-ci #41631701365 succeeded for the new V2 transition and command-worker code. The test and syntax-check steps passed. Later branch commits only updated handoff documentation. Emulator, deployed service, and production-state verification remain pending.
+
+
+### 2026-11-03 — Lottery transition extension
+
+- Added exact lottery result, receipt status, and guarded bulk result transitions. Matching must be unique; bulk fails closed if no target or any target is purchased/received. These updates do not create purchase/inventory rows.
+- Supported pure transitions now cover seven types: purchase, sale, open-packs, lottery application, exact result, receipt, and bulk result. Pokémon Center spouse-specific result and receipt-sale repair remain review-only.
+- Local verification: 47 tests and syntax check pass. CI for this extension was pending at the time of this handoff update. No Emulator/production data tests.
+
+
+CI follow-up (2026-11-03): GitHub Actions v2-ci #41632052953 succeeded for the lottery result/receipt/bulk extension. Test and syntax-check steps passed; subsequent branch commits only update handoff docs. Emulator and production checks remain unverified.
+
+
+Queue identity guard (2026-11-03): the worker now checks that the claimed document requestId matches the payload requestId immediately before reading or mutating V2. A mismatch enters review before any canonical write. Local verification is 48 tests plus syntax check; CI for this addition was pending at handoff time.
+
+
+CI follow-up (2026-11-03): GitHub Actions v2-ci #41632298133 passed for the requestId cross-check. Test and syntax-check steps succeeded; later commits are documentation-only. Emulator/production verification remains outstanding.
+
+
+### 2026-11-03 — Progress estimate and Gmail message dedupe planning
+
+- Whole project is estimated at ~25% through production cutover (stage-weighted, approximate). Architecture/schedule design is complete; API/queue and seven command transitions are prototype-tested but not runtime-connected. Gmail API/parser, market worker, cloud provisioning, canonical migration, E2E verification, and cutover have not started.
+- Added bounded-page Gmail message planning using only provider IDs, stable SHA-256 job keys, per-page duplicate removal, and fail-closed oversized-page handling. Planner retains no body, subject, sender, or labels; Gmail API is not connected.
+- Local verification: 51 tests and syntax check pass. GitHub Actions v2-ci #41634692957 succeeded. No Firestore Emulator or production check.
+
+
+### 2026-11-03 — Bounded Gmail scan windows and pagination
+
+- Added a pure Gmail query/cursor planner: seven-day initial backfill, 15-minute overlap for hourly scanning, six-hour overlap for result-focused scanning, maximum 100 messages per page.
+- The query upper bound stays fixed across `nextPageToken` pages. A successful timestamp advances only after the final page is durably processed; invalid/oversized inputs fail closed. Combined with the message-ID ledger key planner, repeated messages are not applied again.
+- Local verification: 55 tests and syntax check pass. GitHub Actions v2-ci #41635098677 succeeded. Gmail API, OAuth, parsing, and persisted checkpoints remain unconnected.
+- Project progress estimate: about 25% to production cutover; breakdown in the portable handoff.
+
+
+## 2026-11-04 — Gmail classifier port
+
+- Ported the current Apps Script lottery Gmail eligibility rules (result/application/card keyword filters) into a pure Node classifier. It emits only a classification/reason and does not persist mail fields or mutate V2.
+- Added tests for results, applications, focused result scans, and non-matching mail; registered the test and syntax check.
+- Local verification: cloud test suite 58 passed; syntax check passed. Latest PR head `0eabd4071ba23dc169ebb0ad118d8e612369106f`: Actions v2-ci #41721123698 succeeded; both `npm test` and `npm run check` steps passed.
+- No Gmail provider/OAuth, runtime connection, production trigger, Apps Script deployment, or V2 mutation. Existing production data and triggers were left untouched; no queued sales were replayed.
+- Next: verify CI, implement a read-only Gmail adapter with least-privilege OAuth and durable bounded checkpoints, add quota/retry recovery coverage, and continue market adapter work. Canonical V2 identity and cloud permissions remain prerequisites to migration/runtime.
+
+
+## 2026-11-04 — Gmail page worker
+
+- Added a provider-agnostic Gmail scan worker connecting the bounded query planner, provider message IDs, durable message-job ledger, and injected processor. No message subject/body/from is persisted by this layer.
+- Checkpoint advances only after every returned message job is complete or already complete. Failed/busy/exhausted jobs leave the cursor unchanged; successful final page alone updates lastSuccessfulAt.
+- Added failure/pagination/final-page tests. Local verification: 61 tests passed; syntax check passed. Latest PR head `c092911bf612d5cf4234385bffd0329a611bc665`: Actions v2-ci #41721641270 succeeded; both `npm test` and `npm run check` passed.
+- Gmail OAuth/provider, durable checkpoint implementation, production wiring, Apps Script deployment, and V2 changes remain unimplemented. Existing production data/triggers unchanged.
+- Next: verify Actions, implement Firestore cursor persistence + quota-aware provider contract, then the least-privilege Gmail adapter when Google Cloud credentials/permissions are available.
+
+
+Latest handover commit `9933e4238c769cd3d9794ebc13a206e4e00fd7cc`: Actions v2-ci #41721758957 succeeded, including `npm test` and `npm run check`.
+
+
+### 2026-11-04 — Firestore Gmail checkpoints and quota-aware provider
+- Added `cloud/src/firestore-gmail-checkpoints.js`: Firestore stores only the scan type, fixed-window page cursor, last-success timestamp, schema version, and update time. The worker writes the initial window before requesting Gmail, resumes that window after failure, uses expected-cursor compare-and-swap against stale workers, and atomically clears the cursor/updates last-success after the final page.
+- Added `cloud/src/quota-aware-gmail-provider.js`: injected Gmail list requests retry 429/5xx and recognized 403 quota responses with bounded exponential backoff, capped Retry-After, and attempt limits. Authentication errors are not retried. No message content is persisted by these modules.
+- Registered focused tests for checkpoint validation/CAS/atomic completion, scan-window resume, quota retries, Retry-After caps, non-retryable auth failures, and retry exhaustion. GitHub Actions v2-ci #41830898928 succeeded; both `npm test` and `npm run check` passed.
+- Runtime boundary: no Gmail API client, OAuth grant, Firestore Emulator, Cloud Run deployment, production checkpoint, or live message processing was added. Existing Apps Script, triggers, V2 data, and pending queue rows remain unchanged; no pending sales or lottery row was replayed.
+- Next: add isolated Firestore Emulator concurrency/race tests; implement the Gmail API adapter with least-privilege read-only scopes when the authorized Cloud project/credentials are available; then wire the adapter and checkpoint store only in staging. Canonical V2 identity is still unresolved, so no import/cutover.
+
+
+### 2026-11-04 — Gmail checkpoint generation fencing follow-up
+- Tightened checkpoint compare-and-swap to include the previous `lastSuccessfulAtMs` as well as the cursor. This prevents a stale invocation from recreating an old cursor after a newer scan has completed and cleared it.
+- Added a regression test for stale-generation restart. Focused local verification: 10 tests passed; GitHub Actions v2-ci #41831501955 passed the full `npm test` and `npm run check` steps.
+- Still no emulator or live Firestore/Gmail validation; production and queue state unchanged.
+
+
+### 2026-11-04 — Firestore Emulator race-test scaffold
+- Added an opt-in Admin SDK integration test for concurrent checkpoint advances, stale-generation rejection, and final readback. It uses a unique demo-project namespace and cleans up its document. Added `cloud/firebase.json` and `npm run test:firestore-emulator --prefix cloud` instructions.
+- Local focused run: 10 passed, 1 Emulator integration test skipped because `FIRESTORE_EMULATOR_HOST` is unset. This workspace has Java but no Firebase CLI or gcloud, so no actual emulator transaction race was executed.
+- GitHub Actions v2-ci #41832445196 passed the full `npm test` and `npm run check` steps. The emulator-specific test remains opt-in and was not run against a live emulator.
+- No production credentials, Gmail, Firestore, Apps Script, triggers, queue rows, or V2 data were accessed or changed.
+- Next: execute the opt-in test against an isolated Firestore Emulator when Firebase CLI/emulator runtime is available; then implement/wire the least-privilege Gmail adapter only after authorized Cloud credentials are available.
+
+
+### 2026-11-04 — Firestore Emulator race tests verified in CI
+- Added a dedicated GitHub Actions job that installs Firebase CLI 15.34.2 and runs the opt-in Firestore test inside `firebase emulators:exec` using the `demo-toreca-vault` project. The emulator config loads deny-all client rules; test writes use the Admin SDK only against the local emulator.
+- First emulator run exposed a test teardown typo (`db.close`); changed cleanup to the Admin SDK's `db.terminate()` and reran.
+- GitHub Actions v2-ci #41833501945 succeeded: both normal `npm test`/`npm run check` and the separate Emulator job passed. Emulator log shows 1/1 race test passed, 0 failures, 0 skipped. It verified competing cursor CAS updates, rejection of a stale generation after completion, and final checkpoint readback.
+- This is isolated Emulator validation only. No production Firestore, Gmail, Apps Script, triggers, canonical V2, or pending queue rows were accessed or changed.
+- Next: implement the read-only Gmail API adapter using least-privilege OAuth only after authorized credentials/project are available; keep it staged until canonical V2 identity and migration readback gates are satisfied.
+
+
+### 2026-11-04 — Read-only Gmail API list adapter
+- Added `cloud/src/google-gmail-api-provider.js`. It calls only `users/me/messages` list, asks the injected access-token callback for the single `https://www.googleapis.com/auth/gmail.readonly` scope, and returns only message IDs/page tokens. It does not fetch bodies, subjects, senders, or labels; API error bodies are reduced to safe status/reason fields.
+- The adapter uses the bounded quota retry wrapper, refreshes the injected token for each attempt, caps request duration and pagination values, and fails closed on malformed IDs. No OAuth grant or refresh-token storage was added.
+- Added four mock transport tests for request shape/scope/ID-only output, quota retry/token refresh, auth failure sanitization, and malformed IDs. Local targeted tests: 4 passed. GitHub Actions v2-ci #41834363103 succeeded; standard test/check and Firestore Emulator jobs both passed.
+- No user Gmail account or credentials were used; no live mail, Firestore, production data, Apps Script, triggers, or pending queue rows were touched.
+- Next: implement/configure the least-privilege OAuth token source only when the authorized Cloud project and credentials are available; then test in staging. Canonical V2 identity is still a migration gate.
+
+
+### 2026-11-04 — Bounded Gmail detail reader and transient classification
+- Extended `cloud/src/google-gmail-api-provider.js` with read-only per-message detail retrieval using the existing injected `gmail.readonly` token source. It requests the subject header and bounded MIME text parts, returns only subject plus decoded `text/plain`, and rejects message content over 512 KiB, more than 128 MIME parts, or nesting deeper than 8. No sender/recipient fields are returned.
+- Added bounded quota retry for detail requests and a pure `createGmailClassifierProcessor` that returns only classification kind/reason. No subject/body or classification is persisted by this change.
+- Added mock tests for detail URL/field mask, content bounds, transient fields, and processor output. GitHub Actions v2-ci #41837018173 succeeded: full npm test, npm run check, and the Firestore Emulator job all passed. The task workspace had no local repository checkout, so tests ran in CI.
+- Important wiring gap found during review: `dispatchJobs` discards handler return values and marks a job completed. Do not wire this classifier processor into the scanner until a durable result-code consumer exists, or a successful classification could be lost while its message ID is deduplicated.
+- No OAuth grant/token source, live Gmail, Cloud Run/production Firestore, Apps Script, trigger, canonical V2, or pending queue row was accessed or changed. The eight pending sales and TCG193 remain untouched.
+- Next: verify CI, add a durable classification outcome path that stores only hashed message ID and classification code/reason, and test unique/ambiguous matching before any V2 transition. Verify Google Cloud project and restricted-scope approval before staging. Canonical V2 identity remains unresolved.
+
+
+### 2026-11-04 — Redacted Gmail classification outcome store
+
+- Added a Firestore collection for compact classifier outcomes. Each document ID is SHA-256(messageId); stored fields are the hash, schema version, classification kind, optional allowlisted ignore reason, and timestamp. No raw message ID, headers, subject, or body is stored.
+- The classifier processor now writes its outcome before returning. If the durable write fails, the handler fails and the scan worker will not advance the cursor. If ledger completion later fails, retry sees the same classification record and returns an idempotent duplicate; a conflicting reclassification fails closed.
+- Added tests for write-once outcomes, hashed IDs, privacy bounds, conflict rejection, and processor ordering. GitHub Actions v2-ci #41838849830 succeeded: full npm test, npm run check, and isolated Firestore Emulator jobs passed.
+- The processor is still not wired into a live scanner/runtime. No OAuth grant, live Gmail, Cloud Run/production Firestore, Apps Script, triggers, V2 writes, or queue replay. Existing data and the eight pending sales plus TCG193 remain untouched.
+- Next: verify CI, compose the existing scan worker with the detail provider, Firestore checkpoint, message ledger, and classifier processor in isolated tests; then test unique/ambiguous V2 matching without writes. Cloud project/token source and canonical V2 identity remain staging/cutover gates.
+
+
+### 2026-11-04 — Gmail scan/classifier composition tests
+
+- Added isolated composition tests for the read-only detail provider contract, the bounded scanner, message job ledger, classifier processor, and Firestore classification result store.
+- Verified ordering: persist hashed-ID classification outcome → complete message job → advance the scan checkpoint. If the outcome write fails, the job remains incomplete and the cursor stays at its saved window.
+- GitHub Actions v2-ci #41838849830 passed npm test, npm run check, and the Firestore Emulator job. The scan composition is still mock-only; no Gmail/OAuth or production runtime is connected.
+- Next: confirm canonical V2 source identity and target Cloud project/token source, then add privacy-preserving unique/ambiguous match rules before any staging V2 transition. Production cutover and Apps Script changes remain gated.
+
+
+### 2026-11-04 — Canonical V2 source identity check
+
+- Performed read-only Google Drive searches for `toreca-vault-v2`, the exact `toreca-vault-v2-staging.json` name, and JSON files matching the project name. Results exposed the handoff document and command queue only; no V2 JSON candidate was discoverable in Drive search.
+- The Apps Script configured source ID/ScriptProperties cannot be inspected with the connected tools available in this session. Therefore canonical identity remains unverified; no candidate was read as canonical, imported, or changed.
+- No queue rows, Apps Script triggers, V2 data, or Gmail messages were read or mutated by this check. Eight pending sales and TCG193 remain untouched.
+- Next: obtain a read-only export/source ID from the configured Apps Script project (or an explicitly confirmed canonical Drive file), then compare revision/hash/counts before any staging import. Keep production cutover disabled.
+
+
+### 2026-11-04 — Canonical source search follow-up
+
+- Expanded read-only Drive searches to the configured source-key name, project-name variants, V2Automation.gs, and the Apps Script project MIME type. No Apps Script project or V2 JSON was returned; search exposed only the handoff and command queue.
+- Checked diagnostic Actions run #40676318499 for artifacts; none were attached. The Apps Script workflow uses the configured source ID for push/deploy and is not a safe read-only lookup path.
+- Canonical V2 identity remains unverified. No Apps Script settings/source, V2 data, Gmail messages, triggers, or queue rows were accessed or changed. Eight pending sales and TCG193 remain untouched.
+- No further implementation can safely depend on live V2 identity here. Resume after a read-only configured source ID/export or explicitly confirmed canonical Drive file is available; record revision/hash/counts before isolated import and matching checks. Keep production cutover disabled.
+- Latest code CI #41839376404 was reported successful for npm test, npm run check, and the Firestore Emulator job; it does not verify live Google access or canonical V2 data.
+
+
+## 2026-11-05 — Confirmed requirements from regular Chat
+
+Status: user-approved requirements; implementation and production wiring remain incomplete. Earlier dated history is retained; this section is the active specification.
+
+- Build the replacement app, not a repair of the old V2 Apps Script. Reuse the existing Cloud Run/Firestore prototype and tests. Avoid Apps Script version quotas and prefer non-Apps-Script APIs, scheduled work, and Gmail integration.
+- Gmail: poll hourly at 07:00, 08:00, …, 23:00, and 24:00 JST (midnight at the start of the following day). This is independent from the Chat command queue. Change recorded 2026-11-05: the prior Work note's 30-minute interval was a temporary direction; the user reconfirmed hourly and said 30 minutes is unnecessary.
+- Chat command queue: process every 15 minutes. Completion requires ordinary Chat text and screenshot reports to be able to submit lottery, purchase/receipt, opening, and sale commands; Work-only entry is insufficient.
+- Market refresh: once daily after 13:30 JST for BOX, packs, and singles. Store source and checked time; preserve the prior quote and mark unavailable/stale on failure; never guess. Keep market refresh independent of Gmail failures.
+- Migration: preserve lottery, purchase, sale, opening, inventory, and cost-basis history; prevent duplicate entries and double-counted cost. Exclude the user's schemaVersion 1 file and the unconfirmed staging JSON. Never replay pending sales. No writes to old V2 before data validation; production cutover and retirement of the old system require user acceptance.
+- Persistence path discovery: current GitHub V2 automation sends action=load to the Apps Script Web App URL in TV2_SYNC_URL and validates schemaVersion 2. In the authenticated Apps Script list, the Toreca Vault V2 API project and V2Api.gs were found; its settings contain TV_V2_DATA_FILE_ID, described in code as a dedicated V2 JSON file separate from V1. The old app's backup action failed because this browser app had no V2 connection URL configured.
+- Data read status: the storage route is identified, but the JSON contents have not been retrieved. Schema/revision/timestamp/counts/quantities/cost/asset totals/hash remain unverified, and no backup exists. Exclude toreca-vault-data.json (schemaVersion 1, last modified 2026-10-05) and unconfirmed toreca-vault-v2-staging.json. Never record tokens or secrets in handoff files.
+- Verification and cost: reuse the existing PR #105 prototype. Latest recorded code CI #41839376404 passed tests/checks/Firestore Emulator. Live Google API/OAuth, canonical data, Cloud resources, real Chat intake, and free-tier usage are unverified. Cloud Run + Firestore remains the baseline candidate; verify quotas and cost.
+- Next: read the dedicated V2 file without mutation, validate revision/content/totals/hash, and save a backup. Continue independent new-app work even if V2 data retrieval remains blocked. Align Gmail scheduling with the hourly 07:00–24:00 requirement.
+
+
+
+## 2026-11-05 — V2 storage-target follow-up
+
+- The configured TV_V2_DATA_FILE_ID in the authenticated Toreca Vault V2 API project resolved by Drive URL to a file named toreca-vault-v2-staging.json. It remains unconfirmed staging, so no record aggregation, migration, backup, or hash was performed on it.
+- The Drive folder “Toreca Vault Private” lists the handoff Doc and the user's schemaVersion 1 toreca-vault-data.json only; no separate V2 JSON candidate was visible there.
+- The old V2 app backup action failed because the Work browser app has no Apps Script connection URL configured. Production V2 contents remain unverified; no backup/hash exists.
+- Needed to resume canonical data validation: attach a read-only JSON export produced by the already-connected regular browser/app, or provide the confirmed production Drive file link. No token/Secret is needed. Do not alter old V2 settings or redeploy.
+
+
+
+## 2026-11-05 — 通常ChatとWorkの決定事項引き継ぎ手順（確定）
+
+- 適用範囲: Google Docs「Toreca Vault Handoff (CURRENT)」、このファイル、`docs/NEW_DESIGN_HANDOVER.md`。新アプリ専用のLibrary引き継ぎ資料にも同じ状態を反映する。会話間の自動共有は前提にしない。
+- 作業開始時: 最新版のGoogle DocsとGitHubの両引き継ぎ、新アプリ専用資料を読み、相互の差分と直近の変更履歴を確認する。
+- 新しい仕様・設定・運用方針が通常Chatで決まった場合: Workで開発に着手する前に、ユーザーが共有した決定内容を各引き継ぎ先へ記録する。通常Chatの会話をWorkから取得できない場合は自動共有済みと扱わず、共有された内容だけを記録する。
+- 既定事項を変更する場合: 過去の記録を削除・上書きせず、追記で旧仕様、新仕様、変更日、変更理由を残す。ユーザー承認なしに確定仕様を変えない。
+- 状態表示: 各項目を「決定済み」「検討中」「実装済み」「未実装」「検証済み」の該当状態で明記する。実装済みと検証済みは別々に扱い、未検証を完了と表現しない。
+- 保存後: Google Docs、GitHub各ファイル、Library資料を再読込し、追記内容が保存されたことを確認する。確認できない場合は未確認と報告する。
+- 秘密情報: 認証トークン、Secret、同期キーなどを引き継ぎに記載しない。
+
+### 現在の確定仕様（2026-11-05）
+
+- 旧V2を修復せず、新アプリを開発する。Cloud Run + Firestoreを基本候補とし、Apps Scriptの保存版上限に依存しない。
+- Gmail抽選メール確認: 毎日07:00〜24:00 JST、1時間ごと。24:00は翌暦日の00:00。通常Chat登録キュー処理: 15分ごと。両スケジュールは独立。
+- 買取相場: 毎日13:30以降に1回。Gmail障害と独立し、未取得時に前回価格と未更新状態を区別し、推測価格を登録しない。
+- 通常Chatからテキスト・スクリーンショットで報告して自動登録することを最終要件とする。
+- 旧V2の購入・売却・在庫・原価・抽選履歴を安全に移行する。未確認のstaging JSONは移行元にしない。正本検証前の書込みや切替は行わない。
+- 無料枠、API上限、長期保守性を考慮する。確定仕様の変更と本番切替はユーザー承認後。
+
+
+## 2026-11-05 — Gmail確認時刻の実装・検証状況
+
+- 決定済み: Gmail抽選メール確認は毎日07:00、08:00、…、23:00、24:00（翌暦日の00:00）の1時間ごと。通常Chat登録キューの15分間隔とは独立。
+- 実装済み: `cloud/src/schedule.js` のGmail due判定を上記時間に合わせ、`cloud/test/schedule.test.js` に07:00・各時刻・翌日00:00、01:00〜06:00の時間外、07:30の非実行境界を確認するテストを追加。関連コミット: `3d843c2`、`9bbd7d0`。
+- 検証済み: ローカルのscheduleテスト5件成功。GitHub Actions `v2-ci #42022058028` がcommit `9bbd7d050f8448263d00dbb9db8a3f636d6740cd` で成功。
+- 未実装/未検証: Cloud Scheduler等への本番設定、Gmail worker/OAuthの接続、実Gmailでの時刻・API利用量の運用確認は未完了。今回、旧V2やトリガーへの変更は行っていない。
+
+
+## 2026-11-05 — 新アプリ設計監査と予防的改善
+
+### 発見と判断
+
+- **A Firestore容量** — 現行adapterはV2全体を1ドキュメントに保持し、900,000 bytesで書込みをfail-closedする。Firestore Nativeの文書上限は1 MiB-4 bytes。V2正本のサイズと成長率をまだ取得できず、今コレクション分割すると複数文書の整合性・トランザクション・追加read/writeを増やすため、移行前の分割は保留。正本をread-only検査し、630,000 bytes超または90日実測成長から12か月以内に安全上限到達が見込まれる場合は移行を止め、分割案を再設計する。現状のfail-closedは維持。
+- **B 定期処理** — plannerが実起動時刻を予定時刻として使い、19:00の重点確認を別Gmail jobとして出していた。plannerに予定時刻入力を追加し、遅延起動でもjob keyを予定slotに固定。19:00は毎時Gmail job一つに重点フラグを付け、12:30重点確認は維持。保留コマンドとGmail固定window/checkpointは再開可能な状態を保持する。一方、Cloud Schedulerの予定時刻headerをruntimeで渡す接続、永続heartbeat、実行漏れアラートは未実装。
+- **C Gmail** — 各ページの上限を100件から50件へ下げ、plannerとproviderの両方で強制。Googleの現在の表ではmessages.listは5 units、完全形式messages.getは60 units、ユーザーごとの上限は6,000 units/分。50件の1ページは最大3,005 units（list 1回+full get 50回）で、短時間の上限到達余地を減らす。ページング/checkpointは継続する。19:00の二重実行は解消、12:30は保持。OAuth grant/token source、refresh失敗通知、実Gmail接続は未実装。認証エラーは自動再試行しない。
+- **D 通常Chat登録** — 認証済みAPIにPOST queue受付とstatus-only GETを追加し、pending/processing/done/reviewと正本readback確認を区別。status APIはコマンド本文を返さない。`cloud/openapi-chat-action.yaml` を追加した。API/queueは既定無効で、Cloud Run未配備のため通常Chatからのend-to-end投入は未検証。queueのrequestId+payload hashは完全再送を防ぐが、ChatとGmailの異なるIDを同じ抽選イベントとして認識する業務キーは未実装。Gmailはまだ分類のみでV2履歴を書かない。この照合ができるまではGmail結果をV2へ適用しない。
+- **E バックアップ/復旧** — 定期backup、restore drill、破損時の復元手順は未実装。Firestore backup/PITR/restoreとTTL削除に無料枠外の費用があり得るため、費用見積りとユーザー承認の前に有効化しない。隔離環境で復元検証と保存期間を設計する。
+- **F 監視** — 現在の`/health`は初期化と書込み設定のみ。Gmail最終成功、queue未処理・失敗、相場、backup、auth error、budgetの運用監視と通知は未実装。
+- **G 費用** — Cloud本番資源は未作成、利用量も実測なし。公式料金の確認ではCloud Schedulerはbilling account単位で3 jobs/月が無料、Firestore標準無料枠は1日50,000 read/20,000 write/20,000 deleteと1 GiB、Cloud Run request-basedは月200万requestなどの無料枠がある。一つの15分dispatcherはScheduler無料枠内に収まる見込みだが、既存billing accountの利用分とFirestore/Cloud Run/ネットワーク/backup/TTLを含む全体無料は未検証。Gmail quotaはusage limitであってCloud費用の保証ではない。課金設定は未変更。
+
+### 実装・検証結果
+
+- 実装済み: `cloud/src/schedule.js`予定時刻入力、19:00 Gmail job統合、Gmailページ上限50、command status API、`cloud/openapi-chat-action.yaml`。
+- テスト済み: schedule・API status・Gmail page/checkpoint・quota retry/providerの関連ローカルテスト29件成功、0失敗。OpenAPI YAML parseとserver/schedule構文確認も成功。GitHub Actions全体CIは今回の新commitについて確認待ち。
+- 関連commit: schedule/status/API/schema `ef7bf9c` / `ebec886` / `d7d4159`; Gmailページ上限 `7479b33`; quota/page tests `5671b68`。
+- 本番影響: Cloud Run/Firestore、Gmail、Apps Script、既存queue、V2正本は未変更。未処理売却queueの再投入なし。確定した時刻仕様の変更なし。
+
+### 次工程
+
+- GitHub CI全体結果を確認し、Schedule header接続・scheduler heartbeat/alertの実装範囲を決める。
+- V2正本取得後にsize/growth reportでsingle-documentか分割か判断し、バックアップとrestore drillを課金見積り付きで提案する。
+- requestIdとは別の業務event keyでChat/Gmail抽選を照合する設計を実装前にテストする。通常Chat Actionの実接続は認証・Cloud配備後に検証する。
+
+
+## 2026-11-05 — 設計監査後のCI確認
+
+- GitHub Actions `v2-ci #42027010332` は成功。`test` job（`npm test` と `npm run check`）および `firestore-emulator` jobの両方が完了成功。
+- 変更したSchedule/API/Gmail quota guardの関連ローカルテスト29件は成功、失敗0件。OpenAPI YAML parseとserver/schedule構文確認も成功。
+- 変更はPR #105のdraft branchにあり、未マージ・未配備。CI/emulator成功は本番Cloud、OAuth、通常Chat Action、V2正本接続の検証ではない。
+
+
+## 2026-11-05 — 定期実行の取りこぼし範囲を再確認
+
+- 状態: 予定時刻固定と同一jobKeyの重複防止は実装済み・CI検証済み（v2-ci #42027010332成功）。ただし、遅延起動テストが確認するのはSchedulerが予定時刻を渡した場合で、Scheduler起動自体が丸ごと抜けたケースのheartbeat検知やcatch-up実行を検証したものではない。
+- 既存の保留Chat queueは次回dispatcherが保留行を処理でき、Gmailは保存済みwindow/cursorと最終成功時刻から再開し、marketは当日安定jobKeyで13:45以降のtickから起動できる設計。ページ失敗時にGmail cursorを進めないcheckpointテストも通過済み。これは次の起動後にサービス単位の保留データを再開する仕組みであり、実行漏れそのものを監視・通知するheartbeatではない。
+- 未実装: scheduler runtimeで予定時刻headerを渡す接続、最後の成功tick/経過時間の保存、未実行アラート、長時間停止の運用通知。したがって「数日停止を検知する」は未達成。今回、heartbeatだけ追加して自動復旧済みと扱う変更はしていない。
+- 改善判断: catch-upはサービスごとの耐久cursor/queueを使って分離実装し、Gmail失敗でChat/marketを止めない。runtimeを接続する工程で、欠落slot数の検知と閾値アラートを追加し、長時間の重複scanや一括再実行を避ける。実装・統合テストとCloud設定は次工程。
+- 本番状態・制約: Cloud Scheduler/Run、OAuth、queue、旧V2正本は未変更。未処理売却queueの再投入なし。PR #105はdraft・未マージ・未配備。
+
+
+## 2026-11-05 — V2 JSON候補の読み取り専用取得
+
+- ユーザーの今回の指示により、Apps Script設定が参照する `toreca-vault-v2-staging.json` を未確認候補として読み取り専用で取得。JSON解析に成功し、schemaVersion 2、revision 2563を確認。Drive上の更新日時は2026-11-05 12:41:09 UTC。
+- 正本と確認されていないため、移行データ・本番バックアップ・canonical snapshotとして扱わない。V1 JSONも使用しない。取得した候補JSONとSHA-256 sidecarは個人用Libraryに保存。ハッシュ値自体やファイルID、認証情報はこの公開リポジトリへ記録しない。
+- 取得は読み取り専用。Apps Script、Drive原本、V2、queue、トリガー、Cloud資源への書き込み・設定変更は行っていない。未処理売却queueの再投入なし。
+- 次: 本番正本として確認できるソースが判明したら別途取得し、候補と混同せず検証する。現在の候補を移行に使う判断は未確定。
+
+
+## 2026-11-05 — Firestore容量監査と分割保存の予防実装
+
+### 決定変更と理由
+
+- 旧設計の「900,000 bytesを超えたら保存を停止し、移行前に別途分割を再設計する」から、「900,000 bytes以下は従来どおり単一ドキュメント、超過時はFirestore内のchunked-v1へ切り替える」に変更。候補JSONのcompact payload-envelope見積りが1,009,515 bytesとなり、単一ドキュメントの内部安全予算を超えたため。変更日は2026-11-05。これは本番保存先・正本・移行元を変更するものではない。
+- 先の説明にあった「raw JSON 1.24 MBだからFirestoreの1 MiB上限を超える」という断定は誤りとして訂正する。raw JSONは1,242,326 bytes、JSON compact payload-envelope見積りは1,009,515 bytesで、Firestoreの公称1 MiB-4 bytesを下回る。Firestoreの実際の符号化サイズは未計測なので、上限超過とは断定できない。一方、900,000-byte内部安全予算は超える。
+- staging名の候補は未確認データであり、現行V2 validatorがBOX conditionを拒否する。正本・有効な移行スナップショットとして扱わず、件数・在庫・原価・資産集計も検証済みとは扱わない。
+
+### 実装
+
+- PR #105の cloud/src/firestore-store.js にlegacy単一ドキュメント読込互換を残し、保存時は900,000 bytes以下ならsingle、超過時はchunked-v1を使う。
+- chunked-v1は配列フィールドを最大650,000 bytesのsegmentへ分割し、revision・順序・件数・payload SHA-256をmanifestで照合する。rootとsegmentsを1トランザクションで保存し、余剰segmentの削除・保存後readbackも行う。7,000,000-byte payload等の安全上限を超えたらfail-closed。
+- API body上限を7,500,000 bytesへ整合。Firestore index設定に保存payload/manifest配列のindex exemptionを追加したが、本番へ適用していない。
+- migration reportはsingle/chunked/blockedを区別する。candidateの実移行・本番V2書込み・Firestore配備は行っていない。
+
+### 検証・状態
+
+- 保存方式とmigration reportのローカルテストは12件成功、0件失敗。
+- GitHub Actions v2-ci #42033589572 はtest/checkとFirestore Emulatorを含め成功。Emulatorでは合成データでchunked save・readback・manifest・segmentサイズを確認した。これは本番データ、OAuth、通常Chat接続の検証ではない。
+- PR #105はdraft・未merge・未配備。Cloud請求設定、旧Apps Script、queue、trigger、V2正本に変更なし。未処理売却queueの再投入なし。
+- 全体進捗は約25%のまま。コアコードの範囲は広がったが、正本確認、通常Chat実接続、Cloud実運用、バックアップ復元、監視と本番切替は未完了。無料枠内の継続運用も実測前で未保証。
+
+### 次工程
+
+- V2正本の保存経路を特定し、有効な読み取り専用exportを得た後にだけvalidator・保存サイズ・件数・在庫/原価/資産集計を再検査する。候補JSONは使用しない。
+- chunked-v1の障害ケース、複数更新、segment cleanupと費用/読み書き数を検証し、Firestore実サイズの見積りに余裕を持たせる。
+- 通常Chat Actionからの受付実接続、業務event keyによるChat/Gmail重複防止、Scheduler欠落監視、バックアップ/復元、Cloud利用量を引き続き未解決事項として扱う。
+
+
+## 2026-11-06 — Firestore分割保存の整合性テスト
+
+- 分割保存の失敗時に破損状態を受け入れないことを確認する単体テストを追加: segment欠落、segment内容改変によるpayload hash不一致、異なるrevisionのsegmentを検出する。
+- 大きなスナップショットをrevision 1から2へ更新し、readback payloadと全segmentのrevisionが一致することを確認する。
+- 関連ローカルテスト16件が成功、失敗0件。GitHub Actions v2-ci #42110925076はtest、check、Firestore Emulatorを含め成功。新しい不整合テストはfake Firestore transactionで検証し、Emulatorは合成データのchunked save/readbackを検証した。
+- これは新アプリのコード検証であり、本番FirestormやV2データの検証ではない。PR #105はdraft・未merge・未配備。本番V2、Apps Script、trigger、queue、課金設定は変更なし。売却queue再投入なし。
+- 次工程: scheduler実行欠落のheartbeat/catch-up、読み書きコスト評価、backup/restore設計、通常Chatからの実接続を独立した安全な段階で進める。正本取得は依然として移行のblocker。全体進捗は約25%のまま。
+
+
+## 2026-11-06 — Firestore Emulator連続更新・破損検知
+
+- Emulator統合テストを拡張し、chunked-v1を2 revision連続で保存した際のroot/segment revision一致とreadbackを検証。segmentの内容を改変した後にhash不一致で読み込みが拒否されることも確認した。
+- GitHub Actions v2-ci #42111400132（run #685）は通常test、check、Firestore Emulatorの全jobが成功。前回追加のsegment欠落・改変・revision mismatch・連続更新単体テスト16件も成功済み。
+- すべて合成データを使った隔離検証。本番Firestore、V2正本、Apps Script、Gmail、queue、課金設定へのアクセスや変更なし。PR #105はdraftのまま。
+
+
+## 2026-11-06 — Firestore操作数の基準見積り
+
+- migration reportへ成功更新あたりのFirestore document read/write基準見積りを追加。single保存は3 reads・1 write。chunked保存は segment count=N のとき 3+2N reads・1+N writes。
+- 根拠は現行adapterのduplicate確認read、revision-CAS root read、保存後readback。chunkedの初回readとreadbackは全segmentを含む。SDK transaction retryおよび旧segment削除writes/deletesは見積りに含めない。これは基準値であり実測や課金額ではない。
+- 操作数見積りを含む保存方式/migration reportのローカル16件は成功。記録時点ではCI未確認だったが、その後のGitHub Actions v2-ci #42112277167（run #688）がbranch head 8ae3436でtest/check/Firestore Emulator全job成功。このheadはoperation estimate変更を含む。
+- 無料枠への適合は実際の保存回数、segment数、既存プロジェクトの他利用量を測るまで未保証。Cloud請求設定は変更していない。
+
+
+## 2026-11-06 — Draft new-app schedule recovery
+
+PR #105 adds a stable daily 12:30 lottery-result focus job that is retried on 15-minute slots through 18:45 after a missed Scheduler tick. Retries retain the 12:30 `scheduledAt`, record `triggeredAt`, and stop when the durable ledger reports completion. The 19:00 focus remains merged into the regular hourly Gmail job. v2-ci #42114904105 (run #690) passed test, check, and Firestore Emulator. Live Scheduler wiring, heartbeat/alerts, Cloud deployment, and V2 source confirmation remain pending; no production or legacy queue changes were made.
+
+
+## 2026-11-06 — New-app scheduler heartbeat monitoring
+
+PR #105 adds a bounded Firestore heartbeat record and `GET /health/scheduler`. It reports scheduler tick age, missed 15-minute slots, and failed job count without storing command, email, or raw error content. CI #693 detected a response bug and the fix was verified by #694–#697; test, check, and Firestore Emulator succeeded, including heartbeat persistence/recovery. Scheduler runtime wiring and notifications remain pending; the endpoint will report unhealthy until the dispatcher records ticks. No production, legacy V2, Apps Script, Gmail, pending queue, or billing changes were made.
+
+
+## 2026-11-07 — Scheduled dispatcher orchestration
+
+PR #105 adds a runtime coordinator that parses Cloud Scheduler's planned time, checks durable completion for daily jobs, dispatches due work under leases, and records heartbeat/failure metadata. Existing pending queue and Gmail checkpoints are reused for catch-up; no bulk replay occurs. v2-ci #699 passed tests, checks, and Firestore Emulator. Runtime is not yet mounted behind an authenticated Cloud Run Scheduler route; production handlers and monitoring are pending. No legacy or production data was changed.
+
+
+### 2026-11-07 JST — 新アプリ引き継ぎとV2読取の現状
+
+- WorkクラウドブラウザでApps Script dashboardを読み取り専用で開こうとしたが、公開Apps Scriptドキュメントへリダイレクトされ、プロジェクト一覧/エディタやScript Propertiesは確認できなかった。canonical V2保存先とTV_V2_DATA_FILE_IDの値は未確認。
+- 旧V2、Drive、Gmail、Apps Scriptへの書込、secret/token入力、pending sale queue再処理はなし。V1/staging JSONは移行に使わない。正本export/hash/revision/資産集計も未取得。
+- 新アプリPR #105はdraft/未配備、進捗約25%。関連ローカルテスト28 passed、1 emulator test skipped。GitHub Actions v2-ci #701成功（head 72c714eb750e7ea7c4d1e5e1c5e38868218c95dd）。Scheduler routeと本番handler接続、通常Chat実接続、バックアップ復元、実課金計測は未完了。
+
+
+### 2026-11-07 JST — Scheduler HTTP入口の安全な土台
+
+- `/internal/scheduler/tick` を追加。認証関数とtick handlerが明示的に未設定なら無効のままにし、Cloud Scheduler markerと予定時刻を検査してから実行。失敗時は情報を漏らさず503を返して再試行可能にした。
+- ローカル関連test 9件とaudit-tests 25件が成功。GitHub Actions v2-ci #703はtest/check、Firestore Emulator成功。PR head `de8e2fa560884bce60658da0cca89e3b648cbfc2`。
+- 実行routeはまだCloud Run runtime・IAM/OIDC・Schedulerと接続していない。PR #105 draft/未配備、V2・Apps Script・queue・課金変更なし。
+
+
+### 2026-11-07 JST — Scheduled job handler失敗の分離
+
+- 全jobのhandlerを事前検証する実装では、Gmail handler未設定が同一tickのqueue処理まで止め得ることを発見。job単位でdispatchし、未設定jobは安全な失敗状態/heartbeatに記録しつつ、他jobを継続するよう修正。
+- 関連test12件、全cloud test30件成功。ローカルではEmulator統合1件をskip。GitHub Actions v2-ci #706のtest/checkとFirestore Emulatorは成功。
+- PR #105 head `8f4d0f61faffa52af9775fa156d2657510da1f55`、draft/未配備。実handler接続、V2正本取得、通常Chatの実接続は未完了。実システムへの変更なし。
+
+
+### 2026-11-07 JST — Offline backup integrity and restore-preview foundation
+
+- Added a versioned V2 backup artifact with canonical JSON SHA-256, a separate metadata hash, schema/revision checks, inventory cost/quantity validation, and a 7.5 MB fail-closed limit. Added a local-only CLI for create, verify, and restore preview. Creation refuses to overwrite an existing output and writes with owner-only permissions; input snapshots remain unchanged.
+- Restore preview requires the observed current revision and returns only aggregate counts, total quantity, known acquisition cost, and unknown-cost lot count. It never applies a restore or exposes product names, transaction IDs, or lottery IDs.
+- Focused backup and migration-report tests: 10 passed locally. GitHub Actions v2-ci #716 passed test/check and Firestore Emulator. Code head: `0bf32262cdd425cf559f9492d7567a857d49fd21`.
+- This is an offline backup-file foundation, not automated/retained cloud backup or a restore drill. No canonical V2 export, Cloud storage, retention, automatic restore, production data, Apps Script, queue, or billing configuration was touched. Existing V1/staging candidates remain excluded; pending sale work was not replayed.
+- Overall development estimate: about 30% (previously about 25%). The backup artifact and dry-run path are now implemented; authenticated regular-Chat integration, canonical V2 confirmation, live runtime/OAuth, scheduled backup retention and actual restore drill, monitoring, and cost measurement remain open. The requested 35% milestone is not yet reached.
+
+
+### 2026-11-07 JST — Backup export path and isolated restore drill
+
+- Added a create-once backup export task over the read-only canonical store contract. It checks snapshot/revision agreement, writes a deterministic date/revision/payload-hash key through an injected repository, reloads the object, and verifies its artifact hash and payload hash. Retry of the same daily snapshot is idempotent; storage mismatch fails closed.
+- Added a local file repository and `backup-snapshot.js export` CLI path. Files use exclusive creation and mode 0600; newly created directories use mode 0700; unsafe keys and overwrite attempts are rejected. No Cloud storage provider is connected.
+- Added an isolated Firestore Emulator drill that restores a synthetic chunked backup into a fresh test document and confirms revision, complete payload readback, and matching SHA-256. GitHub Actions v2-ci #729 passed test/check and Firestore Emulator. Backup-focused local tests: 8 passed. Code head: `129911336026aac176a5094e67252791488195de`.
+- Overall development estimate updated from about 30% to about 35% because the backup path now has an executable export, create-once persistence contract, readback integrity checks, and an Emulator restore drill. This is not production operation. Cloud backup schedule/provider/retention, live canonical export, automated restore, regular Chat integration, OAuth/runtime wiring, monitoring, and cost measurement remain open. Production V2, Apps Script, existing queues, and billing were not changed; no pending sale work was replayed.
+
+
+### 2026-11-07 JST — Market, Gmail scheduler binding, and queue health foundation
+
+- Added a scheduled market-refresh worker using one injected batch lookup over positive inventory targets. It accepts only a nonnegative integer JPY price with a nonempty source; missing, duplicate, invalid, or failed results preserve the last confirmed price/source/time and mark the quote stale. Stable daily job keys prevent repeat provider calls after a committed mutation; V2 CAS save/readback is required. Bounded aggregate health metadata is written under `automation.health.marketRefresh`. No market source is configured and no live prices were requested.
+- Bound the existing Gmail scanner to the scheduled hourly and result-focus job contracts. Hourly jobs use their planned time; the 12:30 result catch-up uses the actual trigger time as the query upper bound while keeping the stable daily ledger key. At 19:00 the hourly job remains one scan with result terms included. Gmail uses separate hourly/results checkpoints and a 50-message cap.
+- Added a queue summary using two Firestore aggregate queries for pending/processing and review counts; it returns counts only. Unit tests and a real Firestore Emulator aggregate test cover the result.
+- Local focused tests: market worker 5 passed, scheduled Gmail handlers 3 passed, queue summary 2 passed. GitHub Actions v2-ci #747 passed full test/check and Firestore Emulator. Code head: `a0d1575db56c0c54c7c02d58505c956a4eee2927`.
+- Overall estimate updated from about 35% to about 50%: backup export/restore foundation, daily market transition, Gmail scheduled binding, and queue health aggregation now have executable tested paths. This remains pre-production code. Live Gmail OAuth, a confirmed market provider, Cloud Scheduler/runtime composition, regular Chat end-to-end, canonical V2 export/migration, complete alerting, backup retention/provider, and real cost measurement remain open. No production data, old V2, Apps Script, pending queue, or billing configuration was changed.
+
+
+### 2026-11-07 JST — Cross-source business event deduplication foundation
+
+- Problem: queue idempotency based only on requestId did not prevent the same lottery application from being submitted by Chat and Gmail under different request IDs.
+- Added optional top-level businessEventKey to the command API. When supplied, the queue hashes the key and normalized command payload (excluding only requestId), then atomically creates a hash-only business-event index with the queue entry. A matching event returns accepted=false, duplicate=true, and the existing request ID; a key reused with different business data fails closed as business-event-collision (HTTP 409). Raw event keys are not persisted.
+- Updated the Chat Action OpenAPI contract and server response to distinguish cross-source duplicates from newly accepted commands and requestId replays. Requests without a reliable key continue to use requestId idempotency only; no key is inferred from ambiguous evidence.
+- Local targeted run: 13 passed, 1 Firestore Emulator test skipped because no local emulator was running. GitHub Actions v2-ci #749 passed test/check and Firestore Emulator, including the concurrent two-source enqueue test. Code commit: 2c5faf7d7c0cf5e6cbfcb4893384da1680481c2f.
+- Overall estimate: about 52% (rough implementation/tested-path estimate), not production readiness. The Gmail classifier and Chat normalizer do not yet derive/share a common key; no live end-to-end run was done. Business-key retention/cost are unmeasured. PR #105 remains draft/unmerged/undeployed. No production V2, old Apps Script, existing queue, pending sale item, or billing configuration changed.
+
+
+### 2026-11-07 JST — Lottery identity resolution and scheduled backup foundation
+
+- Added a shared lottery business-key builder from event kind, canonical retailer key, and an explicit external application ID. It NFKC-normalizes stable retailer spelling, hashes the complete identity, and returns only the hash key. Missing/invalid identity yields a review result with no key. The API maps lottery application/result/receipt command types to the event kind, derives the same key server-side, and rejects identity fields on unsupported command types. No raw external ID is written into the queue index.
+- Added a proposed, not deployed, daily canonical-backup job at 02:00 JST. A later 15-minute tick retries the same date key until the durable ledger records completion; successful daily keys are suppressed. Added a backup handler that validates the scheduled slot and integrity receipt from the existing create-once export task. It still requires a persistent repository/provider and runtime handler wiring before deployment.
+- Focused local verification: 33 tests passed, including Chat API identity derivation, missing-ID review, normalization, daily schedule recovery, ledger suppression, and backup receipt validation. GitHub Actions v2-ci #751 passed the full test/check and Firestore Emulator jobs. Code commit: 99ef62c699b21a00ff076eae83a2ca0a17df63c7.
+- Overall estimate updated from about 52% to about 60%, based on tested code paths; this is not production readiness. Gmail does not yet extract a confirmed application ID or provide the same retailer key, so cross-source deduplication remains unverified end to end. Backup storage, retention, and recovery against production data are unconfigured. Regular Chat end-to-end, canonical V2 export/migration, OAuth, deployed Scheduler/runtime wiring, complete alerting, and real cost measurement remain open. PR #105 stays draft/unmerged/undeployed; no production data, Apps Script, existing queue, pending sale item, or billing configuration changed.
+
+## 2026-11-07 — Conservative cross-source lottery ID extraction (CI #755)
+
+- Reused draft PR #105 and added `cloud/src/lottery-source-identity.js`: pure Gmail identity resolver for explicit externally issued lottery application IDs plus retailer names marked by labels. Retailer aliases must be allowlisted and mapped to a canonical retailer key; no guessing from product, sender, date, or unlabelled numbers. NFKC/whitespace normalization feeds the existing shared hashed business-event key builder.
+- Missing/unknown/conflicting retailer aliases or application IDs return review-only results without any event key. No raw Gmail body/application ID appears in the resolver output. The parser is intentionally not connected to the production Gmail scanner/queue.
+- Added `cloud/test/lottery-source-identity.test.js` (9 tests): Chat screenshot-confirmed key equals Gmail extracted key, event kind separation, repeated labels, missing/unknown/conflicting identity, invalid/oversized mail, privacy, synthetic shared-key queue duplicate suppression, and conflicting business payload fail-closed. `cloud/package.json` now runs the new test and syntax-check.
+- Local extraction-only tests: 7 passed before adding the two queue-integration cases. GitHub Actions v2-ci #755 (head `d5041a025657a7617f7127c865e7ef0fed5134a8`) passed `test` (npm test and check) and Firestore Emulator jobs, including the new queue-integration tests. This is mock/Emulator verification, not live Gmail or Chat E2E.
+- Progress stays approximately 60% as a rough implementation/test estimate, not production readiness. Gmail identity resolver is not attached to the live classification-to-command path. Retailer aliases for real stores and the durable enqueue/settlement handoff must be reviewed before activating; different business command payloads sharing one event key correctly produce review/collision, not silent merge.
+- Still missing: normal Chat action live integration, Gmail OAuth/live inbox, Cloud Scheduler/Cloud Run runtime handlers, confirmed market provider, canonical V2 read-only export and migration audit, persistent cloud backup/retention/restore drill, monitoring and measured free-tier usage. V2 canonical identity still unknown; V1/staging is not an import source.
+- No live Cloud Run/Firestore, Gmail, old V2, Apps Script, existing queue/pending sales, billing, deletion, merge, or production cutover changes. PR #105 remains draft/unmerged/undeployed. Next: documented real retailer alias fixtures (sanitized), review-safe durable Gmail-to-command outbox, mocked E2E including crash/retry, then disabled-by-default runtime/OAuth wiring.
+
+
+## 2026-11-08 JST — Durable backup storage adapter and retention proposal; about 70%
+
+- Added a Cloud Storage repository adapter for the existing verified create-once backup export contract. Keys are limited to the generated `v2/YYYY-MM-DD/revision-<n>-<sha256>.json` namespace; uploads use the generation-match-zero precondition so an existing live object is never overwritten. A precondition conflict is treated as an idempotent duplicate. Uploads carry content type, schema marker, and SHA-256 metadata; reads enforce the 7.5 MB artifact bound. Cloud Storage SDK/runtime wiring is intentionally not included.
+- Added `cloud/backup-lifecycle-proposed.json`, a reviewable 90-day delete rule limited to the `v2/` prefix. It is a proposal only and has not been applied to any bucket. Daily backup remains unconnected to a persistent destination and has not run against canonical production data.
+- Tests cover create-once/precondition behavior, SHA-256 metadata, readback, key/size rejection, and the limited lifecycle scope. Local full suite on the working tree: 138 passed, 0 failed, 1 Firestore Emulator test skipped because no local emulator was configured; `npm run check --prefix cloud` passed. GitHub Actions v2-ci #758 passed on PR head `10f38a2cf2e21edf03913af02799f3ed115d7975`.
+- Overall development estimate updated from about 60% to about 70%, reflecting the additional tested backup storage/retention path foundation. This remains a rough implementation estimate, not production readiness or a percentage of live operation.
+- Cost/free-tier: Cloud Run published free usage is shared by project and requires an active billing account for use; overages are billable. Cloud Storage's published always-free Standard allowance is restricted to three US regions, so a Japan-region bucket would not receive that storage allowance. Standard storage is the proposed class because daily backups need straightforward verification/recovery; actual bytes, request volume, network costs, region-specific estimate, and project-wide free-tier fit remain unmeasured. No billing setting was enabled. Sources: [Cloud Run pricing](https://cloud.google.com/run/pricing), [Cloud Storage pricing](https://cloud.google.com/storage/pricing).
+- V2 canonical JSON: still unavailable/unverified. No Drive V1 or staging JSON was used. No production data, Apps Script, queue, pending sale, Cloud resource, or billing setting was changed; no deploy, merge, cutover, or old-system shutdown occurred. PR #105 remains open, draft, unmerged, and undeployed.
+- Still open: normal Chat-to-command live path and screenshot E2E; real Gmail/Chat common-key E2E and durable review-safe outbox; live Gmail OAuth; Scheduler/runtime production composition; confirmed market source; canonical V2 read-only export and migration reconciliation; persistent backup configuration/retention decision and production-data restore drill; monitoring/alerts and measured costs.
+- Next: build a mocked crash/retry-safe Gmail classification-to-command outbox and connect the regular Chat Action path end to end in isolated tests; then propose disabled-by-default authenticated Cloud Run composition. Keep the GCS lifecycle unapplied pending explicit retention/location/cost review.
+
+
+## 2026-11-08 JST — Gmail command outbox and cross-source retry safety; about 80%
+
+### Implemented
+
+- Reused PR #105. Added a Firestore-backed Gmail command outbox and optional composition point in the classifier processor. For explicitly complete commands, it writes a durable outbox record before queue submission. The requestId is stable and derived from the SHA-256 of the Gmail message ID; raw message IDs and mail text are not persisted by the outbox.
+- The outbox derives the same business-event key from explicit retailer key/application ID as the Chat API. If required command fields or identity are missing, it records a compact review state and does not queue. Queue payload conflict also routes to review.
+- Queue delivery happens after the durable outbox write. If the process fails after queue acceptance but before marking the outbox submitted, retry resends the same requestId and business key; the queue’s existing idempotency/business-event index suppresses a second mutation.
+- buildCommandDraft is an optional injected pure composition point. This change does not add real Gmail field extraction for title/date/target lottery, retailer alias deployment, Gmail OAuth, or production runtime wiring; without a complete explicitly constructed draft, the item remains review-only.
+
+### Verified
+
+- Added tests for crash after queue acceptance and retry, missing identity/fields to review, processor-to-outbox ordering, no persistence of raw message ID or email body, queue collision, and Chat/Gmail same business key under different request IDs.
+- Focused local tests: 5 passed. Working-tree full suite: 143 passed, 0 failed, 1 skipped because local Firestore Emulator was not configured. npm run check --prefix cloud passed.
+- GitHub Actions v2-ci #762 passed on code head f4985cf20c77f30305a0f474e9ebaecc08add436.
+
+### Not yet verified / next
+
+- This is mocked/Firestore-adapter test coverage, not live Gmail, Chat Action, or Cloud Run E2E. The classifier’s real-to-command builder, reviewed retailer alias configuration, and review inbox/monitoring are not connected. Regular Chat Action API/schema already exists but no deployed endpoint or screenshot report E2E is available.
+- Remaining: live Gmail OAuth, authenticated and deployed Cloud Run/Scheduler composition, confirmed market provider, canonical V2 read-only export and migration reconciliation, persistent backup bucket/location/retention decision and production restore drill, operational alerts, and measured project-wide cost/free-tier fit.
+- V2 canonical JSON is still unavailable; V1/staging is excluded. No production V2, Apps Script, existing queue, pending sale, billing setting, cloud resource, or deployment changed. PR #105 remains open, draft, unmerged, and undeployed.
+- Overall progress estimate updated from about 70% to about 80%; this is a rough implementation/test estimate, not production readiness. Confirmed Gmail schedule (07:00–24:00 JST hourly, 12:30 focus, 19:00 merged), independent 15-minute Chat queue, and daily 13:30+ market schedule are unchanged. The 90-day GCS lifecycle remains an unapplied proposal.
+- Next: add a conservative, tested Gmail command-draft builder for only explicitly labelled fields; missing/ambiguous evidence must stay in review. Then compose and test the disabled-by-default Chat Action + Gmail + queue path. Do not enable OAuth, billing, production queues, or lifecycle policy in this phase.
+
+
+
+## 2026-11-08 JST — Gmail outbox privacy and ambiguity guard follow-up
+
+- Tightened the optional Gmail command builder boundary after code review: the outbox now reconstructs commands from a type-specific allowlist. Unknown properties (including body/raw mail fields or caller-supplied requestId), conflicting title/product values, control characters, oversized strings, and malformed optional dates send the item to review without queue submission or persistence of the rejected fields.
+- Focused outbox tests: 7 passed. Working-tree full suite: 145 passed, 0 failed, 1 skipped without local Firestore Emulator. Syntax check passed. GitHub Actions v2-ci #765 passed on code head b73951fc0a5fd99f8da5143eaf5a4573110ddbb7.
+- Remaining functional gap: review states are safely retained, but a review inbox and explicit user-confirmation-to-command flow are not implemented or connected. This and the live Chat/Gmail/Cloud Run path remain product-completion work. Progress estimate stays about 80%; the estimate is not a production readiness claim.
+
+
+
+## 2026-11-08 JST — Labelled Gmail command builder and Chat/Gmail mock E2E; about 90%
+
+### Implemented
+
+- Added a conservative Gmail lottery command builder for only explicit labelled fields: external application ID, allowlisted retailer name, product, and ISO date; result status/date are also required for results. It does not infer from sender, product codes, unlabelled numbers, message timestamps, or surrounding prose. Conflicting/missing labels, unknown store aliases, malformed/oversized data return no draft and stay in review. The builder emits only the command fields needed by V2; outbox applies its own command allowlist.
+- Added a mocked end-to-end test: a regular Chat Action HTTP request submits a lottery application, then the Gmail classifier/parser/outbox sees the same explicit event under a different Gmail ID and is suppressed by the same business-event key. This is isolated HTTP/mock coverage, not an actual ChatGPT screenshot or live network connection.
+- Added an opt-in Firestore Emulator test for concurrent outbox create-once calls, readback, hashed message ID, and submitted-state update.
+
+### Verified
+
+- Focused builder/outbox tests: 12 passed. Working-tree full suite: 150 passed, 0 failed, 2 skipped locally because no Firestore Emulator was configured. Syntax check passed.
+- GitHub Actions v2-ci #769 passed, including full test/check and Firestore Emulator jobs. Code head: `63f34b818a4671040b873b7f2a872a4febe86364`.
+
+### Remaining / completion gates
+
+- Overall progress estimate updated from about 80% to about 90%; this remains implementation/test coverage, not production readiness. Real store aliases and Gmail templates have not been reviewed against actual messages. Result commands still depend on the V2 worker finding exactly one matching lottery row; otherwise the existing worker must leave them in review.
+- Normal ChatGPT Action is not deployed or configured. Screenshot interpretation, actual endpoint/auth, live Gmail OAuth, Cloud Scheduler/runtime composition, review inbox and explicit review-resolution flow are unverified/unimplemented. No command is being registered automatically from this ordinary Chat session.
+- Canonical V2 JSON remains unavailable; no V1/staging source is used. Migration reconciliation, persistent Cloud backup connection/retention application/restore drill, confirmed market provider, operational alerts, and project-wide cost measurement remain open. GCS lifecycle remains unapplied. No production data, Apps Script, pending queue, Cloud resource, billing setting, deployment, or cutover changed.
+- Reaching production completion requires owner-side access to export the configured canonical V2 JSON read-only, reviewed store aliases and representative sanitized Gmail templates, plus approval before any billing/project activation. Do not send tokens or secrets in chat.
+- Next safe step: test the strict builder against sanitized, real retailer mail formats and add an explicit review resolution path. Then prepare disabled-by-default Cloud Run composition and a reviewable setup/cost plan before any external activation.
+
+
+## 2026-11-08 explicit Gmail review approval path (~92% implementation/test estimate)
+
+- Added a code-only outbox review resolution method. It requires an explicit `confirmed: true`, a current review payload hash (optimistic concurrency), complete validated command fields, and explicit retailer/application identity. Firestore atomically transitions only the unchanged `review` row to `ready`; delivery uses the original stable Gmail request ID and shared lottery event key. Missing, stale, already-submitted, malformed, or conflicting states fail closed.
+- The path is not exposed as an HTTP endpoint and has no review UI or owner authentication integration. It is a library method exercised with a fake Firestore store. It is not safe to present as a user-facing approval flow yet.
+- Focused Gmail outbox tests: 9 passed. Full local cloud suite: 151 passed, 0 failed, 2 Firestore Emulator tests skipped without local Emulator; `npm run check --prefix cloud` passed.
+- Gmail OAuth/live retailer templates, Chat Action deployment, Cloud Run auth/runtime, review UI and authorization, canonical V2 export, deployed backup storage/restore, and measured operating cost remain unverified. No V2 data was read or changed; billing, production deployment, and cutover remain untouched. PR stays Draft, unmerged, undeployed.
+
+
+### CI follow-up
+- Hashed-reference version of the review resolver passed GitHub Actions v2-ci #774 on commit `43d40d3a5acacfc813e3a1a5318fff444b11e5b2`, including the Firestore Emulator job. This remains code/CI validation only; no live review authorization or runtime connection.
+
+
+### Free-tier review (2026-11-08; official pricing pages)
+- A single default Firestore Standard database has a free allowance of 1 GiB stored, 50,000 document reads/day, 20,000 writes/day, 20,000 deletes/day, and 10 GiB outbound/month. Firestore managed deletes/TTL, PITR, backups, and restores are billed features and require billing.
+- Cloud Run request-based allowance includes 2 million requests/month plus CPU/RAM allowances; it is a billing-account-level allowance, not a guarantee of zero cost. Cloud Scheduler provides 3 free jobs/account/month; one dispatcher job fits the job count.
+- Cloud Storage Always Free storage applies only in US-WEST1, US-CENTRAL1, US-EAST1, so a Japan-region backup bucket is outside that free storage allowance.
+- This is quota fit, not a cost forecast. Actual Firestore operations, dataset size, logging/egress, and backup/restore cost are unmeasured; no billing setting or resource was enabled. Sources: https://cloud.google.com/firestore/quotas ; https://cloud.google.com/run/pricing ; https://cloud.google.com/scheduler/pricing ; https://cloud.google.com/storage/pricing
+
+
+## 2026-11-08 bounded command worker and verification (~94% implementation/test estimate)
+
+- Added a bounded Firestore pending-command page and Cloud Run `POST /internal/worker/commands` route. Each tick processes up to 10 commands by default (hard cap 50), using existing lease claims, V2 revision CAS, readback verification, and queue settlement. The route requires separate worker authorization, Cloud Scheduler headers, and explicit V2 writes + command queue enablement. Production startup rejects worker enablement unless both write and queue flags are explicitly true; all flags default off.
+- Added unit/API coverage and a Firestore Emulator queue-page test. Focused local tests: 20 passed. Full local cloud suite: 155 passed, 0 failed, 4 skipped without Emulator; `npm run check` passed. GitHub Actions v2-ci #782 passed on code commit `ac805f49ba964e7f770f26091627e970f7229e4c`: 415 tests, 407 passed, 0 failed, 8 skipped; Firestore Emulator job succeeded.
+- Added setup notes to `cloud/README.md`. This is not an active 15-minute schedule: Cloud Scheduler job, Cloud Run deployment, Secret Manager binding, regular ChatGPT Action registration, live Gmail OAuth/runtime, and complete dispatcher wiring remain unconnected. Do not enable the worker before canonical V2 import and verification.
+- No V2 source was retrieved or changed, no pending sale queue was replayed, and no billing, production resource, deployment, or cutover was enabled. PR #105 remains Draft, unmerged, undeployed. Progress remains an implementation/test estimate, not production readiness.
+
+
+### ChatGPT conversation integration gate (2026-11-08)
+- The current OpenAI connection is only a backend API and a GPT Action OpenAPI template; ordinary Chat does not call that endpoint automatically.
+- OpenAI’s current Help Center says personal Free/Go/Plus/Pro accounts cannot create or publish new GPTs. Existing GPTs may remain usable/editable if they already exist and account permissions allow, but none has been connected or tested here. Custom MCP write/modify support is currently documented for Business/Enterprise/Edu; Pro custom MCP is read/fetch only. Therefore a Plus account has no documented self-serve custom write MCP route at this time.
+- The Apps SDK public directory route is a separate possibility, but it requires building and submitting an app for review, public hosting, privacy/auth design, and user installation. No public app submission or publication is authorized or performed.
+- This is a product/connection blocker, not a backend test failure. Before the user goal can be called complete, there must be a supported ChatGPT integration installed and an end-to-end test from a normal conversation with text and screenshot reports. Official references: https://help.openai.com/en/articles/8554397-creating-and-editing-gpts ; https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt ; https://help.openai.com/en/articles/12515353-building-with-the-apps-sdk
+
+
+### Final verification checkpoint (2026-11-08)
+- Latest worker code commit `2e4c32a7f3e9102a71d4a42c9a2ef6a26b350dcf` passed v2-ci #785: 416 tests, 408 passed, 0 failed, 8 skipped; Firestore Emulator job passed. Local cloud suite: 156 passed, 0 failed, 4 skipped without local Emulator; `npm run check` passed.
+- Latest handoff/document commit `a658c17ca52e24e56698edef187e111a524f77d3` passed v2-ci #786. This is documentation validation only.
+- Current estimate remains ~94% of implementation/test work, not production readiness. Normal ChatGPT write integration, V2 canonical export, billing approval, deployment/runtime connections, backup restore drill, and measured spend remain gates.
+
+### 2026-11-08 JST — Command worker Scheduler認証をOIDC化
+
+- `TV2_WORKER_TOKEN` の共有Secret方式を取り除き、Google `OAuth2Client.verifyIdToken` で署名済みID tokenのaudienceを検証し、設定済みScheduler service account emailとemail_verifiedも照合する認証middlewareを追加。token欠落・署名不正・audience/identity不一致は拒否する。Cloud RunサービスURLと専用Scheduler service accountは識別情報で、Secretではない。
+- workerは引き続き既定無効。worker/queue/writeの3 flag、Scheduler marker/予定時刻、既存canonical stateと各IAM設定の確認が必要。`roles/run.invoker`付与、Scheduler作成、deploy、課金設定は実施していない。
+- 検証: ローカル `npm test --prefix cloud` 160 passed、0 failed、4 skipped（local Firestore Emulator未起動）。`npm run check --prefix cloud`成功。PR #105への反映後、v2-ci #791のtest/checkとFirestore Emulator jobがsuccess。
+- 進捗概算は約94%の実装・テスト作業で据置。これは本番readinessではない。通常Chat書込統合、V2正本export/migration、Gmail OAuth/実接続、Cloud Run/Scheduler本番配備、backup保持/production restore、障害通知、利用量と費用の実測、ユーザー承認が必要な本番移行は未完了。V2正本JSONは未取得。無料枠適合と実費は未測定。既存V2/Apps Script/queue/売却保留/課金設定に変更なし。
+
+### 2026-11-08 JST — Gmail identity一致ゲートとFirestore Emulator cross-source E2E
+
+- Gmail classifier processorは、共有identity resolverとfield-to-command builderの `retailerKey` / `applicationId` が両方一致した場合だけoutboxへ送る。片側の別名設定や抽出結果が食い違う場合はcommandをnullにしてreviewへ送る。
+- 合成データのFirestore Emulator testでChat HTTP endpointが先に応募を受け付け、その後Gmail classifier→builder→outboxから異なるrequestIdで同一応募を送ったとき、Firestore上のcommand本体とbusiness-event indexが各1件であることを確認。ID欠落と同一キー・異なるcommand内容もreview/collision扱いで検証した。
+- 検証: ローカル cloud suite 161 passed / 0 failed / 5 skipped（local Emulatorなし）、check成功。GitHub Actions v2-ci #796のtest/checkとFirestore Emulatorがsuccess。Emulator内の該当統合testはpass、0 skipped。
+- Live Gmail/OAuthからの呼出、通常Chatとの実接続、production Cloud Run/Scheduler、V2正本export/migration、backup保持とproduction復元、監視/費用実測は未完了。V2正本未取得。進捗約94%は実装・テストの概算で本番readinessではない。既存V2、Apps Script、現行queue、売却保留、課金設定に変更なし。
+
+### 2026-11-08 JST — Google Cloud無料枠/backup費用の公式確認
+
+- 現行Google公式料金表: Firestore Standard無料枠は1 GiB、50,000 reads/day、20,000 writes/day、20,000 deletes/dayだが、Backup/Restore/PITR/TTLは無料利用対象外で課金有効化が必要。Cloud Runの公表無料枠は月2M requests等、Cloud Schedulerはbilling accountごと3 jobs/month。1件のdispatcher jobはjob数の無料枠内だが、全体無料を保証しない。
+- Cloud Storage Always Freeは標準storage 5 GB-months等だがUS-WEST1/US-CENTRAL1/US-EAST1限定。Tokyo/Osaka bucketはこの無料保存枠対象外。したがって日本リージョンの永続backupは無料前提にできず、Firestore managed backup/restoreも課金なしでは使えない。
+- 実データ容量・実API利用量・既存billing accountの使用量が未確認で、実月額は未算出。billingは有効化しておらず、backup保存先・保持日数・削除lifecycleも確定/適用していない。90日削除ポリシー等は承認前に適用しない。
+- Official sources: https://cloud.google.com/firestore/pricing ; https://cloud.google.com/run/pricing ; https://cloud.google.com/scheduler/pricing ; https://cloud.google.com/storage/pricing
+
+### 2026-11-08 JST — Gmail頻度とGoogle Drive backup費用の評価（検討中）
+
+- 確定済みGmail予定（07:00〜24:00 hourly、12:30重点確認、19:00は毎時scanへ統合）は変更していない。実装上の15分dispatcherはGmail以外にcommand queueも扱うため、Gmail scanを減らしてもdispatcherのCloud Run起動回数は減らない。Gmail API標準利用は追加料金なしで、現行新quotaのdaily threshold 80,000,000 units/day未満は追加料金なし。仮に19 scan/day、各scanがlist 1件 + 最大50件の`messages.get`をfull相当60 unitsで取得しても約57,095 units/day。これは概算で実測ではなく、projectの作成年/2025-11〜2026-04 API利用有無で適用quotaが変わる。Hourly設定を落としてもCloud請求アカウント要件は解消しない。
+- Google Driveの既存ユーザー領域は最大15 GBでGmail/Drive/Photos共有。標準Drive API利用は通常追加料金なしのため、空きがありユーザーOAuthで書ける場合、既存Drive folderをbackup先にする案はCloud Storage Japan regionより保存料を抑えられる候補。OAuth scopes/Drive API quota/利用可能容量は未確認。
+- Driveのcreate-onceを維持する候補設計: `files.generateIds`のIDをFirestoreのstable backup-key registryへtransactionalに保存し、そのIDでDrive fileを作成。競合/再試行は同じIDの409とSHA-256 readbackで照合。Firestore registryは引き続きGoogle Cloudサービスなのでactive billing account要件が残る。Firestore managed Backup/Restore機能は利用せず、application-generated JSON backupをDriveへ保存する案。
+- Google Cloud projectはactive Cloud Billing accountへリンクしないと、free tier範囲だけの利用でもGoogle Cloud resourceを使えない。従って「利用料0円の可能性」と「課金を有効にしなくても動作」は別。現在billingは未有効化。GCS Japan保存、retention period、自動削除lifecycle、Drive接続はいずれも未設定。
+- Status: Drive案は検討中、仕様変更/実装/接続/削除なし。保持容量を超えた場合の扱いと保持期間は未決定。Sources: https://developers.google.com/workspace/gmail/api/reference/quota ; https://developers.google.com/workspace/drive/api/guides/limits ; https://developers.google.com/workspace/drive/api/guides/create-file ; https://support.google.com/drive/answer/9312312 ; https://docs.cloud.google.com/billing/docs/how-to/manage-billing-account
+
+
+### 2026-11-08 JST — Drive backup adapter prototype (unconnected)
+
+- Added an optional Google Drive backup repository candidate plus a Firestore transactional stable-key → generated Drive file ID registry. Retries reuse the reserved ID; an existing file is accepted only when the key hash and payload SHA-256 match. Readback verifies payload bytes/hash, and payload size is bounded at 7.5 MB.
+- Verification: local cloud suite 166 passed, 0 failed, 5 skipped (local Firestore Emulator is unavailable); `npm run check --prefix cloud` passed. PR #105 v2-ci #803 passed both the full test/check job and the Firestore Emulator job, including the concurrent registry reservation test.
+- This is an unconnected candidate implementation. It is not wired to backup export or runtime, and has not been tested against Google Drive API/OAuth. No Drive folder, OAuth grant, retention, or deletion lifecycle was configured; no backup data was written. Existing backup location and Gmail schedule are unchanged.
+- Progress remains about 94% implementation/test work, not production readiness. The V2 canonical export remains unavailable/unverified. Production authentication/runtime, normal ChatGPT intake, live Gmail/OAuth, recovery drill, monitoring, cost measurements, billing approval, and migration validation remain outstanding.
+- Cost note: Drive may use available user storage quota, but Cloud Run/Firestore still require an active billing account linked to the project. No billing configuration was enabled and actual free-tier fit remains unmeasured.
+
+
+### 2026-11-08 JST — scheduler health route and regular ChatGPT integration gate
+
+- Wired `GET /health/scheduler` to the Firestore scheduler-heartbeat store in the Cloud Run startup path. It returns only bounded timestamps/counts; it returns 200 only for a fresh heartbeat with zero missed slots and zero failed jobs, and 503 for missing/stale/inconsistent/unavailable health. It does not expose command, email, or raw error data.
+- Local verification: API tests 14 passed; full cloud suite 167 passed, 0 failed, 5 skipped without local Emulator; `npm run check --prefix cloud` passed. PR #105 v2-ci #806 passed both test/check and Firestore Emulator jobs. The route is implemented, but the live dispatcher/Scheduler is not configured, so no operational heartbeat exists and the health route should remain 503 until a real dispatcher is connected.
+- Read-only Drive search for a current V2 JSON/export found only the handoff document. The canonical V2 JSON remains unavailable/unverified. No old schemaVersion 1 or unverified staging JSON was opened or used.
+- Current OpenAI product documentation changes the feasible regular-Chat connection path: personal ChatGPT Plus accounts cannot create/publish new GPTs; existing GPTs may remain usable under account rules. Custom MCP write connections are documented for Business/Enterprise/Edu workspaces. The public plugin directory accepts remote MCP apps, but requires a stable public HTTPS endpoint, verified developer identity, and review. No app was submitted, published, or connected. This is a feasibility update, not a change to the requirement that ordinary ChatGPT must support text/screenshot reporting.
+- Operational blockers remain: confirmed V2 canonical export, Cloud billing approval and deployment, live OAuth/provider connections, public ChatGPT integration publication/installation, scheduled handler composition, backup retention and restore verification, alerts, and measured usage/cost. No billing, production data, V2, Apps Script, Scheduler, or Drive destination was changed.
+- Official product references: https://help.openai.com/en/articles/8554407-what-are-gpts ; https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt ; https://developers.openai.com/plugins/deploy/submission ; https://help.openai.com/en/articles/12515353-building-with-the-apps-sdk
+
+
+### 2026-11-08 JST — ChatGPT MCP authentication requirement clarified
+
+- Current OpenAI authenticated MCP guidance requires an OAuth 2.1 authorization flow for write-capable/customer-specific tools and states ChatGPT cannot present custom API keys. The existing Cloud Run REST bearer token therefore cannot be reused as the ChatGPT app connector credential. No OAuth authorization server/provider has been selected or implemented.
+- The public plugin directory remains a possible regular-Chat path, but it requires the remote MCP endpoint, OAuth flow, verified developer identity, and submission review. This is not a change to the user requirement; it is a newly confirmed product authentication gate. Do not publish or enable write access until the OAuth design, deployment, canonical data, and reviewable permission scope are ready.
+- Official reference: https://developers.openai.com/plugins/build/auth
+
+
+### 2026-11-08 JST — 通常Chat未登録2件の読み取り専用照合
+
+- 通常Chatの報告内容を確認したが、Chat→新アプリqueueには送信されていない。V2にも反映されていない。①11/6 30th CELEBRATION 1BOX、イトーヨーカドー アリオ八尾店、シュリンク付き、原価7,200円（支払7,205円から袋代5円除外）。②11/7 ORIGINAL ARTWORK DUEL SET 3種類各1個・合計1セット、過去支払済みで新規原価なし。
+- ユーザーがV2アプリ画面の「V2正本を書き出す」から出力したsnapshotをread-only確認。schemaVersion 2、revision 2708、exportedAt 2026-11-08 17:39 JST、SHA-256 `930bb73fca5c9d8145cf78008dc7595b01985565d4bccc646cad930d2ec70b88`。画面表示はrevision 2709のため、snapshotは画面より1 revision古い。
+- revision 2708のtransactions/inventoryLotsに2件と一致する記録なし。類似名称「オリジナルアートワークコレクション 1BOX」の抽選応募3件は別記録として扱い、DUEL SETと自動同一視しない。
+- 既存Google Sheets Command Queueを読み取り専用で確認し、9行中8行が保留売却、1行が抽選。今回の2件に一致する行なし。Queueは一切変更せず、保留売却を再投入していない。
+- 現行migration validatorはBOX condition「シュリンクなし」で失敗。canonical exportの誤りではなく、新アプリ側の値互換性不足。原本JSONは変更していない。原価不明の在庫4ロットは推測補完しない。
+- 状態: 報告内容確認済み / queue送信なし / V2反映なし / 登録後の正本再読込検証なし。read-only exportのみ検査済み。Cloud Run queue実接続は未完了であり、旧V2直接書込みは禁止。
+- 登録案: 30thはpurchase commandにできるが、live queueがないため未送信。DUEL SETは汎用のreceipt-only/no-new-cost commandが未実装。0円purchaseで代用せず、原価二重計上を防ぐ受取専用処理を設計する。revision 2709以降の再export・二重登録確認・登録内容提示とユーザー承認を経るまで登録しない。
+- Overall estimate remains approximately 94% implementation/test work, not production readiness. No production, Apps Script, V2, queue, billing, deployment, or cutover changes.
+
+
+### 2026-11-08 JST — V2エクスポート形式の検証と互換性修正
+
+- `v2/core.js` が既存BOX状態「シュリンクなし」を有効値として許容するよう修正。値の書換えや正規化はせず、元データ表記を維持する。
+- `inspectV2Snapshot` がV2アプリのエクスポート外枠（app/schemaVersion/exportedAt/revision/data）を読み取れるよう修正。外枠とpayloadのrevision不一致は拒否し、SHA-256はJSON出力ファイル全体を対象に計算する。エクスポート形式、原本ハッシュ、revision不一致、既存BOX状態をテスト。
+- GitHub Actions v2-ci #810 は npm test、npm run check、Firestore Emulator jobがすべて成功。code head: `57463dcb7f39c19f0491cabe7744feb9fd14468b`。
+- 適用結果: ユーザーのV2アプリ画面から出力されたschemaVersion 2 / revision 2708 JSONをread-only検証。SHA-256 `930bb73fca5c9d8145cf78008dc7595b01985565d4bccc646cad930d2ec70b88`、sourceBytes 1,341,567、取引97（購入56/売却34/開封7）、在庫32ロット・数量37、抽選517、相場25、監査2,728。画面表示はrevision 2709で、JSONは1 revision古い。
+- Firestore保存見積りはpayload 1,036,003 bytes。単一document安全上限900,000 bytesを超えるためchunked-v1 5 segment（基準13 reads/6 writes per successful mutation）を選択。payload size/segment limits内で安全計画可能。これは設計見積りで実測費用ではない。原価不明lot 4件は推測補完しない。
+- 既存Sheets queueは9行（未処理売却8、抽選1）、今回2件と一致なし。似た名称の「オリジナルアートワークコレクション 1BOX」抽選応募3件はDUEL SET受取と別扱い。
+- 通常Chat報告は確認済みだが、新アプリqueue送信なし、V2反映なし、登録後readbackなし。新アプリAPI/Cloud Runは未配備、旧V2書込みと未処理売却再投入なし。受取専用（原価を二重計上しない）一般commandは未実装。通常Chat連携とreceipt-only設計が次工程。PR #105はDraft・未merge・未deploy。
+
+
+### 2026-11-08 JST — 通常Chat接続の公開Plugin経路（検討中）
+
+- 新規GPT作成や個人用の直接MCP接続を前提にせず、ChatGPTの公開Plugin／アプリディレクトリから通常Chatへ接続する経路を候補として調査した。公開PluginはChatGPTのモバイルでも利用できる設計だが、個々のPluginの提供プラン・画面は異なるため、PlusのAndroidでの利用可否は公開候補の実機テストで確認する。
+- 公開には安定した公開HTTPS MCP endpoint、OAuth 2.1 user authentication、開発者本人確認、公開レビュー、モバイルを含む動作テストが必要。既存RESTのBearer API tokenはChatGPTの公開MCP認証として流用しない。OAuth providerは未選定。
+- 現時点は「候補・未実装・未検証」。公開申請、公開、配備、本番データ接続、課金設定の有効化は行っていない。API queue/worker/write flagsも有効化しない。
+- 次工程: 既存Cloud Run APIに対する独立したMCP/OAuth adapter案、ローカル/CI mock E2E、公開審査要件一覧を作る。安全なステージング接続と費用・billing案をレビュー可能にしてから、必要な承認を得る。
+- 旧V2書込み、売却queue再投入、本番切替は禁止。通常Chat未登録の2件は確認済みだがqueue送信なし/V2反映なし。JSONはrevision 2708で画面revision 2709より古く、移行には2709以降の正本再出力が必要。
+- Official refs: https://help.openai.com/en/articles/20001256-plugins-in-chatgpt ; https://developers.openai.com/plugins/build/auth ; https://developers.openai.com/plugins/deploy/app-review ; https://developers.openai.com/plugins/plugin-guidelines
+
+
+### 2026-11-08 JST — 通常Chat入力の短期ブリッジ候補（Google Driveアプリ＋専用受付シート）
+
+- 公開Pluginの審査/OAuth準備とは別に、ChatGPT標準のGoogle Driveアプリが通常会話でGoogle Sheetsの更新を許可する場合、専用受付シートを新アプリのinput bridgeにする候補を評価する。OpenAIの現行ヘルプはGoogle Sheets/Docs/Slidesのソース更新を説明しているが、個々のactionはプラン・権限・surfaceに依存する。
+- 使用する場合も既存V2 Command Queue、V2 JSON、Apps Scriptには書き込まない。新アプリ専用sheetに未処理報告を置き、Cloud Runのread-only readerが検証・idempotent Firestore enqueueを行い、処理結果を専用sheetへ記録する設計候補。
+- Plus AndroidでGoogle Sheets更新actionが利用可能か、行追加と読み戻しまでの通常Chat E2Eは未確認。サービスアカウント共有、Cloud Run課金、表の書込範囲、保持・削除方針も未決定。この方式を確定仕様とはしない。
+- 次: row parserとpoll result→Firestore queue importerを副作用のないpure function/adapterとしてテストする。受取専用・原価なしはpurchaseに変換しない。OAuth / public MCP案は審査準備を要する代替候補として保持。
+- No production sheet/resource was created or modified. Billing, old V2, old queue, cutover remain unchanged.
+- Official reference: https://help.openai.com/en/articles/10929079-google-drive-app-and-setup-in-chatgpt ; https://help.openai.com/en/articles/20001256-plugins-in-chatgpt
+
+
+### 2026-11-08 JST — Google Sheets専用受付worker実装
+
+- 専用sheet `Toreca Vault New App Intake` のstatus=`new` 行を最大20件読み、Firestore create-once queueへ渡すprocessor/providerと、Scheduler OIDC認証付きworker routeを実装。受付内容A:Cは変更せず、結果のみD:Gへ記録する。抽選イベントの応募IDまたは店舗キー不足・不確実時は`review`。Chat/Gmailで異なるrequestIdでも明示情報から同じbusinessEventKeyを作る。
+- テスト: `npm run check --prefix cloud`成功、cloud suite 180成功/0失敗/5件Emulator未実行（local Emulator未設定）。live Sheets/ChatGPT Android/Cloud Run/Scheduler/OAuthは未接続。
+- Runtime flagsはすべて初期無効。production sheetやservice account grant、billing、deploymentは作成・変更なし。通常Chatの書込・結果確認E2Eが未検証なので、報告内容はqueue送信済みとして扱わない。
+- 進捗概算はコード/ローカルテスト範囲で約95%。運用可能率ではない。V2正本JSONはrev2708のまま画面rev2709より古く、2報告は内容確認済み/queue未送信/V2未反映/事後readbackなし。旧queueは未変更、売却行の再投入なし。
+- 次工程はPlus Android通常ChatからのGoogle Sheets更新可否とreadback確認。可能な場合に限り、専用sheet作成と接続設計へ進む。課金・production接続・migration・cutoverは未実施。
+
+
+### 2026-11-08 JST — 専用受付シート準備・CI確認
+
+- Google Driveに専用Spreadsheet「Toreca Vault New App Intake」を作成し、`Intake` tabとA1:G1のheaderを設定。A2:G2以降は空であることを再読込確認。既存V2 Queueとは別ファイルで、取引報告は投入していない。
+- GitHub Actions v2-ci #814 passed on head `82b8230705d4a3a3534d2fb1fcf968fd22a825c7`; testとFirestore Emulatorの両方成功。PR #105はopen/Draft/unmerged/undeployed。
+- WorkセッションのGoogle Sheets接続は通常ChatGPT Androidでの書込可否を保証しない。service-account権限、Cloud Run、Scheduler、OAuth、production flags、billingは未設定。queue受付済みやV2反映済みとは扱わない。
+- 次は通常ChatGPT Androidから安全なテスト行を追加/読み戻しできるか確認し、成功後にだけCloud Run identityを接続する。実取引報告はqueue receipt/statusと再試行動作のE2E確認まで投入しない。
+
+### 2026-11-08 JST — 通常Chat AndroidからSheetsへの基本書込確認
+
+- ユーザーが通常Chatから専用受付シート`Intake!A2`へ`normal-chat-smoke-test`を書き込み、読み戻しに成功したと報告。Work側で同値を再確認し、A2だけ空に戻した。再読込でheader保持とA2:G3の空状態を確認。
+- 通常Chat AndroidのGoogle Driveアプリを使った基本write/readは確認済み。取引報告→command JSON生成→Firestore queue→worker→結果readbackの実運用E2Eと画像報告は未確認。smoke testはqueueに投入していない。
+- Chat-only登録の完成条件は未達。今後はCloud Run identity/Scheduler OIDC/Firestore接続案と費用見積りを固める。billing有効化、deployment、service-account共有は承認前に行わない。受取のみで原価を計上しないcommandも未実装。
+
+### 2026-11-08 JST — 受付シートの再開カーソル
+
+- 通常Chatの基本write/readは確認済み。運用時に古い行が先頭20件を占有し、新しい報告が処理されなくなる問題を防ぐため、sheet ID hashとnextRowのみを持つFirestore CAS cursorを追加。20行ごとの連続pageを読み、各行のreceiptが完了してからカーソルを進める。queue/receipt失敗なら同じpageを再試行し、queueのstable requestIdで重複を防ぐ。
+- シートはappend-only前提。過去行の並べ替え・削除・カーソル通過後の編集はしない。訂正は新しいrequestIdの新規行として送る。
+- `npm run check --prefix cloud` passed。Full local cloud suite: 183 passed, 0 failed, 6 skipped because `FIRESTORE_EMULATOR_HOST` is not configured. GitHub Actions v2-ci #817 passed both test/check and Firestore Emulator, including concurrent cursor CAS/resume.
+- Normal Chat→Sheets smoke testは成功済みだが、report-to-command JSON、Firestore queue、15分worker、Chatでの結果提示のE2Eは未検証。通常Chatだけでの登録完成条件は未達。Cloud billing、deployment、service-account共有は未実施。V2 revision 2708 exportはscreen 2709より古いまま。2報告は未キュー/未反映。
+
+### 2026-11-08 JST — 受付receiptの読戻し確認
+
+- Sheets intake providerは、D:Gへの受付結果書込み後に同じセル範囲を再読込し、status/resultCode/acceptedRequestId/processedAtMsの4値が一致した場合だけreceipt成功を返す。
+- 書込み応答または読戻しが欠落/不一致ならworkerはページcursorを進めず、同じrequestIdで再試行する。queue create-onceにより再送は冪等。
+- Added tests for receipt readback success, missing readback, and mismatched readback. `npm test --prefix cloud`: 184 passed, 0 failed, 6 skipped without local Emulator; `npm run check --prefix cloud` passed. GitHub Actions v2-ci #819 passed both test/check and Firestore Emulator; no live sheet worker or Cloud Run was invoked.
+
+### 2026-11-09 JST — キュー受付から最終結果までの受付行追跡
+
+- Intake起点のqueue commandにsheet ID hash・row numberだけのcorrelation metadataを追加。15分の同じSheets intake workerがqueue状態を照合し、既存のCloud Run workerが完了した結果を専用sheet D:Gへ返す。
+- queue pending/processing中はシートstatusを`queued`のまま保持し、並行処理の古いstatus上書きを避ける。V2 workerが保存後readbackした`v2-applied`またはduplicate/reviewをreceiptへ反映し、Sheets側も同じD:Gを再読込して4値一致を確認してからqueue receiptをfinalにする。失敗時は再試行できる。
+- receipt status/hash/row correlationの単体テスト、queue metadataのFirestore Emulatorテスト、worker routeの集計応答テストを追加。Local cloud suite: 188 passed, 0 failed, 7 skipped (local Emulator未設定); `npm run check --prefix cloud` passed. GitHub Actions v2-ci #821 passed test/check and Firestore Emulator.
+- これはコードとCI fixtureの検証であり、live Cloud Run/Scheduler/Firestore/V2接続ではない。通常Chat実取引E2E/画像報告、V2正本revision2708→最新確認、課金、本番移行は未完。2件はキュー未送信/V2未反映、旧売却キュー未変更。
+
+
+### 2026-11-09 JST — 受付から最終receiptまでのFirestore Emulator統合確認
+
+- 受付workerが専用sheet行をFirestore queueへ登録し、command workerがテスト用V2 snapshotを保存・再読込し、最終status reconcilerが同じ行へv2-applied / canonical-readback-verifiedを返してcorrelationをfinalにする合成経路テストを追加。
+- GitHub Actions v2-ci #823: 通常test/checkとFirestore Emulator jobの両方が成功。ローカル全体は188 passed、0 failed、8 skipped（Emulator testはCIで実行）；npm run check --prefix cloud passed。
+- 境界: 実Firestore Emulatorでqueue/correlationを検証したが、Sheets providerとV2 snapshot storeはtest double。Google Sheets、Cloud Run、Scheduler、OAuth、V2正本には接続していない。通常Chatの実取引・画像報告E2Eも未検証。
+- PR #105 head 5e230653e11081e9fa3e9de2122c9bdd67129bdd はDraft/open/unmerged/undeployed。開発進捗の概算は約94%で据置（実装・テスト範囲であり本番稼働率ではない）。V2正本exportはschemaVersion 2/revision 2708、アプリ画面revision 2709との一致は未確認。未登録2報告はqueue未送信・V2未反映、既存queueと未処理売却は変更なし。課金・本番切替なし。
+
+
+### 2026-11-09 JST — receipt書込み前の受付行requestId照合
+
+- 専用シートへD:Gの受付/完了receiptを書く直前に、対象行A:Dを再読込し、A列のrequestIdがqueue correlationのacceptedRequestIdと一致することを確認。一致しなければ更新を止め、Firestore correlationもfinalにしない。行の並替え・差替えによる別行へのreceipt誤記を抑止する。
+- 不一致・書込み不一致・readback不一致の再試行系テストを追加。ローカル全体189 passed、0 failed、8 skipped（Emulator testsはCIで実行）；check成功。GitHub Actions v2-ci #825のtest/checkとFirestore Emulator全jobが成功。
+- PR #105はDraft/open/unmerged/undeployed。実Google SheetsやCloud Runを使った検証ではない。既存V2/queue・未処理売却・課金・切替は不変。通常Chat取引/画像E2E、V2正本最新export（revision 2708/画面2709の差）および本番接続は未検証。
+
+
+### 2026-11-09 JST — 通常Chat・Android接続と無料枠の再確認
+
+- 最新のOpenAIヘルプを確認。自作MCPのwrite/full supportはBusinessおよびEnterprise/EduのChatGPT web向け。custom MCPのmobile接続は不可。Plus/Androidで専用MCPを直接使う案は運用ルートとして不適合。
+- 公開ChatGPT app directoryへの申請・審査・公開は候補として残す。公開appの利用可否・機能はplan/regionで異なり、Androidでの実機確認前に利用可能とは扱わない。公開endpoint/OAuth/privacy reviewが必要。
+- Google Cloud公式条件: Free Tier利用にも有効なBilling accountが必要。低利用時Cloud Run/Firestore/Schedulerは無料枠内の可能性があるが、超過・別サービス・バックアップで課金され得る。Firestore backup/restoreはfree quota対象外、Cloud Storage Always Freeは米国3 region限定。実費は未計測。
+- 当セッションにはGoogle Cloud Console操作権限がない。Billing連携、deployment、ChatGPT公開申請、OAuth設定は未実施。ユーザー承認前に課金有効化は禁止。
+- 進捗約94%は実装/テスト概算。PR #105 Draft/unmerged/undeployed。通常Chat取引/画像E2E、V2最新正本（export rev2708/画面2709）、本番接続は未完。
+
+
+### 2026-11-09 JST — 新Work継続時の最新状態
+
+- PR #105はDraft/open/unmerged/undeployed。開発ブランチheadは `23fce53f37c56c531e04e5faaeab82d8f987d9c4`。Actions v2-ci #825と資料更新後の#829は成功。
+- 専用 `Toreca Vault New App Intake` sheetはread-only確認でA1:G1のheaderのみ、A2:G5は空。テスト値や取引は追加していない。
+- 実装中の `lottery-receipt` はlottery record専用。支払済み通常注文の「受取のみ」commandは未実装。0円purchaseへ流用しない。V2 export revision 2708と画面2709の差を解消し、最新正本と既存記録を照合するまで両報告は未キュー・未反映。
+- 30th CELEBRATION購入は商品原価7,200円で、au PAY合計7,205円のうち袋代5円を原価へ含めない。ORIGINAL ARTWORK DUEL SETは3種類各1、過去支払済みで今回受取のみ。既払原価の二重計上を避ける状態遷移とテストが必要。
+- 既存V2、旧queue、未処理売却8件、billing、deploymentには変更なし。通常Chat実取引/画像report→queue→worker→結果readback、本番接続、V2最新exportの一致は未検証。安全な次工程はread-only最新V2確認と重複照合、その後に受取のみcommandのdata model/test設計。
+
+
+### 2026-11-10 JST — 最新V2 export revision 2789
+
+- ユーザー提供の `toreca-vault-v2-2026-11-10.json` をread-only確認。schemaVersion 2、revision 2789（top-level/data一致）、export 2026-11-10 07:06 JST。97 transactions、32 inventoryLots、520 lotteries。
+- 11/6・11/7のtransactionsは存在しない。11/6の30th CELEBRATION 1BOXとイトーヨーカドー アリオ八尾の一致なし。過去の30th商品は存在するが、今回の拡張パックBOXと異なる9種カードセット等。現在のinventoryLotsに同商品のBOX lotはなし。
+- ORIGINAL ARTWORK DUEL SETは報告された英語/日本語表記や一般的なカード名の一致なし。既払い履歴が別名の可能性は残る。既払原価を再計上しない汎用受取commandは未実装。
+- 以前のrevision 2708 export / screen 2709 mismatchは新しいrevision 2789 exportで置換。添付ファイルは未変更。どちらの報告もまだintake sheet/queueへ送っておらず、V2は未変更。
+- 30th purchase command自体は既存実装で表現できるが、実運用は通常Chat→intake→queue→worker→canonical readbackのE2E完了後。ORIGINAL ARTWORK受取は商品名/既払記録の対応と専用no-double-cost transition/testが必要。Cloud Run/Scheduler/OAuth、billing、deployment、migrationは未実施。
+
+
+### 2026-11-10 JST — 2件の新アプリ専用Intake記録
+
+- V2 export revision 2789で重複をread-only確認した後、専用「Toreca Vault New App Intake」Intake!A2:G3へ報告2件を記録し、再読込で値/statusを確認。
+- 11/6 30th CELEBRATION 1BOX: requestId normalchat:2026-11-06:30th-celebration-arion-yao、status=new、商品原価7,200円（袋代5円除外）、数量1、シュリンクあり。Intakeに受付待ちであるだけで、Firestore queue/worker/V2へ未反映。
+- 11/7 ORIGINAL ARTWORK DUEL SET: requestId review:2026-11-07:original-artwork-duel-set、status=review、resultCode=needs-review。3種類各1個・合計1セット、過去支払済み。商品別名と既払記録が照合できるまで在庫・原価commandを投入しない。append-onlyのため、照合後もこの行をnewへ変更せず、新requestIdの別行を使う。
+- 専用sheet以外への書込みなし。V2原本、旧queue、未処理売却8件、billing、deployment/cutoverは不変。通常Chat実取引→Firestore→worker→canonical readback E2Eは未検証。PR #105はDraft/unmerged/undeployed。
+- docs/NEW_DESIGN_HANDOVER.mdも同じ進捗へ更新。新DESIGN handover更新commit b1a7819f466e4ab10d1513d9bfa3c98b30d2bf57ではGitHub CI照会時点でworkflow run/statusは未返却。反映後に再確認する。
+
+
+CI follow-up (2026-11-10 JST): v2-ci #834 passed on docs commit 7e169dcafe2be762b3cac4a0ff8b726420d45c36, including the then-current new-app intake staging notes in both handover files. CI does not execute the intake queue or mutate V2.
+
+### 2026-11-10 JST — ステージング作成承認後の実行可否
+
+- ユーザーは新アプリ用ステージング作成・デプロイと必要な課金有効化を承認。旧V2への書込み/本番移行は未承認。
+- GitHubのcloud/README.mdと現状を確認。現在の作業環境にGCP provisioning connector、gcloud、Firebase CLIがない。Cloud Consoleは「Site Unavailable」で、1回の再読込後も利用不可。project/account/billing状態を確認できず、GCP resource・課金・deploymentの変更はゼロ。
+- ステージング作成は実行未完了。継続条件はGoogle Cloud Consoleまたは許可済みGCP API/CLIへの接続。接続後は専用project、最小権限、予算通知を先に確認しsyntheticデータでE2E確認する。旧V2、既存pending queue/売却8件、本番移行は触らない。
+- 詳細はdocs/NEW_DESIGN_HANDOVER.mdの「承認済みステージング作成の実行ブロッカー」を参照。
+
+### 2026-11-12 JST — 新アプリ専用ステージングの作成とIntake受理確認
+
+- 承認済みの新アプリ staging をCloud Run/Firestoreで作成。Cloud Run `toreca-vault-staging`（asia-northeast1）はReady/100% traffic、private。HTTP /health readbackは200、canonicalInitialized=false、writesEnabled=false。
+- 専用Intake Sheetのみstaging runtime SAにwriter共有し、Scheduler OIDC service account/job（Asia/Tokyo・15分間隔）を構成。Sheets intake + Firestore queueはON、V2 writes + command workerはOFF。
+- Intake A2の30th CELEBRATION購入報告はstaging Firestore queueでaccepted/queuedとなり、同シートreceiptのreadback一致を確認。V2 canonicalには反映していない。A3のORIGINAL ARTWORK DUEL SETはreview/needs-reviewのまま。
+- 旧V2、旧queue、未処理売却8件、Gmail/Apps Script、本番migrationは不変更。Cloud Run deploy時はCloud Build SAにroles/run.builderを追加し、repo-root相対COPYに合わせた一時build contextで成功。アプリコードは変更なし。
+- まだ未完了: 普通Chat自然文/画像→commandJson→Sheetの完全E2E、API status確認、canonical V2 import/readback、worker実行。本番運用可能とは扱わない。PR #105はDraft/open/unmerged。詳細はdocs/NEW_DESIGN_HANDOVER.mdを参照。
+- 次: staging queue statusのread-only確認と通常Chat経路の合成データE2E。command workerはV2 canonical snapshotのrevision/hash/件数を照合し、本番移行の別途承認が完了するまでOFFを維持する。
+
+### CI follow-up — 2026-11-12 JST
+
+- GitHub Actions v2-ci #839 for commit `f5185dbfb1298d1c25362bfb237b7932b97bb47c` completed successfully. Test/check and Firestore Emulator jobs passed. This is CI verification only; staging queue acceptance did not apply the report to V2.
+- Current staging: Cloud Run `toreca-vault-staging` is private and Ready; A2 is queued/accepted with receipt readback, A3 remains review/needs-review. V2 writes and command worker are disabled. PR #105 remains Draft/open/unmerged.
+
+
+CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/handover status update) both completed successfully. Test/check and Firestore Emulator jobs passed. The staging configuration and data-path status above are unchanged; V2 writes/command worker remain disabled.
+
+
+### 2026-11-12 JST — staging API認証とキュー状態のread-only確認
+
+- staging API Secretの内容は65 bytesで末尾LF付きと確認。Cloud Shellのcommand substitutionがLFを落とすため、Authorization Bearer値がCloud Run環境変数と不一致になり401となっていた。Secret本文は出力せず、LFを除いたsecret version 2を追加し、Cloud Run `toreca-vault-staging` を再deploy。revision `toreca-vault-staging-00003-a54` がReady/100% traffic。
+- 認証付きGET `/api/v2/commands/{requestId}` が成功し、30th CELEBRATION requestIdのqueue状態を `pending`、`processed=false`、`canonicalReadbackVerified=false` と確認。キューに存在するがworkerはOFFのため、V2適用済みではない。A2 receipt/readbackの受付状態とも矛盾なし。
+- V2 writes/command workerはOFF。canonical V2 import、旧V2、既存queue、未処理売却8件、本番migrationに変更なし。PR #105はDraft/open/unmerged。
+- 前回handover CI v2-ci #842は成功。今回のhandover docs更新後のCI結果は次のfollow-upで記録する。
+
+
+### 2026-11-12 JST — 通常Chat Intake運用境界の明文化
+
+- `cloud/README.md`の古い「未deploy/bridge未接続」記述を現在のstaging状態で補正し、Intake A:Gの列と安全な行ルールを追記。A=requestId、B=commandJson、C=抽選識別子JSON、D=status、E:G=receipt。正常な新規行だけD=`new`、曖昧/重複/原価未確認はD=`review`。既存行の並替え・修正・再送は禁止。
+- normal Chat Androidの単一セルSheets write/readは確認済み。自然文/画像を自動解析して完全なrowを作成するE2E、およびV2 canonical readbackは未確認。A2はstaging queueでpendingのまま。V2 writes/workerはOFF、PR #105はDraft/open/unmerged。
+- README変更commit `8b12bae00969d1bfe57314c35454ebba76a9dcdf`後のCIを確認する。
+
+### 2026-11-12 JST — 通常Chat用staging受付quickstart
+
+- `docs/STAGING_CHAT_QUICKSTART.md`を追加し、Android通常Chatで使う初期指示、Intake A:G列、requestId重複確認、曖昧情報をreviewにするルール、queued/pendingとV2反映の区別を明記。`cloud/README.md`からリンク。
+- DriveのV2 JSON検索ではschemaVersion 2の最新エクスポートを確認できず（handoffと旧V2 queueのみ）。既知のrevision 2789は2026-11-10のexportであり、これだけでは最新canonicalと断定せずstaging canonical初期化に使わない。
+- したがって新しいIntake rowsはFirestore staging queueまで受付可能だが、canonical V2 stateが未初期化、command worker/V2 writesはOFF。通常Chat full text/image-to-row E2E未検証。本番登録運用はまだ開始できない。
+- 未処理売却8件・旧V2/queueは未変更。本番移行と旧V2書込みは別途承認が必要。直近のCI v2-ci #844は成功。
+
+
+### 2026-11-12 JST — staging canonical初期化ガードと運用停止条件
+
+- 空のFirestore staging canonicalへ、検証済みschemaVersion 2 snapshotを一度だけ取り込む専用初期化処理を追加。通常のsaveは従来どおり未初期化canonicalへの書込みを拒否し、初期化処理も既存canonicalがあれば拒否、実行後は全payload/revision/lastMutationIdを読み戻して照合する。
+- `cloud/scripts/initialize-staging-snapshot.js`は専用project `project-8ff0bbc4-675d-4596-a8a`と`torecaVaultStaging/canonical`に固定し、schemaVersion 2 envelope・明示revision一致・サイズ上限を検証。synthetic chunked snapshotを含むFirestore Emulator統合テストを追加。GitHub Actions v2-ci #854（commit `c172f1455b68f7d14d807bd69465d8bfd8ea4d92`）は成功。
+- 運用判定は引き続き停止。Driveで新しいschemaVersion 2 exportを再検索したが確認できず、手元で確認できるrevision 2789は2026-11-10時点で現在のcanonicalと証明できないため、stagingへもインポートしていない。Cloud Run command worker / V2 writesはOFFのまま。A2の30th CELEBRATIONはqueue pending、ORIGINAL ARTWORK DUEL SETはreviewのまま。
+- 次に必要なのは、正本アプリから新たに書き出した最新V2 JSONをCloud Shellへ配置し、revisionを照合した上でstaging専用importerを一度実行すること。その readback が一致するまでworkerを有効化しない。これはstaging snapshotの準備であり、旧V2への書込みや本番切替ではない。
+
+
+### 2026-11-12 JST — 最新export revision 2924の検証
+
+- ユーザー添付の最新export `toreca-vault-v2-2026-11-12.json`を読み取り検証。app=`toreca-vault`、schemaVersion 2、top/data revision=2924で一致、exportedAt=`2026-11-12T11:23:34.111Z`（20:23 JST）。SHA-256=`286843691c5d741b9d7498e75ddc43570b2d0c99b03c7168c83579acb4f8bf7e`。transactions=97、inventoryLots=32、lotteries=521、marketQuotes=25、auditLog=2944。現在のPR branch `v2/core.js` / `migration-report.js`で構造・schema検証に成功し、Firestore storage planはchunked / 5 segments、上限内。
+- read-only duplicate scanで2026-11-06の30th CELEBRATION購入はtransactions/inventoryLotsに見つからず、ORIGINAL ARTWORK DUEL SET表記も見つからない。既存A2 commandはstaging queue pendingのままなので、このsnapshotをstaging canonicalへ入れた後のstaging worker処理候補とする。A3はreview/needs-reviewのまま。
+- import CLIのsnapshot validation呼出しを修正。v2-ci #856（commit `00acde974267325a42d61354b1cee39248e97a0d`）成功。
+- このChatGPT実行環境のCloud ShellページはSite Unavailableで、GCP provision/deploy connectorもないため、snapshot importやworker有効化は未実施。latest exportはChatGPT workspaceへ添付済みだが、Cloud Shellホームへは未配置。canonicalは前回のhealth確認時点で未初期化、command worker/V2 writesはOFF。実操作はCloud Shellでのimport・readback確認後に限る。旧V2/旧queue/未処理売却には変更なし。
+
+
+### 2026-11-12 JST — staging canonical初期化成功
+
+- ユーザー実行のstaging importer結果で `ok=true`、target=`project-8ff0bbc4-675d-4596-a8a / torecaVaultStaging/canonical`、sourceRevision=2924、storagePlan=chunked、5 segments、readbackVerified=trueを確認。対象は最新exportであり旧V2には書き込んでいない。
+- 新アプリ専用IntakeのA2はrequestId `normalchat:2026-11-06:30th-celebration-arion-yao`、status=queued/accepted。最新snapshotに同日購入が無いため、staging worker有効化後の処理対象とする。A3 ORIGINAL ARTWORK DUEL SETはreview/needs-reviewのままで原価・在庫を処理しない。
+- 次はstaging `TV2_ENABLE_WRITES=true` / `TV2_ENABLE_COMMAND_WORKER=true`を設定し、既存scheduler service accountで15分間隔のprivate command worker jobを作成/更新して初回実行する。その後A2のsheet receiptが`v2-applied` / `canonical-readback-verified`になることを確認する。旧V2、旧queue、未処理売却8件、本番切替は対象外。
+
+
+### 2026-11-12 JST — staging購入1件の処理と最終readback確認
+
+- staging Firestore canonicalは最新のV2 export revision 2924（schemaVersion 2、chunked 5 segments）から初期化済み。対象は専用project `project-8ff0bbc4-675d-4596-a8a` / document `torecaVaultStaging/canonical`。初期化readbackVerified=true。
+- staging Cloud Run `toreca-vault-staging`でcommand worker/V2 writesを有効化し、15分間隔のstaging Scheduler経路を実行。購入requestId `normalchat:2026-11-06:30th-celebration-arion-yao` はstatus `done`、`processed=true`、resultCode `v2-applied`、`canonicalReadbackVerified=true`。Intake!A2:G2を再読込し、D=`v2-applied`、E=`canonical-readback-verified`、F=requestIdを確認。
+- ORIGINAL ARTWORK DUEL SET（A3）は`review` / `needs-review`を維持。過去支払済みの原価照合が済むまで登録しない。
+- stagingにおける専用Intake → Firestore queue → worker → canonical適用 → readback確認の購入1件は完了し、同経路での限定的なstaging運用を開始できる。自然文/画像からIntake行を完全自動生成するE2E、Gmail/OAuth・相場更新・全取引種別、backup/restore、実費の無料枠確認は未検証。アプリ全機能の完成や本番cutoverとは区別する。
+- 旧V2本番、旧queue、未処理売却8件、旧Apps Script、本番データ、billing設定は変更なし。本番移行は未実施。
+
+
+### 2026-11-14 JST — 買取ミミの画像形式（ポケカ/ONE PIECE）を仕様に追加
+
+- ユーザー提供の買取表画像2枚に基づき、買取ミミ `https://x.com/mimi_kaitori` の画像レイアウトを具体化。ポケカ表は11/13 12:00更新表示、ONE PIECE表は11/12 12:00更新表示。元投稿URL・postIdは未照合であり、最新相場としてFirestoreには取り込んでいない。
+- **旧仕様**: 店舗横断でOCR／商品パッケージを照合する方針のみ。**新仕様**: ポケカは上段赤＝シュリンク有1BOX、下段青＝シュリンク無1BOX。ONE PIECEはテープ付きのみで上段赤＝1BOX、下段青＝1ケース/カートン。青欄のハイフン・欠落を0円としない、青い「段ボール未開封」等は金額でなく条件注記、ケース総額はBOX単価に割らない。
+- **変更理由**: 同じ2段赤青でも商品の状態と単位の意味が異なるため、誤った買取相場・在庫評価を防ぐ必要がある。11/12 ONE PIECE左上枠は33,000円/BOXと402,000円/ケースという別価格の具体例。
+- 正本は `docs/X_BUYBACK_QUOTES_SPEC.md` v1.1と `docs/NEW_DESIGN_HANDOVER.md`。画像やユーザー固有の保有データは公開GitHubに転記しない。
+- **完了した作業**: 文書仕様追記のみ。**未実装/未検証**: X元ポストの真正性・最新性検証、公式画像マスタでの商品ID付与、OCR・視覚解析、自動quote保存、Cloud Runデプロイ。売却8件・在庫・旧キュー・Firestore正本には未変更。
+
+
+### 2026-11-14 JST — カードショップアリウムの通常BOX/数量限定買取画像の仕様
+
+- ユーザーが `https://x.com/cardshop_allium` の11/13付買取画像2枚を提供。上段水色＝シュリンクあり1BOX、下段黒＝シュリンクなし1BOX。ハイフンは価格なしで0円ではない。数量限定高価買取も同じ2段表示を使用する。
+- **旧仕様**: 買取ミミの店舗固有画像形式を優先定義。**新仕様**: アリウムの通常表とピックアップ表の判定を追加。商品と価格は位置/見出し/公式デザインの照合。特別強調色と炎絵文字は条件や数字に混ぜない。
+- ユーザーの「相場取得時の最新の値段」の指示を受け、同一商品・同一状態の**最新有効提示額**を選ぶ設計。限定高額だから無条件で高い方を選ぶのではなく、投稿の時間順、数量限定の終了・改訂、当日のみの有効性を確認する。受付枠未確認なら条件付き表示/reviewとする。通常表も有効期限切れなら最新と扱わない。
+- 対象アカウントはユーザー提供、個別投稿URL・postId・現在の有効相場は未確認。今回のスクリーンショット金額をFirestoreへ取り込んでいない。個人の保有品・履歴、ユーザー提供画像は公開GitHubへ載せない。
+- **実施済**: 文書仕様/受け入れ条件の追加。**未実装**: X連携、OCR、商品画像照合、有限数量の失効判定、Firestore買取相場更新とUI反映。既存売却8件、旧キュー、在庫、原価、staging正本は変更していない。
+
+
+### 2026-11-14 JST — 通常Chatからの抽選報告時に公式商品情報で識別する
+
+- **ユーザー指示:** 抽選報告を通常Chatに送ったら、メーカー/販売元公式の商品ページと画像をその場で照合し、正式名称、デザイン・パッケージ、BOX/パック/カートン/セットの区別、公式税込定価（単位と出典URL、確認日）を調べて認識する。応募ページの略称だけから商品を推測で確定しない。
+- **旧仕様→新仕様/変更理由:** 旧仕様では抽選応募のスクリーンショットを応募済みの証拠とするだけで、公式商品マスタ照合の義務が曖昧だった。新仕様では応募・当選/落選の報告時に画像OCR、公式商品画像の色・ロゴ・主要キャラクターと公式定価を突合し、安定productIdへ紐付ける。抽選と将来の在庫/買取価格の誤結合防止。
+- **登録原則:** 応募完了画像なら応募済み、当選/落選の報告は同一抽選の結果を更新。応募や当選だけでは購入・在庫・購入原価を増やさない。実際の購入/決済/受取の報告時に適切な記録を作る。公式定価は実支払原価とは別の参考値、未知なら未確認。BOX/カートン、シュリンク有無、セット構成は区別する。
+- **不明時:** 複数の商品候補や公式価格が見つからない場合はreviewし推測値を入れない。同一抽選の報告を二重登録しない。通常Chatに認証済み書込経路がない場合は、照合・記録候補の提示までとアプリ正本への実反映完了とを明確に区別する。
+- **状態:** 設計ルール/引き継ぎのみ更新。新アプリの抽選自動登録、マスタ同期、Firestore反映やcanonical readbackの実装/確認は今回なし。既存在庫・購入・売却8件・キューは変更なし。
+
+
+### 2026-11-14 JST — Chat/Work共通引き継ぎをスマホUIから開く・ダウンロードする機能（実装コード）
+
+- **目的/決定事項**: 日常報告は通常Chat、アプリの開発・修正はWorkに分離。両方とも非公開Google Docs正本「Toreca Vault Handoff (CURRENT)」を読み書きし、新スレッドでも同じ参照先を使う。GitHub docsは公開可能な技術資料であり、個人の売却/購入/原価明細は同期掲載しない。
+- **旧仕様→新仕様**: 従来のステージングUIは資産・在庫・予定・履歴のみ。新しい `引継ぎ` メニューでGoogle Docs正本を開くリンクと、クリック時点の内容をGoogle Docsから直接 `.txt` エクスポートするリンクを設置。更新内容を新たなFirestore文書へ複製しないことで定期的な同期漏れを防ぐ。理由はセキュリティ・保守性・コストを優先したため。
+- **コード変更済み**: `cloud/src/dashboard-view.js`、`cloud/src/dashboard-server.js`、`cloud/scripts/deploy-dashboard-staging.sh`、`cloud/test/dashboard.test.js`。Doc IDは環境変数に設定しHTMLでは正規表現で検証。IAP保護・閲覧専用・元API分離を維持。Google Docsのアクセス権は別途必要で、「リンクを知っている全員」にしない。
+- **実装と未実施の区別**: GitHub作業ブランチにコードを反映。CI結果とCloud Runへの再デプロイは別途確認が必要。既存のスマホ画面には未表示、実機ダウンロード未確認。Google Docを開く/ダウンロードするとその時点の内容になるが、アプリ内部に本文や最終編集時刻は表示していない。Google Docsへ実際に書き込まれない変更は自動反映されない。
+- **次工程**: CI成功確認→Cloud Shellで専用UIのみ安全にデプロイ→IAPログイン/Doc表示/更新後のTXT再ダウンロード/既存画面維持を実機検証。売却8件・在庫・正本・旧キュー・元API/workerは今回未変更。
+
+
+### 2026-11-14 JST — 通常Chat日常報告をIntake→Firestoreへ流す実装準備とCI完了
+
+- **目的**: 普段の抽選・購入・受取・売却は通常Chat、アプリ開発はWork。共通Google Docsが双方の正本。ユーザーは自然文/スクリーンショットで報告し、公式商品画像/パッケージ・販売単位・税込定価を公式情報と照合する。
+- **旧状態→新実装**: Sheets`Intake`は存在し購入1件の`v2-applied/canonical-readback-verified`実績あり。ただし`queued`/`new`も残る。review受付の空`acceptedRequestId`、businessDuplicateで異なる`acceptedRequestId`がD:G書込時にA列と不一致になるバグを修正し、別のsourceRequestIdでcompare-before-writeする。原本A:Cは改変しない。
+- **抽選**: 発行元の応募IDがなくても、明示的な応募済み報告/スクショ、店舗・商品・応募者・申込日が揃えば専用の内部冪等キーで受付可能にした。これは実応募番号ではなく同一報告の重複防止用。曖昧なケースはreview。追加の同日同店同商品/本人の抽選はV2正本で重複レビュー。商品公式ID/参考定価/URL、BOX数量、シュリンク、支払状況を保存し、申込で在庫・原価は増えない。
+- **コード実装**: `cloud/src/google-sheets-intake.js`、`cloud/src/google-sheets-intake-provider.js`、`cloud/src/v2-command.js`、関連テスト3ファイル。通常Chat運用手順 `docs/CHAT_DAILY_REPORTING_RUNBOOK.md` を作成。
+- **CI結果**: [Actions #43527682483](https://github.com/manato-maker/toreca-vault/actions/runs/43527682483) にてコードテストとFirestore Emulator両方success（途中失敗したテストは修正済み）。
+- **まだ実施していない**: Cloud Run APIへのコード配備、Google Sheetsの受付編集経路を通常Chatから新規実取引でE2E試験すること、Scheduler/IAM実動作検証、FireStore canonical readback、アプリ画面での実取引反映。既存`new`行や旧売却8件を再発行しない。一般利用開始を完成としない。
+- **次工程**: GCP権限を持つWork/Cloud Shellでstaging APIの設定・Cloud Schedulerの15分triggerとサービスアカウントのSheets権限を安全に照合、コードデプロイ、新規報告1件の同一IDエンドツーエンド検証。元APIにIAP追加・旧V2移行・無関係な正本更新は禁止。
+
+
+### 2026-11-14 JST — 無料枠優先のstaging事前監査（未デプロイ）
+
+- **目的**：通常Chatからの報告登録を無料枠内中心で運用する。ただし請求有効化済み環境で月額0円を保証しない。
+- **コード変更**：`cloud/scripts/deploy-dashboard-staging.sh`のUIデプロイにrequest-basedを指定する`--cpu-throttling`、concurrency 40、timeout 30秒を追加。既存min0/max1/1CPU/512MiBは維持。Cloud Runにはまだデプロイしていない。
+- **新規監査ツール**：`cloud/scripts/audit-free-tier-staging.py`（読み取り専用）。Cloud Shellの対象リポジトリで`python3 cloud/scripts/audit-free-tier-staging.py`を実行し、プロジェクト番号、両Cloud Runサービスのmin/max/CPU課金方式、Firestoreデータベース、東京Schedulerのジョブ数、Billing有効状態を点検。請求詳細/予算設定/他リージョンや他プロジェクトは未確認として残す。プロジェクトのリソース/権限/機密情報を変更しない。
+- **設計判断**：Schedulerは請求先アカウントにつき3ジョブまで無料（停止中含む）、Firestoreの無料枠は対象DBに限定、Artifact Registryは月0.5GiBまで無料。X有料API/画像AIを自動有効化しない。Google Cloud Budget通知だけでは課金を止められない。
+- **価格出典と全工程**：`docs/FREE_TIER_STAGING_COST_PLAN.md`。次は実際のCloud Shell監査、当月の請求明細照合、既存Worker/Scheduler/IAMを保護したstaging配備、Chat→Intake→Firestore正本→UIの1件E2Eを行う。旧売却8件の新ID再送は禁止。
+
+
+### 2026-11-14 JST — Chat報告→新アプリ反映の通し検証と安全なstagingリリース経路
+
+- 日常Chat報告は自然文/画像→公式商品デザイン/税込定価照合→専用Intake→Firestore受付worker→staging canonical→スマホUIという経路。Workは開発・修復・配備を担当し、双方の運用正本は非公開Google Docs。
+- **コードに追加済み**: `cloud/test/chat-intake-e2e.test.js`（購入/抽選/要確認の通しモック）、`cloud/scripts/preflight-chat-staging.js`（Firestoreと専用Sheetの読み取り専用件数/状態検証、IDは環境渡し）、`cloud/scripts/release-chat-staging.sh`（check/stage/promote、最初は0%トラフィックで候補作成）、`cloud/test/preflight-chat-staging.test.js`、`cloud/test/release-chat-staging.test.js`。 npm test/checkに追加。
+- **既存行との互換性**: 抽選受付identity JSONの`kind`フィールドはコマンドtypeと一致する場合のみ許容。異なる場合は`lottery-kind-mismatch`でreview。実行前の既存queue/Intake同一ID/注文や抽選識別子の照合を省略しない。
+- **費用・権限**: GCPプロジェクト番号・Firestore staging canonicalパス・Cloud Run API非公開IAM・OIDC・専用Sheetをリリース前に検査。Cloud ShellのGoogle認証必須。staging code deployは `--no-traffic`、移行は別モードで明示的な検証済みフラグが必要。API secret値やSheetの生IDは公開コード/出力に含めない。
+- **未実施/ブロッカー**: ChatGPT通常会話がクラウドへ反映したことの実地E2E、Cloud Run API/UIへの反映とGCP IAM/請求の現況確認はこのツール権限では不可。WorkのCloud Browser/Google Cloud Shellなど認証済み環境から順番に検証し、完了後のみ「運用開始可」と報告。旧V2/既存未登録売却8件と旧Queueに触れない。
+- **詳細**: `docs/CHAT_STAGING_RELEASE_RUNBOOK.md`、`docs/CHAT_DAILY_REPORTING_RUNBOOK.md`、`docs/FREE_TIER_STAGING_COST_PLAN.md`。CIは最新のGitHub Actions成功を確かめてからデプロイする。
+
+
+### 2026-11-14 JST — Driveの旧JSONはV2正本ではない
+
+- 非公開Driveフォルダ「Toreca Vault Private」内の `toreca-vault-data.json` を読み取り専用で確認。ファイル更新は2026-10-05で、トップレベル`schemaVersion=1`、内部データもV1形式。`data`の集計はlotteries 285、purchases 37、boxes 6、packs 0、cards 13、openings 2、sales 27（内容・個人情報はGitHubに転載しない）。
+- **重要**：これは現在のV2 schemaVersion 2の正本を証明するものではない。2026-10-05以降の記録が欠ける可能性が高いため、これを最新canonicalとしてFirestoreにインポートしてはならない。V2正本のApps Script `TV_V2_DATA_FILE_ID` の実設定、現在のV2 JSONのschemaVersion/revision/hash/更新日を認証付き環境で照合する。
+- 今回の調査ではDrive上の最新V2 JSON正本は未確定。既存canonical・旧Queue・在庫・売却は変更していない。V1→V2変換も実行しない。
+
+
+### 2026-11-14 JST — Intakeの再試行・結果確定とID衝突の不具合を修正
+
+- **問題→解消**：Sheetsのreceipt書込前にenqueueだけ成功して再実行された同一requestIdを、誤って「終了済みduplicate」にしてしまう問題を修正。`accepted:true, duplicate:true`は「既存の受付が処理中」として`queued/accepted`を保ち、別の業務事実の重複`businessDuplicate`のみ「重複」で終了。
+- **結果改ざん防止**：providerはsourceRequestIdだけでなく行の現statusを比較し、D:Gの`v2-applied`/最終`review`/`duplicate`を古い`queued`状態に戻さない。再実行時に同じ最終receiptなら値を再取得して整合性を確認し、上書きせず成功。衝突は調査待ちで停止。
+- **IDの紐付け**：Firestore queueは同じrequestIdのリプレイ時に元受付のSheet ID hashとrow numberが一致することを必須にした。別行またはAPIからの同一IDは衝突として拒否し、ghost receiptを作らない。
+- **テスト**：GitHub Actions https://github.com/manato-maker/toreca-vault/actions/runs/43559680508 で通常コードテストとFirestore Emulatorともに成功。PR #105はdraft/open。**GitHubのみ更新**。Cloud Run実機配備・canonical readback・通常Chatの実登録・スマホUI検証は未完了。既存の取引/在庫/未処理キューは書き換えていない。
+
+
+### 2026-11-14 JST — 完了依頼の実行境界と切替安全ガード
+
+- ステージングAPIの `release-chat-staging.sh promote` に、writes/command-queue/command-worker/Sheets-intakeの4環境フラグが全て`true`の場合のみ切替を許可するゲートを追加。検出した無効設定はユーザー向け値を出さずに切替を停止。変更は作業ブランチのみ。
+- 最新CI [#43561882965](https://github.com/manato-maker/toreca-vault/actions/runs/43561882965) は test と firestore-emulatorともに成功。
+- Google Sheetsの現在の受付状態：反映済み1、処理中`queued`1、未受付`new`3、確認待ち`review`3。原本を変更せず、同じ業務事実での再投入を行っていない。
+- **未完了/外部権限の境界**：このスレッドのツールにはGoogle Cloudデプロイ/請求/IAM/Schedulerの認証付き操作がなく、稼働中Cloud Runサービスは更新されていない。実際のデプロイ・ログ・トリガー・Firestore canonical E2E・スマホ表示を確認するまで「完成」「報告運用開始可能」と称しない。既存の`docs/CHAT_STAGING_RELEASE_RUNBOOK.md`を用い、認証済みCloud Shellで作業する。旧V2・売却未処理8件へ手動書込み禁止。
+
+
+### 2026-11-14 JST — 参考価格=定価のバグ修正、買取実勢価格の参照ゲート追加
+
+- **原因**：ステージングの `dashboard-view.js` は買取相場が見つからないBOX/パックの`assetEstimate`を `lot.unitCost` で代替。その原価に定価が使われていたため参考価格が定価と同じになった。
+- **修正**：原価代用を廃止し、`参考買取評価額`は最新/有効/店舗出典確認済の買取提示のみの部分評価。相場なしは未算定、旧価格は過去値と表示、定価・原価・売却額は別値。 `cloud/src/buyback-quotes.js`を新設、`dashboard-view.js`と`market-refresh-worker.js`を修正。Xの直接元投稿、投稿日、条件、商品/単位、verified、期限を検証。画像の色レイアウトは`docs/X_BUYBACK_QUOTES_SPEC.md`（買取ミミ、アリウム、KURO）を参照。
+- **テスト**：`cloud/test/buyback-quotes.test.js`と相場refresh/UI回帰テストを追加、Node test・Firestore Emulator成功。
+- **注意**：11/13時点のアリウム/KUROの30th BOX 18,500円（シュリンク有）/17,500円（無）は前日比較サイト値であり、当日11/14の実店舗最新X価格としては未検証。原価や定価をこれらに置換せず、最新元ポスト確認前に正本へ登録しない。
+- **未完了**：PR #105ブランチのコード変更のみ。現行Cloud Run UI/Firestoreにデプロイ・買取数値の実書込は行っていない。GCP認証付き環境で新UI配備、買取元投稿の照合→marketQuotes更新→Firestore readback→スマホ表示検証を実施する必要がある。現行の個人取引/在庫/売却8件/旧V2には無変更。
+
+### 2026-11-14 JST — 参考買取価格の店舗別保存・手動verified入力・元投稿表示
+
+- 既存の定価代用バグ修正に加え、店舗別買取提示額を保持し、同店舗の新しい値下げが古い高値に負けないロジックを追加。`cloud/src/buyback-quotes.js` / `cloud/src/dashboard-view.js` に、出典・投稿日と共に店別参考価格を最大4件表示。最新価格は元投稿・verified・状態/単位・有効期限が一致するものだけで計算。
+- `cloud/src/market-refresh-worker.js` が別店舗のquoteを潰さないよう分離。従来のX自動providerは未接続。
+- 安全な手動取込として `cloud/src/verified-buyback-import.js`と`cloud/scripts/import-verified-buyback.js`を追加。非公開JSONをstagingでpreviewし、rev一致・二重送信・投稿URL/日付・店舗条件を検査。承認とバックアップ確認後にのみFirestore CASで保存しreadback。在庫/原価/抽選/売却履歴は変更しない。実在X原文との照合は外部工程。`docs/BUYBACK_IMPORT_RUNBOOK.md`を参照。
+- 2026-11-14現時点では公式3店の当日原文/X投稿を個別URLと画像で確認できず、11/13の比較表額を11/14の価格としては採用しない。**Firestoreの実marketQuotesと稼働中スマホUIは今回未更新**。認証済みGCPまたは接続済みFirebase等からstaging導入・当日投稿照合・readbackが必要。GitHub PR #105作業ブランチのテスト成功と実運用は区別する。
+
+
+### 2026-11-14 JST — 3店舗同時買取提示と古い高値巻き戻りの不具合修正
+
+- `cloud/src/market-refresh-worker.js`を修正。同じtargetKeyに別店舗の有効quoteが3件あるケースを重複と誤判定せず、(targetKey,店)で受理できるようにした。同店舗の矛盾2件はその店だけ無効にし、他店の有効quoteを巻き込まない。店の新しい投稿が既存の場合、古いキャッシュや同じURLで矛盾する金額を上書きさせず、正しい新投稿で旧投稿はsupersededとして履歴を保持。
+- `cloud/src/buyback-quotes.js` のlotId付き記録も商品・カテゴリ・販売単位が違えば拒否。カード価格をBOXに適用しない。
+- 追加テストは `cloud/test/market-refresh-worker.test.js` と `cloud/test/buyback-quotes.test.js`。Actions [#43571906100](https://github.com/manato-maker/toreca-vault/actions/runs/43571906100)のtestとFirestore Emulatorともにsuccess。
+- 最新店舗X本人投稿の当日買取額を独立に確認できておらず実価格は未書込。Cloud Run staging再デプロイとFirestore readbackも未実施。APIトークン/旧V2本番/原価/在庫/売却履歴へ変更なし。続きは `docs/BUYBACK_IMPORT_RUNBOOK.md`。
+
+
+### 2026-11-14 JST — 参考買取価格の誤結合と買取終了後の旧高値復活を防止
+
+- 指示「進めて」によりGitHub PR #105作業ブランチを継続。現在価格の適用条件を強化し、`lotId`の一致だけで商品名・カテゴリ・販売単位が違う買取額を採用しない。商品名とunit/box/pack/card/caseを必須とする。
+- 店舗名と元投稿の見た目が正しくてもsource/basisに公式定価・販売価格・MSRPの表記が混在した相場は採用しない。
+- 同一店の後日の買取終了・期限切れ投稿があれば、古い高価買取提示額を現在の参考価格として復活させない。投稿時刻は時差を考慮して比較、日時不明は過去のverifiedにも表示しない。他店舗の有効提示額は別に採用可能。
+- `cloud/test/buyback-quotes.test.js`に再発防止のテスト追加。CI [#43572888397](https://github.com/manato-maker/toreca-vault/actions/runs/43572888397)でNode testとFirestore Emulator双方success。
+- 実店舗Xの11/14当日価格の全面照合、Cloud Run再デプロイ、Firestore.marketQuotesの実更新、スマホ画面readbackは未実施。GitHubコード・文書・テストのみ。旧V2や在庫/売却原本に変更なし。
+
+
+### 2026-11-14 JST — Android Chromeからの安全なstaging仮配備を一本化
+
+- **ユーザー指示**：「完成させて」。このスレッドが開発Workであり、新しいWorkへ移動しない。FirebaseプラグインはAndroidで接続不可との確認を尊重し、今後必要条件にしない。通常Chatは報告、Workは開発・修正・検証。Cloud Run+Firestore+Google Sheets Intakeを継続利用。
+- **実際の状態**：2026-11-14に接続済みIntakeの処理ステータスを再読。v2-applied/canonical-readback-verified 1件、queued 1件、new 3件、review 3件。**通常Chat→新アプリが実環境で全件自動処理される状態ではない**。既存キュー/取引/売却8件を再投入しない。
+- **新規リリース入口**：`cloud/scripts/android-staging-launch.sh` を追加。認証済みAndroid Chrome Cloud Shellの作業ブランチから`check`（標準モード・読み取り専用）/ `stage`（既存staging APIの新候補を0%トラフィックで配備）を選べる。git remote headとローカルコミット、作業ツリーの一致、GCPプロジェクト番号、無料枠リスク、正本とIntakeのバインド、非公開Invoker IAM、CIテストを検査する。**promoteは自動では行わない**。候補が正しく動き、バックアップ・OIDC・Scheduler・実受付のreadbackを検証してから専用別コマンドで切替。実行はGoogle Cloud認証済みの操作者のみ可能。
+- **Android操作手順**：`docs/ANDROID_STAGING_GO_LIVE.md`。通常の `https://shell.cloud.google.com/` にブラウザでログインし、作業ブランチを`git clone`して`bash cloud/scripts/android-staging-launch.sh stage`を実行する。Google公式の「GitHubのOpen in Cloud Shell」リンクはGoogle以外のリポジトリで認証にアクセスできない一時環境になるため採用しない。PC・Firebaseの接続は不要。
+- **検証**：`cloud/test/release-chat-staging.test.js`にAndroid用スクリプトのbash構文・標準check/0% stage・無断promote禁止の回帰テストを追加。Github Actions v2-ci成功。上記はコード・文書のみであり、**ユーザーのGoogle Cloudへここから認証済みデプロイしたわけではない**。
+- **残りの実環境ゲート**：ユーザーがCloud Shellへログインしstageコマンドを実行→候補サービス健康状態・Scheduler/Sheets IAM/Firestore正本・請求状況を確認→明示的にレビューされた候補だけpromote→UIデプロイ（IAP維持）→新たな実報告1件を通常Chatから投入し`v2-applied/canonical-readback-verified`とスマホ画面まで照合。最新の店舗本人X投稿が未確認の参考買取価格は推測して登録しない。旧V2本番移行は別承認。
+
+
+### 2026-11-14 JST — Cloud Run Intake 503の診断改善
+
+- Android ChromeのCloud Shell実環境の証拠: 新候補 revision `toreca-vault-staging-00005-foq` は0%トラフィックでstage成功（active APIは未変更）。Scheduler `toreca-vault-staging-intake` と `toreca-vault-staging-command-worker` はENABLED、15分間隔。Intakeジョブに`CODE 14`、Cloud SchedulerはHTTP 500/503を観測。Cloud Run requestsの個別URLは`/internal/worker/sheets-intake`、旧active revisionは`toreca-vault-staging-00004-nfr`。旧revisionの環境フラグ `TV2_ENABLE_WRITES`、`TV2_ENABLE_COMMAND_QUEUE`、`TV2_ENABLE_COMMAND_WORKER`、`TV2_ENABLE_GOOGLE_SHEETS_INTAKE` はすべてtrue。
+- Cloud Run stdout/stderrには`Toreca Vault V2 API listening on 8080`のみが表示され、失敗の内部例外が分からなかった。コード調査の結果、`cloud/src/server.js`のIntake APIは内部の`catch {}`で原因を記録せずにHTTP 503 `Google Sheets intake failed`へ変換しており、根本原因の識別ができない。**403権限エラー、Sheetsメタデータ不一致、Firestore cursor/queue、receipt照合失敗などのどれが原因かは未確定**。単に500/503の応答だけで特定してはならない。
+- **変更**：`cloud/src/worker-error-diagnostics.js` を新規追加。Intake本体と最終receipt同期を`intake/reconciliation`の2段階に分け、Sheets認証/権限/429/5xx/シート不一致、Firestore権限/索引、cursor、receipt衝突等の**固定エラーコードだけ**をCloud Run内部ログにJSON記録。例外本文・トークン・URL・取引情報・メールアドレス・正本データを出力しない。外部HTTPレスポンスは従来の汎用503のまま。
+- **テスト**：`cloud/test/worker-error-diagnostics.test.js` に機密値の無漏えい・安全な段階/理由コード・wrapped causeの分類を追加し、npm test/checkに組み込んだ。コードとCIの状態を確認してからだけ次のステップへ進める。
+- **実環境**：この診断は現在の旧active revisionにも、すでに0%でstage済みの旧候補revisionにも未配備。新コードをテスト後に0%で再stageし、候補認証/Google Sheets/Firestore設定を検証する。**完了前にpromoteしない・Schedulerを手動実行しない・既存new/queuedを再投入しない。** ユーザーのコマンド作業を繰り返さないよう可能な範囲はこのWorkで続ける。
+
+
+### 2026-11-14 JST — 旧API Sheets intake 500/503の一括診断を追加
+
+- 2026-11-14にユーザーがAndroid Cloud Shellで確認：旧revision`toreca-vault-staging-00004-nfr`の`/internal/worker/sheets-intake`が15分ごとにHTTP 503、時折500。Scheduler 2ジョブは有効。旧revisionの4フラグは全true。稼働中の旧APIは正常動作していない。新`00005`は0%の安全な候補として配置済み、まだ切替なし。
+- `cloud/scripts/diagnose-intake-staging.py`をGitHubブランチへ追加。本人がCloud Shellで一度だけ`git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py`を実行すれば、稼働Cloud Run SAからの専用Sheetsメタデータ・受付D:G、Firestore正本/カーソル、Scheduler OIDC/URLと最近の5xx件数を安全な要約だけで検査。原本/旧V2/Cloud Run設定に書かず、workerを発火しない。本人にSAのimpersonation権限がなければ失敗として止める。**IAMを公開化・権限付与しない**。
+- `cloud/test/test_diagnose_intake_staging.py`をnpm testに追加。認証不全・対象シート違い・OIDC食い違い・秘密保持・書込みしない構造をモックで検証。通常Node test/Firestore Emulator CIの成功を確認してから使用。
+- 現時点で実際の503根本原因、最新API候補のScheduler動作、Chat→Firestore→スマホの実E2Eは未確認。日常Chat運用開始と称しない。
+
+
+### 2026-11-14 JST — Intake診断実行：Cloud Shell代理認証が停止、GDrive共有設定は別途確認
+
+- Android Cloud Shellから `cloud/scripts/diagnose-intake-staging.py` を実行：`PASS` staging project / 稼働中100%トラフィックのCloud Run revision / 必須4フラグ、`PASS` Scheduler IntakeのOIDC、URL、HTTP methodがAPI側と一致。直近24hにも503が継続。**APIの500/503の根本原因は未確定**。
+- 診断は`BLOCKED: could not impersonate Cloud Run service identity for read-only checks`で停止。これは**Cloud Shell操作ユーザーがサービスアカウントの一時アクセストークンを取得できなかった**という診断権限の制限であり、**実行中Cloud Run自身のGoogle Sheets/Firestore権限不足の証明ではない**。安易にService Account Token Creator等の権限付与を行わない。Cloud RunとIntakeを公開しない。
+- 接続済みGoogle Driveの`Toreca Vault New App Intake`メタデータを直接確認し、**Googleサービスアカウント1件にwriter共有権限がある**ことを確認。ただしこのアカウントが稼働中revisionの`spec.serviceAccountName`と同一かは未照合。共有権限の有無だけでSheetsアクセス成功は断定できない。
+- 新revision`00005`は0%トラフィックのまま。Cloud Run/Schedulerの設定変更・Firestore/Sheet書込み・未処理報告の再投入は実施していない。次の調査では、稼働中SAとIntake writerの同一性を**読み取り専用で照合**し、実行時権限の問題とAPI処理の問題を切り分ける。
+
+
+### 2026-11-14 JST — 稼働中Cloud RunとIntake編集者の同一性を確認
+
+- Android Cloud Shellで稼働中revision `toreca-vault-staging-00004-nfr` のサービスアカウントとGoogle Sheetsの`Toreca Vault New App Intake`にwriter共有済みのサービスアカウントの照合を実施し、**MATCH**を確認した。
+- このWorkからGoogle Driveファイル権限を読み、共有先はユーザーownerとGoogleサービスアカウントwriterの2件を確認。**アカウントの不一致とシート未共有という原因候補は除外**できる。ただしOAuthスコープ、Sheets API、実際のCloud Run権限・Firestoreアクセスが成功する証明にはならない。
+- 前の`BLOCKED: could not impersonate Cloud Run service identity`はCloud Shellユーザーの代理トークン発行権限不足であり、稼働中Cloud Runサービスアカウント自体の権限不足ではない。**IAMのToken Creator付与や一般公開を行わない**。
+- 2026-11-14に接続済みIntake!A1:G22を再読。受付8行で`v2-applied`1、`queued`1、`new`3、`review`3。8行すべてのA列requestIdとB列JSON requestId一致・JSON構文は有効。よって「入力行全件のJSONが壊れて503」という説は支持されない。業務内容/購入原価/個人情報は記録していない。
+- 15分間隔で`/internal/worker/sheets-intake`にHTTP500/503が継続している根本原因は依然未特定。現在のコードでは `sheetsIntakeWorker`失敗を503として返し、候補版に`worker-error-diagnostics.js`の固定コード分類ログが用意されている。candidate 0%を本番切替せず、候補の検証とFirestore/Sheets実行時アクセスを安全に確かめることが次のゲート。実データ変更・Scheduler手動runは未実施。
+
+
+### 2026-11-14 JST — Intake 500/503調査セッションの記録
+
+- 調査開始時のPR #105 branch head `dccc15fda0048e9ba39efcd53b7b9278217f40cc` とCI run #43593537098（v2-ci、success）を確認。PR #105/#106はDraft/openのまま。CI successはCloud Runの稼働確認を意味しない。
+- 接続済みIntakeの読み取り結果は `v2-applied=1 / queued=1 / new=3 / review=3`。既存行を再投入・編集していない。旧V2および未処理売却8件にも書込みなし。
+- PR #105の最新コードには固定reasonCodeによるIntake例外分類があるが、稼働revisionへの適用と実ログの読み取りは未確認。HTTP 500/503の根本原因、staging canonical反映、Android UI E2Eは未解決。
+- このWork環境ではCloud Shellが利用不可で、認証済みGCP CLI/Cloud Run/Firestore接続もなかったため、read-only実環境診断は行えていない。今回、デプロイ・Scheduler実行・IAM/traffic変更は行わず、通常Chatデータの投入もしていない。
+- 続きは認証済みGCP経路でserving revisionを再読し、原因を特定してから安全なcandidate検証へ進む。既存行の再送、旧V2書込み、未処理売却の再投入は禁止。
+
+
+### 2026-11-14 JST — Android Cloud Shell evidence follow-up
+
+- User-provided screenshot confirms Android Cloud Shell is available; the previous browser's Site Unavailable was specific to the Work browser. A fresh clone was used after an initial git pull from outside a repository failed.
+- The chained command `android-staging-launch.sh stage && diagnose-intake-staging.py` reached diagnosis, implying stage exited successfully. Stage mode deploys private `chat-candidate` at 0% traffic. The exact candidate revision is not visible in the screenshot; promotion is not confirmed.
+- Read-only diagnosis: active 100%-traffic revision/project/gates PASS; Scheduler OIDC, endpoint, method match; 30 HTTP 500/503 in the prior 24 hours. Service identity impersonation was BLOCKED; no IAM changes. No internal worker reason code was obtained, so root cause remains unresolved.
+- No worker POST or manual Scheduler run. Existing Intake rows and old V2 were not changed. Continue via read-only runtime evidence without processing existing new/queued rows.
+
+
+### 2026-11-14 JST — Cloud Run traffic readback follow-up
+
+- User screenshot of the read-only traffic query confirms `toreca-vault-staging-00004-nfr` at 100% and `toreca-vault-staging-00005-foq` tagged `chat-candidate`; treat the tagged candidate as 0% traffic. The candidate revision identity is now verified and has not been promoted.
+- No candidate worker execution/reasonCode was observed; the active revision's 500/503 cause remains unknown. The Code OSS agent restart notification is separate from Cloud Run status.
+
+
+### 2026-11-14 JST — read-only candidate Intake health probe
+
+- The user-provided candidate `/health` result confirms Firestore canonical can be read and is initialized. Candidate scheduler health is stale because the candidate is at zero traffic; this does not diagnose active revision execution.
+- PR #105 commit `9d48594936aa865bc277bb8321f1480d83aa31f3` adds a private GET `/health/intake` that uses the Cloud Run runtime identity to read only Sheet metadata/header A1:G1 and the Firestore cursor. It returns fixed categories only and does not inspect report rows, call the worker, or write data.
+- The Android launcher's stage mode now runs this read-only probe automatically after zero-traffic deployment. Once CI succeeds, one command from the existing repo root updates and stages the candidate: `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage`. It never promotes or manually runs Scheduler.
+- CI run #43598298266 passed tests and Firestore Emulator. This does not resolve the active revision's 500/503 yet. The read-only candidate probe must run first; even a pass does not prove write/queue processing or Chat-to-UI E2E. No Intake rows, old V2, pending sales, IAM or active traffic changed.
+
+
+## 2026-11-14 JST — zero-traffic candidate Intake read probe passed
+
+- User ran the single Cloud Shell stage command. Cloud Run deployed revision `toreca-vault-staging-00006-lug` tagged `chat-candidate` at 0% traffic; active API traffic stayed on the prior revision.
+- The candidate's automatic private read-only `GET /health/intake` returned `HTTP 200` and `{ok:true,sheetsReadable:true,cursorReadable:true}`. This proves runtime identity can read the dedicated Intake sheet metadata/header and Firestore cursor. It does not prove queue writes, receipt writes, scheduler execution, or an Intake row's end-to-end reflection; HTTP 500/503 cause remains open.
+- The prior `/health/scheduler` result had null timestamps because this candidate has no traffic and did not run Scheduler. Do not treat it as a failure of the active revision.
+- No worker/Scheduler was manually invoked, no Intake rows/statuses were changed, and no old V2, pending sale, IAM, or active traffic was changed.
+- Next diagnostic is Cloud Logging for the existing 500/503 with sanitized `stage`/`reasonCode`; do not process or replay the current `new`/ `queued` rows until row-level duplicate mapping and queue/canonical reconciliation are verified. Do not promote the candidate on the read probe alone.
+
+
+## 2026-11-14 JST — active revision HTTP 503 recurrence observed
+
+- User Cloud Logging output shows repeated HTTP 503 request entries on active revision `toreca-vault-staging-00004-nfr`, roughly every 15 minutes, across the displayed window (UTC 2026-11-13 afternoon/evening; JST 2026-11-14 after midnight).
+- The displayed fields contain timestamp, revision, and status only; no `stage`/`reasonCode` was present, so the exact handler failure is still unknown. The pattern is consistent with a recurring Scheduler-triggered request reaching the active revision, but request logs alone do not prove its cause.
+- Candidate `00006-lug` remains tagged at 0% traffic. Its HTTP 200 Intake probe proves metadata/header and cursor reads only. Do not invoke its worker or promote it while existing rows may represent duplicate lottery/receipt events.
+- Next investigation must correlate sanitized application diagnostic logs with these request timestamps, or add a non-mutating diagnostic path. Do not read out raw exception text into shared docs, change Scheduler targets, process Intake rows, or touch old V2/pending sales.
+
+
+## 2026-11-14 JST — sanitized log classification result
+
+- The user's follow-up read-only Cloud Logging command returned only recurring HTTP 503 request rows on revision `toreca-vault-staging-00004-nfr`; every row was `unclassified` because no structured `stage`/`reasonCode` or classifiable application error payload was present in the selected log entries.
+- This is not a root-cause diagnosis. It confirms request-level failures but does not distinguish route authorization, Intake provider, Firestore queue, receipt update, or cursor advance.
+- No worker/Scheduler was invoked by this diagnostic; no Intake row/status, old V2, pending sale, IAM, or active traffic was changed. Do not promote candidate `00006-lug` or manually replay Intake. Further diagnosis requires correlating application logs or a non-mutating failure-stage probe before any data-processing run.
+
+
+## 2026-11-14 JST — retain nested intake failure causes safely
+
+- The failure log review returned only request-level 503 entries and no application stage/reasonCode. Code inspection found an observability gap: the Intake queue-enqueue catch replaced the provider/Firestore error with a generic error, and the fixed-category classifier inspected only one `cause` level.
+- PR #105 branch now preserves the nested cause privately, tags it as the Intake stage, and classifies up to five nested causes into the existing fixed reason-code allowlist. Raw exception messages are still not logged or returned.
+- Commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` is on the development branch. GitHub Actions `v2-ci` run #1026 is in progress; no tests were started manually in this session.
+- Candidate `00006-lug` does not contain this new diagnostic change and remains at 0% traffic. No deploy, worker/Scheduler invocation, Intake row/status change, old V2 write, pending-sale replay, IAM change, or active traffic change was performed. Once CI finishes, the code may be staged at zero traffic; this change alone does not resolve the root cause or authorize processing risky existing rows.
+
+
+## 2026-11-14 JST — diagnostic-classification CI result
+
+- GitHub Actions `v2-ci` run #1026 for commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` completed successfully. This confirms code and Firestore Emulator workflow checks pass for the nested-cause diagnostic change; it does not identify the live 503 cause or validate the deployed runtime.
+- The code is not yet in the deployed zero-traffic candidate: current candidate remains `00006-lug`. Staging the new code requires the existing single Cloud Shell stage command. No worker run or traffic promotion is authorized by CI success.
+
+
+## 2026-11-14 JST — classify Intake authorization 503s safely
+
+- Extended fixed-category logging to the Sheets Intake Scheduler authorization exception path. It records only `stage=authorization` and an allowlisted reasonCode; it never logs the bearer token, raw verifier message, or stack. Combined with nested enqueue-cause retention, the code can distinguish authorization-stage failures from Intake/reconciliation failures once the updated revision receives a safe authenticated diagnostic request.
+- Commit `7dc468f40d2756dfff168edb565bec0453110484`; GitHub Actions `v2-ci` #1029 completed successfully (test and Firestore Emulator jobs).
+- The deployed zero-traffic candidate is still `00006-lug`; this commit is not deployed. No worker/Scheduler request, row mutation, old V2 write, pending-sale replay, IAM change, or traffic promotion occurred. Live HTTP 503 root cause and Chat-to-UI end-to-end reflection remain unverified.
+
+
+## 2026-11-14 JST — staging stopped by local-worktree guard
+
+- User ran `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage` from the development checkout. Pull fast-forwarded to the branch head; the launcher then stopped at its `git status --porcelain` guard with `BLOCKED: local changes must be reviewed before release.`
+- The guard exits before remote-head verification, cost/auth checks, Cloud Run build/deploy, or the candidate health probe. Therefore this attempt made no Cloud Run revision, traffic, IAM, Firestore, Sheets, old V2, or pending-sale changes. Candidate remains `00006-lug` at 0% traffic.
+- The local changes are not identified yet. Inspect with `git status --short`; do not run reset, clean, stash, or checkout commands until each entry is reviewed.
+
+
+## 2026-11-14 JST — staging guard resolved as generated artifacts
+
+- User's `git status --short` output contained only two untracked generated directories: `cloud/node_modules/` and `cloud/scripts/__pycache__/`; no tracked source edits were shown. These were created by earlier dependency/Python runs.
+- Added exact ignore entries for those two paths in `.gitignore` (commit `0b8c54fa9ed3e20e14a674598efff946593854cd`). Existing local files are not deleted. After a fast-forward pull, Git should omit these generated folders from porcelain status and the release guard can proceed, provided no other local changes exist.
+- No stage retry/deployment has run yet. Active traffic remains unchanged and candidate is still `00006-lug` until the user pulls and stages.
+
+
+## 2026-11-14 JST — diagnostic candidate 00007 staged safely
+
+- User's latest Cloud Shell screenshot confirms revision `toreca-vault-staging-00007-yaf` deployed successfully and serves 0% traffic. It is tagged `chat-candidate`; the prior active revision and API traffic remain unchanged.
+- Automatic read-only `GET /health/intake` returned `HTTP 200`, `sheetsReadable=true`, `cursorReadable=true`. This candidate includes the nested-cause and Intake authorization safe-classification changes. The probe does not run the worker or Scheduler and does not test writes or Chat-to-UI reflection.
+- No Intake rows/statuses, old V2, pending sales, IAM, or active traffic changed. The old active revision's recurring 503 root cause remains unknown. Do not promote or trigger processing until a non-mutating reconciliation of the risky existing rows and queue/canonical records is complete.
+
+
+## 2026-11-14 JST — read-only Intake/queue/canonical preview added
+
+- Added a private `GET /health/intake` diagnostic that reads the current bounded Intake page, cursor, correlated Firestore queue receipts/request records/business-event index, and canonical snapshot. It simulates pending receipt-linked commands and current `new` rows against an in-memory copy only, returning counts, row numbers, and a fixed preview outcome/reason code. It never claims leases, enqueues, writes Sheets, advances cursor, or saves canonical state.
+- Response shaping is allowlisted: no request IDs, command JSON, product/store text, tokens, raw exception messages, or stack traces are returned.
+- Code commit `14eca041c6a76124bc247aef2f770d257795ef4f`; GitHub Actions `v2-ci` #1037 completed successfully (test and Firestore Emulator jobs).
+- Deployed candidate `00007-yaf` does not contain this addition and remains at 0% traffic. No worker/Scheduler, row mutation, old V2 write, pending-sale replay, IAM or traffic change was performed. Root cause remains open pending read-only preview on a newly staged candidate.
+
+
+## 2026-11-14 JST — candidate 00008 read-only preview and row-level findings
+
+- User screenshot confirms Cloud Run candidate revision `toreca-vault-staging-00008-jid` deployed with tag `chat-candidate` at 0% traffic. Active API traffic remained unchanged. The private read-only `GET /health/intake` returned HTTP 200.
+- The probe read the current Intake cursor page (rows 5–9), correlated queue receipt/request/business-event records, and initialized canonical state. It reported `sheetsReadable=true`, `cursorReadable=true`, `intakeRowsRead=5`, `cursorNextRow=5`, `queuedReceiptCount=1`, `correlatedReceiptRows=1`, and `canonicalRevision=2926`. These are read-only findings, not proof of write access or worker success.
+- In-memory-only preview: row 6 = `would-apply / preview-clean`; rows 7 and 9 = `review / lottery-identity-missing`. Bounded-page counts were new=3, queued=1, review=1. Whole-Intake status remains 8 rows: v2-applied=1, queued=1, new=3, review=3.
+- Row-level read confirmed rows 7 and 9 contain lottery type, `応募済`, store/title/owner/applicationDate, but no explicit external lottery identity or `evidenceType`. The current parser only creates a confirmed-chat fingerprint when evidenceType is explicitly `screenshot` or `chat-report`; therefore these two rows remain review. Do not invent an external ID or alter the existing rows. Row 8 is already review.
+- GitHub commit `14eca041c6a76124bc247aef2f770d257795ef4f`, Actions `v2-ci` #1037 passed. PR #105 remains Draft/open; PR #106 remains Draft/open.
+- The active revision's recurring HTTP 500/503 is still not root-caused. Its old request logs were `unclassified`; candidate health is GET-only and emits no worker failure reason. Proving receipt/queue/cursor write behavior would require processing, which would mutate existing Intake/canonical state. No worker or Scheduler was triggered.
+- No Intake cells/status, old V2, pending sales, IAM, active traffic, or production settings were changed. Normal Chat → Intake → queue → canonical → Android UI reflection remains unverified.
+- Next safe gate: resolve the evidence provenance for rows 7 and 9 without rewriting those rows; then create an isolated staging-only processing test outside existing Intake/business events to identify write-stage failures. Only after that should a single explicitly reconciled real event be processed and read back end to end. Never replay pending sales or write old V2.
