@@ -1535,3 +1535,9 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - PR #105 branch now preserves the nested cause privately, tags it as the Intake stage, and classifies up to five nested causes into the existing fixed reason-code allowlist. Raw exception messages are still not logged or returned.
 - Commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` is on the development branch. GitHub Actions `v2-ci` run #1026 is in progress; no tests were started manually in this session.
 - Candidate `00006-lug` does not contain this new diagnostic change and remains at 0% traffic. No deploy, worker/Scheduler invocation, Intake row/status change, old V2 write, pending-sale replay, IAM change, or active traffic change was performed. Once CI finishes, the code may be staged at zero traffic; this change alone does not resolve the root cause or authorize processing risky existing rows.
+
+
+## 2026-11-14 JST — diagnostic-classification CI result
+
+- GitHub Actions `v2-ci` run #1026 for commit `4d9029aa388eb9bca033ab30ad9188f39a431a72` completed successfully. This confirms code and Firestore Emulator workflow checks pass for the nested-cause diagnostic change; it does not identify the live 503 cause or validate the deployed runtime.
+- The code is not yet in the deployed zero-traffic candidate: current candidate remains `00006-lug`. Staging the new code requires the existing single Cloud Shell stage command. No worker run or traffic promotion is authorized by CI success.
