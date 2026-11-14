@@ -1548,3 +1548,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Extended fixed-category logging to the Sheets Intake Scheduler authorization exception path. It records only `stage=authorization` and an allowlisted reasonCode; it never logs the bearer token, raw verifier message, or stack. Combined with nested enqueue-cause retention, the code can distinguish authorization-stage failures from Intake/reconciliation failures once the updated revision receives a safe authenticated diagnostic request.
 - Commit `7dc468f40d2756dfff168edb565bec0453110484`; GitHub Actions `v2-ci` #1029 completed successfully (test and Firestore Emulator jobs).
 - The deployed zero-traffic candidate is still `00006-lug`; this commit is not deployed. No worker/Scheduler request, row mutation, old V2 write, pending-sale replay, IAM change, or traffic promotion occurred. Live HTTP 503 root cause and Chat-to-UI end-to-end reflection remain unverified.
+
+
+## 2026-11-14 JST — staging stopped by local-worktree guard
+
+- User ran `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage` from the development checkout. Pull fast-forwarded to the branch head; the launcher then stopped at its `git status --porcelain` guard with `BLOCKED: local changes must be reviewed before release.`
+- The guard exits before remote-head verification, cost/auth checks, Cloud Run build/deploy, or the candidate health probe. Therefore this attempt made no Cloud Run revision, traffic, IAM, Firestore, Sheets, old V2, or pending-sale changes. Candidate remains `00006-lug` at 0% traffic.
+- The local changes are not identified yet. Inspect with `git status --short`; do not run reset, clean, stash, or checkout commands until each entry is reviewed.
