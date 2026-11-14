@@ -30,7 +30,7 @@ chmod 700 "$WORKDIR"
 gcloud run services describe "$SERVICE" --project="$PROJECT" --region="$REGION" \
   --format=json > "$WORKDIR/service.json"
 python3 - "$WORKDIR/service.json" <<'PY'
-import json, sys
+import json, sys, hashlib
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 container = data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
 if not container:
@@ -42,7 +42,8 @@ if values.get("TV2_FIRESTORE_DOCUMENT") != "torecaVaultStaging/canonical":
     raise SystemExit("BLOCKED: canonical document not the dedicated staging path")
 if "TV2_API_TOKEN" not in values:
     raise SystemExit("BLOCKED: API token binding missing")
-if values.get("TV2_NEW_APP_INTAKE_SPREADSHEET_ID") != "14rWGcmJnqFOdh9VfTlHZvC5wjcBdsW0D5XvYh8DQOAc":
+sheet_id = values.get("TV2_NEW_APP_INTAKE_SPREADSHEET_ID", "")
+if not isinstance(sheet_id, str) or hashlib.sha256(sheet_id.encode("utf-8")).hexdigest() != "a191bc306fcfb2898af83fd66f72808f9f1a4b553805319cbf62e80fb29565ad":
     raise SystemExit("BLOCKED: wrong intake sheet binding")
 if not values.get("TV2_SCHEDULER_AUDIENCE") or not values.get("TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL"):
     raise SystemExit("BLOCKED: OIDC config not present")
@@ -99,6 +100,18 @@ fi
   exit 2
 }
 command -v node >/dev/null || { echo "BLOCKED: node required." >&2; exit 2; }
+# Extract the private spreadsheet binding only into this process environment.
+export TV2_NEW_APP_INTAKE_SPREADSHEET_ID="$(python3 - "$WORKDIR/service.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+containers = data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+if not containers:
+    containers = data.get("template", {}).get("containers", [])
+match = next((e.get("value", "") for e in containers[0].get("env", [])
+              if e.get("name") == "TV2_NEW_APP_INTAKE_SPREADSHEET_ID"), "")
+print(match)
+PY
+)"
 node cloud/scripts/preflight-chat-staging.js
 gcloud run services describe "$SERVICE" --project="$PROJECT" \
   --region="$REGION" --format=json > "$WORKDIR/candidate.json"
