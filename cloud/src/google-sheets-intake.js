@@ -71,7 +71,7 @@ function parseIdentity(value, command) {
   return { businessEventKey: resolved.businessEventKey };
 }
 
-function parseInputRow(row) {
+export function parseGoogleSheetsIntakeRow(row) {
   const requestId = String(row.values?.[0] ?? '').trim();
   if (!REQUEST_ID_PATTERN.test(requestId)) throw Object.assign(new Error('request ID is invalid'), { reasonCode: 'invalid-request-id' });
   const command = parseJsonCell(row.values?.[1], 'command');
@@ -134,7 +134,7 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
       result.seen++;
       let parsed;
       try {
-        parsed = parseInputRow(row);
+        parsed = parseGoogleSheetsIntakeRow(row);
       } catch (error) {
         await provider.writeReceipt(row.rowNumber, {
           status: 'review',
