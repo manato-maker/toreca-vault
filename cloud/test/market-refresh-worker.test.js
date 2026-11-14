@@ -198,3 +198,32 @@ test('retail MSRP, mismatched units, missing original posting or expired shop of
     assert.equal(quote.fresh, false);
   }
 });
+
+
+test('new verified shop offer preserves another shop posting for future comparison', async () => {
+  const state = sampleState();
+  const target = { targetKey: marketTargetKey({ category: 'BOX', productKey: 'box-x', condition: 'あり' }),
+    productKey: 'box-x', category: 'BOX', condition: 'あり' };
+  state.marketQuotes = [{
+    ...sourcedBuyback(target, 1200), priceBasis: 'buyback',
+    lastCheckedAt: '2026-11-07T03:00:00.000Z', fresh: true
+  }];
+  const offer = {
+    ...sourcedBuyback(target, 1300), source: 'トレカショップKURO',
+    sourceStore: 'トレカショップKURO',
+    postUrl: 'https://x.com/kuro_tcg/status/1234567890123456780'
+  };
+  const store = memoryStore(state);
+  const result = await refreshMarketQuotes({
+    store, mutationId: 'market-refresh:2026-11-07',
+    runAt: '2026-11-07T04:45:00.000Z',
+    provider: { async lookupMany() { return [offer]; } }
+  });
+  assert.equal(result.refreshedCount, 1);
+  const quotes = (await store.read()).payload.marketQuotes;
+  assert.equal(quotes.length, 2);
+  assert.equal(quotes[0].sourceStore, '買取ミミ');
+  assert.equal(quotes[0].price, 1200);
+  assert.equal(quotes[1].sourceStore, 'トレカショップKURO');
+  assert.equal(quotes[1].price, 1300);
+});
