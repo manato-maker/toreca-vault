@@ -1155,3 +1155,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト**: `cloud/test/verified-buyback-import.test.js`、`cloud/test/buyback-quotes.test.js`、`cloud/test/market-refresh-worker.test.js` に同店舗値下げ・異店舗比較・矛盾の保留・原価/定価の拒否・旧投稿の無効化・Dry-run/Apply/idempotence/衝突・Firebase保存後readbackを検証するテストを追加。CIのtestとFirestore Emulatorを通す。
 - **一次価格調査**: 2026-11-14 JST時点で買取ミミ、アリウム、KUROの公式Xプロフィールは確認したが、Webの公開検索だけでは**11/14本人投稿の原文・画像・具体的な当日額・適用期限を独立に照合できなかった**。大阪日本橋の外部比較ページは11/13更新であり、その価格を11/14の最新実額として採用しない。古い元投稿未確認の買取画像は学習資料に限定。現行Firestore市場価格への書込みは今回も未実施。
 - **実環境**: GitHub PR #105の作業ブランチにのみ実装。Firebase接続などGCP認証が成立すれば `docs/BUYBACK_IMPORT_RUNBOOK.md` の手順で別途staging readbackを行う。API・Firestore・スマホUIは現在未デプロイ/未更新。旧V2の在庫・売却8件・原価・キューには触れていない。
+
+
+### 2026-11-14 JST — Intake 500/503調査セッションの記録
+
+- 調査開始時のPR #105 branch head `dccc15fda0048e9ba39efcd53b7b9278217f40cc` とCI run #43593537098（v2-ci、success）を確認。PR #105/#106はDraft/openのまま。CI successはCloud Runの稼働確認を意味しない。
+- 接続済みIntakeの読み取り結果は `v2-applied=1 / queued=1 / new=3 / review=3`。既存行を再投入・編集していない。旧V2および未処理売却8件にも書込みなし。
+- PR #105の最新コードには固定reasonCodeによるIntake例外分類があるが、稼働revisionへの適用と実ログの読み取りは未確認。HTTP 500/503の根本原因、staging canonical反映、Android UI E2Eは未解決。
+- このWork環境ではCloud Shellが利用不可で、認証済みGCP CLI/Cloud Run/Firestore接続もなかったため、read-only実環境診断は行えていない。今回、デプロイ・Scheduler実行・IAM/traffic変更は行わず、通常Chatデータの投入もしていない。
+- 続きは認証済みGCP経路でserving revisionを再読し、原因を特定してから安全なcandidate検証へ進む。既存行の再送、旧V2書込み、未処理売却の再投入は禁止。
