@@ -1447,3 +1447,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **変更**：`cloud/src/worker-error-diagnostics.js` を新規追加。Intake本体と最終receipt同期を`intake/reconciliation`の2段階に分け、Sheets認証/権限/429/5xx/シート不一致、Firestore権限/索引、cursor、receipt衝突等の**固定エラーコードだけ**をCloud Run内部ログにJSON記録。例外本文・トークン・URL・取引情報・メールアドレス・正本データを出力しない。外部HTTPレスポンスは従来の汎用503のまま。
 - **テスト**：`cloud/test/worker-error-diagnostics.test.js` に機密値の無漏えい・安全な段階/理由コード・wrapped causeの分類を追加し、npm test/checkに組み込んだ。コードとCIの状態を確認してからだけ次のステップへ進める。
 - **実環境**：この診断は現在の旧active revisionにも、すでに0%でstage済みの旧候補revisionにも未配備。新コードをテスト後に0%で再stageし、候補認証/Google Sheets/Firestore設定を検証する。**完了前にpromoteしない・Schedulerを手動実行しない・既存new/queuedを再投入しない。** ユーザーのコマンド作業を繰り返さないよう可能な範囲はこのWorkで続ける。
+
+
+### 2026-11-14 JST — 旧API Sheets intake 500/503の一括診断を追加
+
+- 2026-11-14にユーザーがAndroid Cloud Shellで確認：旧revision`toreca-vault-staging-00004-nfr`の`/internal/worker/sheets-intake`が15分ごとにHTTP 503、時折500。Scheduler 2ジョブは有効。旧revisionの4フラグは全true。稼働中の旧APIは正常動作していない。新`00005`は0%の安全な候補として配置済み、まだ切替なし。
+- `cloud/scripts/diagnose-intake-staging.py`をGitHubブランチへ追加。本人がCloud Shellで一度だけ`git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py`を実行すれば、稼働Cloud Run SAからの専用Sheetsメタデータ・受付D:G、Firestore正本/カーソル、Scheduler OIDC/URLと最近の5xx件数を安全な要約だけで検査。原本/旧V2/Cloud Run設定に書かず、workerを発火しない。本人にSAのimpersonation権限がなければ失敗として止める。**IAMを公開化・権限付与しない**。
+- `cloud/test/test_diagnose_intake_staging.py`をnpm testに追加。認証不全・対象シート違い・OIDC食い違い・秘密保持・書込みしない構造をモックで検証。通常Node test/Firestore Emulator CIの成功を確認してから使用。
+- 現時点で実際の503根本原因、最新API候補のScheduler動作、Chat→Firestore→スマホの実E2Eは未確認。日常Chat運用開始と称しない。
