@@ -165,7 +165,7 @@ def check_reads(token, sheet):
     meta = ("https://sheets.googleapis.com/v4/spreadsheets/"
             + urllib.parse.quote(sheet, safe="")
             + "?fields=properties.title,sheets.properties.title")
-    status, body = api_request(meta, token, user_project=PROJECT)
+    status, body = api_request(meta, token)
     if status != 200 or not isinstance(body, dict):
         print("BLOCKED: Cloud Run identity cannot read Intake metadata; HTTP " + str(status))
         return False
@@ -180,7 +180,7 @@ def check_reads(token, sheet):
     uri = ("https://sheets.googleapis.com/v4/spreadsheets/"
            + urllib.parse.quote(sheet, safe="") + "/values/" + page
            + "?valueRenderOption=UNFORMATTED_VALUE")
-    status, result = api_request(uri, token, user_project=PROJECT)
+    status, result = api_request(uri, token)
     if status != 200 or not isinstance(result, dict):
         print("BLOCKED: Cloud Run identity cannot read Intake receipt rows; HTTP " + str(status))
         return False
@@ -196,7 +196,7 @@ def check_reads(token, sheet):
     base = ("https://firestore.googleapis.com/v1/projects/" + PROJECT
             + "/databases/(default)/documents/")
     canonical_uri = base + urllib.parse.quote(CANONICAL, safe="/") + "?fields=name"
-    status, _ = api_request(canonical_uri, token, user_project=PROJECT)
+    status, _ = api_request(canonical_uri, token)
     if status != 200:
         print("BLOCKED: Cloud Run identity cannot read staging canonical; HTTP " + str(status))
         return False
@@ -205,7 +205,7 @@ def check_reads(token, sheet):
     cursor_id = hashlib.sha256(sheet.encode("utf-8")).hexdigest()
     cursor_uri = (base + "torecaVaultNewAppIntakeCursors/"
                   + cursor_id + "?fields=name")
-    status, _ = api_request(cursor_uri, token, user_project=PROJECT)
+    status, _ = api_request(cursor_uri, token)
     if status not in (200, 404):
         print("BLOCKED: Cloud Run identity cannot read Firestore intake cursor; HTTP " + str(status))
         return False
