@@ -45,18 +45,21 @@ function shopFor(quote) {
 function compatible(quote, lot) {
   if (!quote || !lot || !shopFor({ ...quote, category: lot.category })) return false;
   if (String(quote.basis || quote.priceBasis || quote.priceKind || '').match(NON_BUYBACK)) return false;
-  if (quote.lotId) {
-    if (String(quote.lotId) !== String(lot.id || '')) return false;
-  } else {
-    if (!quote.category || String(quote.category) !== String(lot.category)) return false;
-    if (normalize(quote.productKey || quote.product) !== normalize(lot.productKey || lot.product)) return false;
-  }
+  // lotId is only a supplementary correlation ID. It must never override
+  // a contradictory product, category or selling unit supplied by a shop.
+  if (!quote.category || String(quote.category) !== String(lot.category)) return false;
+  if (quote.lotId && String(quote.lotId) !== String(lot.id || '')) return false;
+  const quoteProduct = normalize(quote.productKey || quote.product);
+  const lotProduct = normalize(lot.productKey || lot.product);
+  if (!quote.lotId && (!quoteProduct || quoteProduct !== lotProduct)) return false;
+  if (quote.lotId && quoteProduct && quoteProduct !== lotProduct) return false;
   // Do not apply a shrink price to a no-shrink item, and do not reuse
   // case/carton prices for individual BOX or packs.
   const unit = String(quote.unit || quote.salesUnit || '').toLowerCase();
   if ((unit === 'case' || unit === 'carton' || unit === 'カートン') && lot.category !== 'カートン') return false;
   if (unit && (unit === 'pack' || unit === 'パック') && lot.category !== 'パック') return false;
   if (unit && (unit === 'box' || unit === 'box単品') && lot.category !== 'BOX') return false;
+  if (unit && (unit === 'card' || unit === 'カード') && lot.category !== 'カード') return false;
   if (quote.condition === undefined || quote.condition === null || String(quote.condition).trim() === '') {
     if (lot.condition) return false;
   } else if (conditionKey(quote.condition) !== conditionKey(lot.condition)) return false;
