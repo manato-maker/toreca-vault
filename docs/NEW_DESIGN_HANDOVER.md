@@ -1195,3 +1195,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The prior `/health/scheduler` result had null timestamps because this candidate has no traffic and did not run Scheduler. Do not treat it as a failure of the active revision.
 - No worker/Scheduler was manually invoked, no Intake rows/statuses were changed, and no old V2, pending sale, IAM, or active traffic was changed.
 - Next diagnostic is Cloud Logging for the existing 500/503 with sanitized `stage`/`reasonCode`; do not process or replay the current `new`/ `queued` rows until row-level duplicate mapping and queue/canonical reconciliation are verified. Do not promote the candidate on the read probe alone.
+
+
+## 2026-11-14 JST — active revision HTTP 503 recurrence observed
+
+- User Cloud Logging output shows repeated HTTP 503 request entries on active revision `toreca-vault-staging-00004-nfr`, roughly every 15 minutes, across the displayed window (UTC 2026-11-13 afternoon/evening; JST 2026-11-14 after midnight).
+- The displayed fields contain timestamp, revision, and status only; no `stage`/`reasonCode` was present, so the exact handler failure is still unknown. The pattern is consistent with a recurring Scheduler-triggered request reaching the active revision, but request logs alone do not prove its cause.
+- Candidate `00006-lug` remains tagged at 0% traffic. Its HTTP 200 Intake probe proves metadata/header and cursor reads only. Do not invoke its worker or promote it while existing rows may represent duplicate lottery/receipt events.
+- Next investigation must correlate sanitized application diagnostic logs with these request timestamps, or add a non-mutating diagnostic path. Do not read out raw exception text into shared docs, change Scheduler targets, process Intake rows, or touch old V2/pending sales.
