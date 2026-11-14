@@ -92,6 +92,9 @@ function confirmed(quote, shop, nowMs) {
   if (quote.quoteType === 'pickup_limited' && quote.availabilityConfirmed !== true) return false;
   const url = validSourceUrl(quote, shop);
   if (!url) return false;
+  // Current X quotes require the actual post time with an explicit zone.
+  // A photo's "11/14 update" caption by itself cannot prove post recency.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(String(quote.postedAt || ''))) return false;
   const posted = stamp(quote.postedAt);
   if (posted === null || posted > nowMs + 10 * 60 * 1000) return false;
   const validUntil = stamp(quote.validUntil);
@@ -149,7 +152,8 @@ export function buybackForLot(quotes, lot, now = new Date()) {
   if (live.length) {
     return { status: 'current', quote: live[0], price: quotePrice(live[0]) };
   }
-  const historical = matches.filter(q => stamp(q.postedAt || q.quotedAt || q.checkedAt) !== null);
+  const historical = matches.filter(q => ['verified', 'superseded', 'expired'].includes(String(q.status || '').toLowerCase())
+    && !!buybackSourceUrl(q) && stamp(q.postedAt || q.quotedAt || q.checkedAt) !== null);
   historical.sort((a, b) => (stamp(b.postedAt || b.quotedAt || b.checkedAt) || 0)
     - (stamp(a.postedAt || a.quotedAt || a.checkedAt) || 0));
   const old = historical[0] || null;
