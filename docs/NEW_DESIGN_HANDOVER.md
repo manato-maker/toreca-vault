@@ -1145,3 +1145,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト**：`cloud/test/buyback-quotes.test.js`（定価・原価流用なし、シュリンク/販売単位不一致、期限切れ、原価不明、出典URL）、`cloud/test/market-refresh-worker.test.js`（公式定価や条件欠損拒否）、`cloud/test/dashboard.test.js`を更新。CIでNode testとFirestore Emulator成功。
 - **外部情報の注意**：11月13日付の店舗比較表には、ポケカ30th CELEBRATION 1BOXアリウム/KUROシュリンクあり18,500円、なし17,500円の掲載がある。これは**11月14日の公式X投稿の当日価格を確認できたことを意味しない**ため、実在庫の現行quoteとしては自動投入しない。店舗本人の投稿URL・有効性・商品・状態が確認できなければreviewにする。
 - **実運用の境界**：今回のコードと引き継ぎはPR #105作業ブランチへ反映したが、Cloud Run stagingへのデプロイ・Firestore.marketQuotes実データの値更新・スマホ実機でのreadbackは**このスレッドの権限では未実施**。既存の原価・在庫・購入/売却履歴・旧V2正本/キューは変更していない。市場の最新有効投稿データ取得と認証済みGCPからの更新・再デプロイが必要。
+
+### 2026-11-14 JST — 店舗別の参考買取価格・検証済み価格の手動取込経路を追加
+
+- **依頼**: 「続けて」。参考買取価格を定価で代用しない修正を発展させ、3店舗の元投稿を確認できた場合に日常運用しやすい保存・表示経路を実装。
+- **実装**: `cloud/src/buyback-quotes.js` は同一店の複数投稿から**投稿日時の新しい方**を採り、同一日時で矛盾する額はその店舗を参考評価から除外しreview。現行有効提示だけを他店と比較。旧価格の履歴表示も `verified/expired/superseded` と元投稿が検証可能なものだけに限定し、日付だけの値や未検証投稿を「最新」と偽らない。
+- **画面**: `cloud/src/dashboard-view.js` に在庫ロットごとの「店舗別の有効な参考買取価格」を表示。最大4店の店名・円額・元X投稿リンクを添え、参考買取評価額は有効な提示の最高値のみ。定価・原価・実売却額との混同なし。
+- **保存**: `cloud/src/market-refresh-worker.js` は店をまたいで`marketQuotes`を上書きしないよう保存先を分離。実X provider/OCRは未接続。コード側で追加可能にした `cloud/src/verified-buyback-import.js` と `cloud/scripts/import-verified-buyback.js` は認証済みCloud Shell専用の手動verified価格インポート。最初にrevisionと証拠のdry-runを作り、本人の承認・バックアップ確認後の明示applyのみCASで保存し、canonicalを再読して在庫/取引/抽選に変化がないことを検証。元投稿URL・投稿日・状態・販売単位・商品名が曖昧なら拒否し、旧投稿は履歴として残す。元Xへのアクセス・実在/金額の検証自体は別途人手で必要。
+- **テスト**: `cloud/test/verified-buyback-import.test.js`、`cloud/test/buyback-quotes.test.js`、`cloud/test/market-refresh-worker.test.js` に同店舗値下げ・異店舗比較・矛盾の保留・原価/定価の拒否・旧投稿の無効化・Dry-run/Apply/idempotence/衝突・Firebase保存後readbackを検証するテストを追加。CIのtestとFirestore Emulatorを通す。
+- **一次価格調査**: 2026-11-14 JST時点で買取ミミ、アリウム、KUROの公式Xプロフィールは確認したが、Webの公開検索だけでは**11/14本人投稿の原文・画像・具体的な当日額・適用期限を独立に照合できなかった**。大阪日本橋の外部比較ページは11/13更新であり、その価格を11/14の最新実額として採用しない。古い元投稿未確認の買取画像は学習資料に限定。現行Firestore市場価格への書込みは今回も未実施。
+- **実環境**: GitHub PR #105の作業ブランチにのみ実装。Firebase接続などGCP認証が成立すれば `docs/BUYBACK_IMPORT_RUNBOOK.md` の手順で別途staging readbackを行う。API・Firestore・スマホUIは現在未デプロイ/未更新。旧V2の在庫・売却8件・原価・キューには触れていない。
