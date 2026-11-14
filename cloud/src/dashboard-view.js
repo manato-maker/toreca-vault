@@ -95,7 +95,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
   const lotteries = Array.isArray(snapshot.lotteries) ? snapshot.lotteries : [];
   const quotes = Array.isArray(snapshot.marketQuotes) ? snapshot.marketQuotes : [];
-  let cost = 0, buybackTotal = 0, comparableCost = 0, pricedCount = 0;
+  let cost = 0, buybackTotal = 0, comparableBuyback = 0, comparableCost = 0, pricedCount = 0;
   let noPrice = 0, unknownCost = 0, comparableQuantity = 0;
   const categoryTotals = { 'BOX': 0, 'パック': 0, 'カード': 0 };
   const pickedByLot = new Map();
@@ -110,6 +110,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       buybackTotal += picked.price * quantity;
       pricedCount += quantity;
       if (known(lot.unitCost)) {
+        comparableBuyback += picked.price * quantity;
         comparableCost += num(lot.unitCost) * quantity;
         comparableQuantity += quantity;
       }
@@ -203,7 +204,7 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 <div class="metrics">
 ${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
-${metric('参考評価差額',comparableQuantity ? money(buybackTotal - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
+${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
