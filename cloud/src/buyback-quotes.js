@@ -141,7 +141,7 @@ export function buybackOffersForLot(quotes, lot, now = new Date()) {
     if (!shop || !validSourceUrl(quote, shop)
       || !['verified', 'expired', 'superseded', 'unavailable'].includes(String(quote.status || '').toLowerCase())) continue;
     const posted = String(quote.postedAt || '');
-    if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(posted)
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(posted)
       || stamp(posted) === null || stamp(posted) > nowMs + 10 * 60 * 1000) continue;
     if (!groups.has(shop.key)) groups.set(shop.key, []);
     groups.get(shop.key).push({ quote, shop, postedAtMs: stamp(posted) });
