@@ -98,6 +98,17 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
             || (current.businessEventKeyHash || '') !== businessEventKeyHash) {
             return { status: 'collision', accepted: false };
           }
+          // A queue record may have originated from an API request, a Gmail
+          // outbox or a DIFFERENT Intake row. Treating that record as an
+          // accepted Sheets retry would leave the source row queued forever,
+          // because the existing record has no matching receipt correlation.
+          // A real replay must retain the same source sheet and row.
+          const priorReceipt = current.intakeReceipt || null;
+          if (intakeReceipt &&
+            (!priorReceipt || priorReceipt.spreadsheetIdHash !== intakeReceipt.spreadsheetIdHash
+              || priorReceipt.rowNumber !== intakeReceipt.rowNumber)) {
+            return { status: 'collision', accepted: false };
+          }
           if (eventSnapshot?.exists) {
             const event = eventSnapshot.data();
             if (event.requestId !== requestId.trim() || event.businessPayloadHash !== businessPayloadHash) {
