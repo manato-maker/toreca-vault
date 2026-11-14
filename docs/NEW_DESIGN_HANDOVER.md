@@ -1134,3 +1134,14 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **実環境の確認**：接続済み専用Google Sheets IntakeのD:Gを再読。状態は`v2-applied/canonical-readback-verified` 1件、`queued`1件、`new`3件、`review`3件。既存行を更新せず、未処理レコードを別requestIdで再投入しなかった。**実環境のワーカー/Schedulerが動くことは依然未証明**。
 - **重要な制約**：この会話のGitHub/Google Drive接続は有効だが、**Google Cloud Console/Cloud Run/Cloud Scheduler/Cloud Billing/Firestoreに対する認証付き操作ツールは未提供**。このため`check→stage→promote`コマンドはCloud Shellで未実行。CI成功はデプロイ成功ではなく、Chatからの報告→Firestore canonical→スマホUIの実E2Eは未完了。月額0円も未保証。
 - **次の唯一の実環境ゲート**：認証済みGoogle Cloud Shellにて `cloud/scripts/audit-free-tier-staging.py`、`cloud/scripts/release-chat-staging.sh check` を実行して既存サービスと費用を監査。安全なら `stage`→候補のIAP/OIDC/worker/設定と費用を独立確認→`promote`→Chat実報告1件のcanonicalとUI読み戻し。Cloud Shell権限なしに「完成」と表示しない。旧V2の書込み・本番移行は別途承認を要する。
+
+
+### 2026-11-14 JST — 参考資産額が定価になる不具合を修正・参考買取価格の証拠検証を強化
+
+- **ユーザーの指摘**：「参考価格が定価になってるから参考買取価格を更新して」。GitHub `cloud/src/dashboard-view.js` を確認した結果、買取相場が未取得のBOX/パックを在庫原価`lot.unitCost`で評価額に代用していた。取得原価が公式定価の場合、買取相場と誤認させる表示になっていた。
+- **表示の旧→新**：`参考資産額`（未取得に原価代用）→`参考買取評価額`（確認済みの有効買取価格がある在庫だけの**部分合計**）。価格未取得は`未算定/買取相場未取得`、古い買取提示は`旧価格/要更新`で現行資産評価には加算しない。現在値と在庫原価/定価/実売却額を混同しない。参考評価差額も価格と原価の両方が確認済みのロットだけで算出する。
+- **コード新規・変更**：`cloud/src/buyback-quotes.js` は店舗名・直接出典URL（Xの場合公式アカウントの個別status）・投稿日時・適用期限・verified状態・商品カテゴリ/名前・シュリンク/テープ条件・BOX/パック/カートン単位を検証し、有効な最新買取提示額のみ集計。 `cloud/src/dashboard-view.js` は原価代用を削除し、店舗・日付・元投稿URLと旧価格を区別して表示。 `cloud/src/market-refresh-worker.js` は従来`price/source`だけで現在の相場としていたが、投稿元の検証情報や商品・状態・単位が不明な値、公式定価、期限切れを拒否してstaleにする。
+- **店舗別画像レイアウト**：既存の買取ミミ/アリウムに加え、トレカショップKUROはポケカの上段黒＝シュリンクあり、下段白＝シュリンクなし。遊戯王のBOX価格/カートン価格、ORIGINAL ARTWORK DUEL SET 3種セット価格を混同しない。 `docs/X_BUYBACK_QUOTES_SPEC.md`へ追加済み。
+- **テスト**：`cloud/test/buyback-quotes.test.js`（定価・原価流用なし、シュリンク/販売単位不一致、期限切れ、原価不明、出典URL）、`cloud/test/market-refresh-worker.test.js`（公式定価や条件欠損拒否）、`cloud/test/dashboard.test.js`を更新。CIでNode testとFirestore Emulator成功。
+- **外部情報の注意**：11月13日付の店舗比較表には、ポケカ30th CELEBRATION 1BOXアリウム/KUROシュリンクあり18,500円、なし17,500円の掲載がある。これは**11月14日の公式X投稿の当日価格を確認できたことを意味しない**ため、実在庫の現行quoteとしては自動投入しない。店舗本人の投稿URL・有効性・商品・状態が確認できなければreviewにする。
+- **実運用の境界**：今回のコードと引き継ぎはPR #105作業ブランチへ反映したが、Cloud Run stagingへのデプロイ・Firestore.marketQuotes実データの値更新・スマホ実機でのreadbackは**このスレッドの権限では未実施**。既存の原価・在庫・購入/売却履歴・旧V2正本/キューは変更していない。市場の最新有効投稿データ取得と認証済みGCPからの更新・再デプロイが必要。
