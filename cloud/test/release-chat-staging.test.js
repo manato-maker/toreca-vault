@@ -49,11 +49,11 @@ test('Android staging launch defaults to read-only checks and requires explicit 
   const check = spawnSync('bash', ['-n', target], { encoding: 'utf8', timeout: 5000 });
   if (check.error?.code === 'ENOENT') return t.skip('bash not installed');
   assert.equal(check.status, 0, check.stderr);
-  assert.match(script, /MODE="\\$\\{1:-check\\}"/);
+  assert.ok(script.includes('MODE="${1:-check}"'));
   assert.match(script, /git ls-remote origin/);
   assert.match(script, /audit-free-tier-staging\.py/);
   assert.match(script, /release-chat-staging\.sh check/);
-  assert.match(script, /if \\[\\[ "\\$MODE" == "check" \\]\\]/);
+  assert.ok(script.includes('if [[ "$MODE" == "check" ]]'));
   assert.match(script, /release-chat-staging\.sh stage/);
   assert.doesNotMatch(script, /release-chat-staging\.sh promote/);
 });
