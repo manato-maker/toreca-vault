@@ -38,11 +38,17 @@ function validQuote(value, target, checkedAt) {
   return matched.status === 'current' && matched.price === value.price;
 }
 
-function findQuoteIndex(quotes, target, key) {
-  return quotes.findIndex((quote) => quote.targetKey === key
+function findQuoteIndex(quotes, target, key, sourceStore = '') {
+  const matchingTarget = (quote) => quote.targetKey === key
     || (quote.category === target.category
       && valueKey(quote.productKey) === valueKey(target.productKey)
-      && String(quote.condition || '') === String(target.condition || target.shrinkStatus || '')));
+      && String(quote.condition || '') === String(target.condition || target.shrinkStatus || ''));
+  if (sourceStore) {
+    // Never replace shop A's source evidence with shop B's price.
+    return quotes.findIndex(quote => matchingTarget(quote)
+      && valueKey(quote.sourceStore || quote.source) === valueKey(sourceStore));
+  }
+  return quotes.findIndex(matchingTarget);
 }
 
 /** Refresh quotes with one injected batch lookup; failed/untrusted results keep the previous price stale. */
@@ -107,9 +113,11 @@ export async function refreshMarketQuotes({
   for (const target of targets) {
     const targetKey = marketTargetKey(target);
     const result = ambiguousResponseKeys.has(targetKey) ? null : responseByKey.get(targetKey);
-    const index = findQuoteIndex(next.marketQuotes, target, targetKey);
+    const accepted = validQuote(result, target, checkedAt);
+    const index = findQuoteIndex(next.marketQuotes, target, targetKey,
+      accepted ? String(result.sourceStore || result.source).trim() : '');
     const previous = index >= 0 ? next.marketQuotes[index] : null;
-    if (validQuote(result, target, checkedAt)) {
+    if (accepted) {
       const quote = {
         ...(previous || {}),
         targetKey,
