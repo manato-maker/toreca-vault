@@ -1260,3 +1260,15 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Response shaping is allowlisted: no request IDs, command JSON, product/store text, tokens, raw exception messages, or stack traces are returned.
 - Code commit `14eca041c6a76124bc247aef2f770d257795ef4f`; GitHub Actions `v2-ci` #1037 completed successfully (test and Firestore Emulator jobs).
 - Deployed candidate `00007-yaf` does not contain this addition and remains at 0% traffic. No worker/Scheduler, row mutation, old V2 write, pending-sale replay, IAM or traffic change was performed. Root cause remains open pending read-only preview on a newly staged candidate.
+
+
+## 2026-11-14 JST — candidate 00008 read-only preview and row-level findings
+
+- User screenshot confirms Cloud Run candidate revision `toreca-vault-staging-00008-jid` deployed with tag `chat-candidate` at 0% traffic. Active API traffic remained unchanged. The private read-only `GET /health/intake` returned HTTP 200.
+- The probe read the current Intake cursor page (rows 5–9), correlated queue receipt/request/business-event records, and initialized canonical state. It reported `sheetsReadable=true`, `cursorReadable=true`, `intakeRowsRead=5`, `cursorNextRow=5`, `queuedReceiptCount=1`, `correlatedReceiptRows=1`, and `canonicalRevision=2926`. These are read-only findings, not proof of write access or worker success.
+- In-memory-only preview: row 6 = `would-apply / preview-clean`; rows 7 and 9 = `review / lottery-identity-missing`. Bounded-page counts were new=3, queued=1, review=1. Whole-Intake status remains 8 rows: v2-applied=1, queued=1, new=3, review=3.
+- Row-level read confirmed rows 7 and 9 contain lottery type, `応募済`, store/title/owner/applicationDate, but no explicit external lottery identity or `evidenceType`. The current parser only creates a confirmed-chat fingerprint when evidenceType is explicitly `screenshot` or `chat-report`; therefore these two rows remain review. Do not invent an external ID or alter the existing rows. Row 8 is already review.
+- GitHub commit `14eca041c6a76124bc247aef2f770d257795ef4f`, Actions `v2-ci` #1037 passed. PR #105 remains Draft/open; PR #106 remains Draft/open.
+- The active revision's recurring HTTP 500/503 is still not root-caused. Its old request logs were `unclassified`; candidate health is GET-only and emits no worker failure reason. Proving receipt/queue/cursor write behavior would require processing, which would mutate existing Intake/canonical state. No worker or Scheduler was triggered.
+- No Intake cells/status, old V2, pending sales, IAM, active traffic, or production settings were changed. Normal Chat → Intake → queue → canonical → Android UI reflection remains unverified.
+- Next safe gate: resolve the evidence provenance for rows 7 and 9 without rewriting those rows; then create an isolated staging-only processing test outside existing Intake/business events to identify write-stage failures. Only after that should a single explicitly reconciled real event be processed and read back end to end. Never replay pending sales or write old V2.
