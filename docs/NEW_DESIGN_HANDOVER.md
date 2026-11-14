@@ -1092,3 +1092,15 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **無料枠の落とし穴**：Scheduler無料3ジョブは同一billing account全体（pauseも数える）。Firestoreはeligibleなデータベース1個のみ。Cloud Runの無料CPU/RAM/リクエスト枠やArtifact Registryの保存容量はbilling account単位。Cloud Build・保存容量・ネットワーク・バックアップも実請求確認。予算通知だけで支出は停止しない。有料X APIや画像AIの定期実行は費用確認まで保留。
 - **詳細**：`docs/FREE_TIER_STAGING_COST_PLAN.md`を追加。旧売却8件・旧キュー・Firestore正本・UI本番設定には変更なし。
 - **未完了**：Cloud Shellで実監査/当月請求確認、API/Worker/Service Account/Schedulerの実稼働点検、staging再デプロイと通常ChatからのE2E readback。低コスト設定と運用開始は別の検証項目。
+
+
+### 2026-11-14 JST — 通常Chat報告の完成に向けた通しテストとstaging段階的リリース準備
+
+- **依頼**: 「完成形まですすめて」。ユーザー体験は普段の通常Chatで自然文/スクショによる抽選・購入・受取・開封・売却の報告、Workはシステム開発・不具合修正、スマホUIで資産/在庫/履歴/カレンダー閲覧、共通Google Docsでスレッドを引き継ぐ形。無断の本番移行・旧V2書込み・課金拡大はしない。
+- **新規テスト**: `cloud/test/chat-intake-e2e.test.js` が、通常Chatで構造化された報告→専用Intake→durable queue→worker→Firestore state CAS/readback→Sheet最終receiptの一連の処理を、購入/抽選/要確認の3パターンで模擬検証。購入の在庫1LOTのみ増、応募だけなら在庫と実支払原価は不変、未確定情報はreviewのみ。実クラウドにテストデータは書かない。
+- **新規読み取り専用事前確認**: `cloud/scripts/preflight-chat-staging.js` は認証済みstaging canonicalの存在とスキーマ・rev、専用Google SheetsのメタデータとD:G処理状態を件数のみ検証。内部データやトークンは出力しない。専用Sheet IDは環境から受け取り公開ソースへ直書きしない。テストは外部SDK不要なモックで実施。
+- **段階的staging APIリリース**: `cloud/scripts/release-chat-staging.sh` は`check`（読み取り専用でプロジェクト番号・canonical/Intake/OIDC/非公開IAM確認）、`stage`（フルtest/check後にタグ付き候補を0%トラフィックで配置、既存環境変数/secret/IAMを上書きしない）、`promote`（明示的なレビューフラグとstaging読み取り専用事前確認の後、候補revだけ100%へ切替）を提供。Google Cloud Shellの認証が必要。**このチャットでは実行不可、今回Cloud Run上の新revisionは作成していない**。
+- **互換性修正**: 既存Intakeの抽選結果/受取行は`businessEventIdentityJson`へ`kind`を含むことがある。受付parserは`kind`がコマンドtypeから導いたapplication/result/receiptと完全一致する場合だけ許容し、不一致ならreviewにする。既存の`new`行を勝手に修正/再投入しない。
+- **セキュリティ・費用**: GitHubリポジトリは公開。Google Sheets生ID・tokenや個人の取引記録を新規コードに埋め込まない方針に修正（過去コミット履歴の書換は未実施）。Cloud Run staging UIのmin0/max1、request-based運用。Cloud Build/Artifact Registryの費用はリリース時に監査。旧売却8件と旧Queue・本番V2・Firestore正本のデータは変更なし。
+- **手順正本**: `docs/CHAT_STAGING_RELEASE_RUNBOOK.md`にWork/Cloud Shell実環境リリースと最終Chat→Intake→canonical→UI E2E、失敗時の切り分け・旧V2保護のルールを記録。
+- **未完了**: GCP請求と権限の実監査、Cloud Run API/UIへ今回の変更をデプロイ、OIDC/Scheduler実起動の確認、通常Chatから未登録の実報告を投入したcanonical読戻しとスマホ表示検証、Gmail実OAuth・X画像相場の実取得・バックアップ復元ドリル・旧売却未処理の安全な処理。CI成功≠実運用完成。PR #105は引き続きdraft/open。
