@@ -170,3 +170,35 @@ test('unconfirmed or insufficiently identified Chat lottery never gets a fingerp
   assert.equal(queueCalls, 0);
   assert.ok(provider.receipts.every(x => x.resultCode === 'lottery-identity-missing'));
 });
+
+
+test('legacy matching kind field is accepted for an exact lottery receipt without relaxing identity safety', async () => {
+  const requestId = 'chat:legacy:receipt:1';
+  const command = { requestId, type: 'lottery-receipt', title: '抽選A', store: '公式店', receivedDate: '2026-11-13' };
+  const identity = JSON.stringify({ kind: 'receipt', retailerKey: 'pokemoncenter-online', applicationId: 'entry-2026-1' });
+  const provider = fakeProvider([row(requestId, command, identity)]);
+  const enqueued = [];
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 200,
+    queue: { async enqueue(x) { enqueued.push(x); return { accepted: true }; } }
+  });
+  assert.equal((await run()).enqueued, 1);
+  assert.equal(enqueued[0].requestId, requestId);
+  assert.match(enqueued[0].businessEventKey, /^lottery:v1:[a-f0-9]{64}$/);
+  assert.equal(provider.receipts[0].status, 'queued');
+});
+
+test('mismatched legacy kind is reviewed, not turned into a different lottery event', async () => {
+  const requestId = 'chat:legacy:kind-mismatch';
+  const command = { requestId, type: 'lottery-receipt', title: '抽選A', store: '公式店', receivedDate: '2026-11-13' };
+  const identity = JSON.stringify({ kind: 'application', retailerKey: 'pokemoncenter-online', applicationId: 'entry-2026-1' });
+  const provider = fakeProvider([row(requestId, command, identity)]);
+  let queueCalls = 0;
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 200,
+    queue: { async enqueue() { queueCalls++; } }
+  });
+  assert.equal((await run()).review, 1);
+  assert.equal(provider.receipts[0].resultCode, 'lottery-kind-mismatch');
+  assert.equal(queueCalls, 0);
+});
