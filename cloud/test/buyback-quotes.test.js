@@ -153,3 +153,14 @@ test('inventory shows distinct shop offers and original post links without subst
   assert.match(html, /mimi_kaitori\/status/);
   assert.match(html, /kuro_tcg\/status/);
 });
+
+
+test('a matching lotId does not override a contradictory category, product or selling unit', () => {
+  const keyed = { ...mimi, lotId: 'lot-1', productKey: lot.productKey,
+    category: lot.category, condition: lot.condition };
+  assert.equal(buybackForLot([keyed], lot, NOW).status, 'current');
+  assert.equal(buybackForLot([{ ...keyed, category: 'カード' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, productKey: 'different-product' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, unit: 'card' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, unit: 'pack' }], lot, NOW).status, 'missing');
+});
