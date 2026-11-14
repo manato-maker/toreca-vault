@@ -329,5 +329,7 @@ test('old cached shop post cannot downgrade a newer already verified buyback amo
   const quotes = (await store.read()).payload.marketQuotes;
   assert.equal(quotes.length, 1);
   assert.equal(quotes[0].price, 1250);
+  assert.equal(quotes[0].status, 'verified');
+  assert.equal(quotes[0].fresh, true);
   assert.notEqual(quotes[0].price, 4000);
 });
