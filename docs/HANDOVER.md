@@ -1372,3 +1372,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **費用・権限**: GCPプロジェクト番号・Firestore staging canonicalパス・Cloud Run API非公開IAM・OIDC・専用Sheetをリリース前に検査。Cloud ShellのGoogle認証必須。staging code deployは `--no-traffic`、移行は別モードで明示的な検証済みフラグが必要。API secret値やSheetの生IDは公開コード/出力に含めない。
 - **未実施/ブロッカー**: ChatGPT通常会話がクラウドへ反映したことの実地E2E、Cloud Run API/UIへの反映とGCP IAM/請求の現況確認はこのツール権限では不可。WorkのCloud Browser/Google Cloud Shellなど認証済み環境から順番に検証し、完了後のみ「運用開始可」と報告。旧V2/既存未登録売却8件と旧Queueに触れない。
 - **詳細**: `docs/CHAT_STAGING_RELEASE_RUNBOOK.md`、`docs/CHAT_DAILY_REPORTING_RUNBOOK.md`、`docs/FREE_TIER_STAGING_COST_PLAN.md`。CIは最新のGitHub Actions成功を確かめてからデプロイする。
+
+
+### 2026-11-14 JST — Driveの旧JSONはV2正本ではない
+
+- 非公開Driveフォルダ「Toreca Vault Private」内の `toreca-vault-data.json` を読み取り専用で確認。ファイル更新は2026-10-05で、トップレベル`schemaVersion=1`、内部データもV1形式。`data`の集計はlotteries 285、purchases 37、boxes 6、packs 0、cards 13、openings 2、sales 27（内容・個人情報はGitHubに転載しない）。
+- **重要**：これは現在のV2 schemaVersion 2の正本を証明するものではない。2026-10-05以降の記録が欠ける可能性が高いため、これを最新canonicalとしてFirestoreにインポートしてはならない。V2正本のApps Script `TV_V2_DATA_FILE_ID` の実設定、現在のV2 JSONのschemaVersion/revision/hash/更新日を認証付き環境で照合する。
+- 今回の調査ではDrive上の最新V2 JSON正本は未確定。既存canonical・旧Queue・在庫・売却は変更していない。V1→V2変換も実行しない。
