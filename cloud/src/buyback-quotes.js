@@ -109,6 +109,35 @@ function confirmed(quote, shop, nowMs) {
   return true;
 }
 
+/** The latest CURRENT verified offer per shop, sorted by price.
+ * A price reduction supersedes the earlier quote for the same shop even if
+ * both posts remain within their original displayed date window.
+ * Conflicting prices from the same shop at exactly the same posted timestamp
+ * are excluded pending review, rather than choosing the higher one.
+ */
+export function buybackOffersForLot(quotes, lot, now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
+  if (!Number.isFinite(nowMs)) return [];
+  const groups = new Map();
+  for (const quote of Array.isArray(quotes) ? quotes : []) {
+    if (!compatible(quote, lot)) continue;
+    const shop = shopFor({ ...quote, category: lot.category });
+    if (!shop || !confirmed(quote, shop, nowMs)) continue;
+    if (!groups.has(shop.key)) groups.set(shop.key, []);
+    groups.get(shop.key).push(quote);
+  }
+  const live = [];
+  for (const offers of groups.values()) {
+    offers.sort((a,b) => String(b.postedAt).localeCompare(String(a.postedAt)));
+    const latestTime = String(offers[0]?.postedAt || '');
+    const latest = offers.filter(x => String(x.postedAt) === latestTime);
+    if (latest.some(x => quotePrice(x) !== quotePrice(latest[0]))) continue;
+    live.push(latest[0]);
+  }
+  return live.sort((a,b) => quotePrice(b) - quotePrice(a)
+    || String(b.postedAt).localeCompare(String(a.postedAt)));
+}
+
 /** Pick the highest currently verified SHOP BUYBACK (not historical MSRP).
  * Return the last dated older buyback as history only if there is no live quote.
  */
@@ -116,10 +145,8 @@ export function buybackForLot(quotes, lot, now = new Date()) {
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
   const matches = (Array.isArray(quotes) ? quotes : []).filter(q => compatible(q, lot));
   if (!matches.length || !Number.isFinite(nowMs)) return { status: 'missing', quote: null, price: null };
-  const live = matches.filter(q => confirmed(q, shopFor({ ...q, category: lot.category }), nowMs));
+  const live = buybackOffersForLot(matches, lot, now);
   if (live.length) {
-    live.sort((a, b) => quotePrice(b) - quotePrice(a)
-      || String(b.postedAt).localeCompare(String(a.postedAt)));
     return { status: 'current', quote: live[0], price: quotePrice(live[0]) };
   }
   const historical = matches.filter(q => stamp(q.postedAt || q.quotedAt || q.checkedAt) !== null);
