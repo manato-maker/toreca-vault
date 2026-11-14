@@ -1455,3 +1455,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - `cloud/scripts/diagnose-intake-staging.py`をGitHubブランチへ追加。本人がCloud Shellで一度だけ`git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py`を実行すれば、稼働Cloud Run SAからの専用Sheetsメタデータ・受付D:G、Firestore正本/カーソル、Scheduler OIDC/URLと最近の5xx件数を安全な要約だけで検査。原本/旧V2/Cloud Run設定に書かず、workerを発火しない。本人にSAのimpersonation権限がなければ失敗として止める。**IAMを公開化・権限付与しない**。
 - `cloud/test/test_diagnose_intake_staging.py`をnpm testに追加。認証不全・対象シート違い・OIDC食い違い・秘密保持・書込みしない構造をモックで検証。通常Node test/Firestore Emulator CIの成功を確認してから使用。
 - 現時点で実際の503根本原因、最新API候補のScheduler動作、Chat→Firestore→スマホの実E2Eは未確認。日常Chat運用開始と称しない。
+
+
+### 2026-11-14 JST — Intake診断実行：Cloud Shell代理認証が停止、GDrive共有設定は別途確認
+
+- Android Cloud Shellから `cloud/scripts/diagnose-intake-staging.py` を実行：`PASS` staging project / 稼働中100%トラフィックのCloud Run revision / 必須4フラグ、`PASS` Scheduler IntakeのOIDC、URL、HTTP methodがAPI側と一致。直近24hにも503が継続。**APIの500/503の根本原因は未確定**。
+- 診断は`BLOCKED: could not impersonate Cloud Run service identity for read-only checks`で停止。これは**Cloud Shell操作ユーザーがサービスアカウントの一時アクセストークンを取得できなかった**という診断権限の制限であり、**実行中Cloud Run自身のGoogle Sheets/Firestore権限不足の証明ではない**。安易にService Account Token Creator等の権限付与を行わない。Cloud RunとIntakeを公開しない。
+- 接続済みGoogle Driveの`Toreca Vault New App Intake`メタデータを直接確認し、**Googleサービスアカウント1件にwriter共有権限がある**ことを確認。ただしこのアカウントが稼働中revisionの`spec.serviceAccountName`と同一かは未照合。共有権限の有無だけでSheetsアクセス成功は断定できない。
+- 新revision`00005`は0%トラフィックのまま。Cloud Run/Schedulerの設定変更・Firestore/Sheet書込み・未処理報告の再投入は実施していない。次の調査では、稼働中SAとIntake writerの同一性を**読み取り専用で照合**し、実行時権限の問題とAPI処理の問題を切り分ける。
