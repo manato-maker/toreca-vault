@@ -1404,3 +1404,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト**：`cloud/test/buyback-quotes.test.js`と相場refresh/UI回帰テストを追加、Node test・Firestore Emulator成功。
 - **注意**：11/13時点のアリウム/KUROの30th BOX 18,500円（シュリンク有）/17,500円（無）は前日比較サイト値であり、当日11/14の実店舗最新X価格としては未検証。原価や定価をこれらに置換せず、最新元ポスト確認前に正本へ登録しない。
 - **未完了**：PR #105ブランチのコード変更のみ。現行Cloud Run UI/Firestoreにデプロイ・買取数値の実書込は行っていない。GCP認証付き環境で新UI配備、買取元投稿の照合→marketQuotes更新→Firestore readback→スマホ表示検証を実施する必要がある。現行の個人取引/在庫/売却8件/旧V2には無変更。
+
+### 2026-11-14 JST — 参考買取価格の店舗別保存・手動verified入力・元投稿表示
+
+- 既存の定価代用バグ修正に加え、店舗別買取提示額を保持し、同店舗の新しい値下げが古い高値に負けないロジックを追加。`cloud/src/buyback-quotes.js` / `cloud/src/dashboard-view.js` に、出典・投稿日と共に店別参考価格を最大4件表示。最新価格は元投稿・verified・状態/単位・有効期限が一致するものだけで計算。
+- `cloud/src/market-refresh-worker.js` が別店舗のquoteを潰さないよう分離。従来のX自動providerは未接続。
+- 安全な手動取込として `cloud/src/verified-buyback-import.js`と`cloud/scripts/import-verified-buyback.js`を追加。非公開JSONをstagingでpreviewし、rev一致・二重送信・投稿URL/日付・店舗条件を検査。承認とバックアップ確認後にのみFirestore CASで保存しreadback。在庫/原価/抽選/売却履歴は変更しない。実在X原文との照合は外部工程。`docs/BUYBACK_IMPORT_RUNBOOK.md`を参照。
+- 2026-11-14現時点では公式3店の当日原文/X投稿を個別URLと画像で確認できず、11/13の比較表額を11/14の価格としては採用しない。**Firestoreの実marketQuotesと稼働中スマホUIは今回未更新**。認証済みGCPまたは接続済みFirebase等からstaging導入・当日投稿照合・readbackが必要。GitHub PR #105作業ブランチのテスト成功と実運用は区別する。
