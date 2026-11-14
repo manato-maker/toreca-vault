@@ -67,13 +67,18 @@ test('market refresh records only sourced quotes and verifies revision readback'
     skipped: false, revision: 2, refreshedCount: 1, staleCount: 0,
     checkedAt: '2026-11-07T04:45:00.000Z'
   });
-  assert.equal(saved.payload.marketQuotes[0].price, 1500);
-  assert.equal(saved.payload.marketQuotes[0].source, '買取ミミ');
-  assert.equal(saved.payload.marketQuotes[0].priceBasis, 'buyback');
-  assert.equal(saved.payload.marketQuotes[0].status, 'verified');
-  assert.equal(saved.payload.marketQuotes[0].postUrl, 'https://x.com/mimi_kaitori/status/1234567890123456789');
-  assert.equal(saved.payload.marketQuotes[0].quotedAt, '2026-11-07T02:00:00.000Z');
-  assert.equal(saved.payload.marketQuotes[0].fresh, true);
+  // The earlier unverified row is retained for audit, never overwritten as
+  // if it were the same shop's verified posting.
+  assert.equal(saved.payload.marketQuotes[0].price, 1250);
+  assert.equal(saved.payload.marketQuotes.length, 2);
+  const newQuote = saved.payload.marketQuotes.find(q => q.sourceStore === '買取ミミ');
+  assert.equal(newQuote.price, 1500);
+  assert.equal(newQuote.source, '買取ミミ');
+  assert.equal(newQuote.priceBasis, 'buyback');
+  assert.equal(newQuote.status, 'verified');
+  assert.equal(newQuote.postUrl, 'https://x.com/mimi_kaitori/status/1234567890123456789');
+  assert.equal(newQuote.quotedAt, '2026-11-07T02:00:00.000Z');
+  assert.equal(newQuote.fresh, true);
   assert.deepEqual(saved.payload.transactions, initial.transactions);
   assert.deepEqual(saved.payload.inventoryLots, initial.inventoryLots);
   assert.deepEqual(saved.payload.automation.health.marketRefresh, {
