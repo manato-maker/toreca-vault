@@ -1520,3 +1520,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The displayed fields contain timestamp, revision, and status only; no `stage`/`reasonCode` was present, so the exact handler failure is still unknown. The pattern is consistent with a recurring Scheduler-triggered request reaching the active revision, but request logs alone do not prove its cause.
 - Candidate `00006-lug` remains tagged at 0% traffic. Its HTTP 200 Intake probe proves metadata/header and cursor reads only. Do not invoke its worker or promote it while existing rows may represent duplicate lottery/receipt events.
 - Next investigation must correlate sanitized application diagnostic logs with these request timestamps, or add a non-mutating diagnostic path. Do not read out raw exception text into shared docs, change Scheduler targets, process Intake rows, or touch old V2/pending sales.
+
+
+## 2026-11-14 JST — sanitized log classification result
+
+- The user's follow-up read-only Cloud Logging command returned only recurring HTTP 503 request rows on revision `toreca-vault-staging-00004-nfr`; every row was `unclassified` because no structured `stage`/`reasonCode` or classifiable application error payload was present in the selected log entries.
+- This is not a root-cause diagnosis. It confirms request-level failures but does not distinguish route authorization, Intake provider, Firestore queue, receipt update, or cursor advance.
+- No worker/Scheduler was invoked by this diagnostic; no Intake row/status, old V2, pending sale, IAM, or active traffic was changed. Do not promote candidate `00006-lug` or manually replay Intake. Further diagnosis requires correlating application logs or a non-mutating failure-stage probe before any data-processing run.
