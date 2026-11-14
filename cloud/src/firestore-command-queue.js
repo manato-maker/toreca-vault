@@ -221,6 +221,23 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
       return snapshot.exists ? clone(snapshot.data()) : null;
     },
 
+    async inspectBusinessEvent(businessEventKey, command) {
+      const normalizedKey = normalizeBusinessEventKey(businessEventKey);
+      if (!normalizedKey) return null;
+      if (!command || typeof command !== 'object' || Array.isArray(command)) {
+        throw new TypeError('business event command is invalid');
+      }
+      const businessEventKeyHash = createHash('sha256').update(normalizedKey).digest('hex');
+      const snapshot = await refForBusinessEvent(businessEventKeyHash).get();
+      if (!snapshot.exists) return null;
+      const event = snapshot.data();
+      return {
+        requestId: String(event.requestId || ''),
+        keyMatches: event.businessEventKeyHash === businessEventKeyHash,
+        payloadMatches: event.businessPayloadHash === businessFingerprint(command)
+      };
+    },
+
     async inspectByRequestIdHash(requestIdHash) {
       if (typeof requestIdHash !== 'string' || !/^[a-f0-9]{64}$/.test(requestIdHash)) {
         throw new TypeError('requestIdHash is invalid');
