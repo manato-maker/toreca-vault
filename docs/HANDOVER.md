@@ -1438,3 +1438,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **Android操作手順**：`docs/ANDROID_STAGING_GO_LIVE.md`。通常の `https://shell.cloud.google.com/` にブラウザでログインし、作業ブランチを`git clone`して`bash cloud/scripts/android-staging-launch.sh stage`を実行する。Google公式の「GitHubのOpen in Cloud Shell」リンクはGoogle以外のリポジトリで認証にアクセスできない一時環境になるため採用しない。PC・Firebaseの接続は不要。
 - **検証**：`cloud/test/release-chat-staging.test.js`にAndroid用スクリプトのbash構文・標準check/0% stage・無断promote禁止の回帰テストを追加。Github Actions v2-ci成功。上記はコード・文書のみであり、**ユーザーのGoogle Cloudへここから認証済みデプロイしたわけではない**。
 - **残りの実環境ゲート**：ユーザーがCloud Shellへログインしstageコマンドを実行→候補サービス健康状態・Scheduler/Sheets IAM/Firestore正本・請求状況を確認→明示的にレビューされた候補だけpromote→UIデプロイ（IAP維持）→新たな実報告1件を通常Chatから投入し`v2-applied/canonical-readback-verified`とスマホ画面まで照合。最新の店舗本人X投稿が未確認の参考買取価格は推測して登録しない。旧V2本番移行は別承認。
+
+
+### 2026-11-14 JST — Cloud Run Intake 503の診断改善
+
+- Android ChromeのCloud Shell実環境の証拠: 新候補 revision `toreca-vault-staging-00005-foq` は0%トラフィックでstage成功（active APIは未変更）。Scheduler `toreca-vault-staging-intake` と `toreca-vault-staging-command-worker` はENABLED、15分間隔。Intakeジョブに`CODE 14`、Cloud SchedulerはHTTP 500/503を観測。Cloud Run requestsの個別URLは`/internal/worker/sheets-intake`、旧active revisionは`toreca-vault-staging-00004-nfr`。旧revisionの環境フラグ `TV2_ENABLE_WRITES`、`TV2_ENABLE_COMMAND_QUEUE`、`TV2_ENABLE_COMMAND_WORKER`、`TV2_ENABLE_GOOGLE_SHEETS_INTAKE` はすべてtrue。
+- Cloud Run stdout/stderrには`Toreca Vault V2 API listening on 8080`のみが表示され、失敗の内部例外が分からなかった。コード調査の結果、`cloud/src/server.js`のIntake APIは内部の`catch {}`で原因を記録せずにHTTP 503 `Google Sheets intake failed`へ変換しており、根本原因の識別ができない。**403権限エラー、Sheetsメタデータ不一致、Firestore cursor/queue、receipt照合失敗などのどれが原因かは未確定**。単に500/503の応答だけで特定してはならない。
+- **変更**：`cloud/src/worker-error-diagnostics.js` を新規追加。Intake本体と最終receipt同期を`intake/reconciliation`の2段階に分け、Sheets認証/権限/429/5xx/シート不一致、Firestore権限/索引、cursor、receipt衝突等の**固定エラーコードだけ**をCloud Run内部ログにJSON記録。例外本文・トークン・URL・取引情報・メールアドレス・正本データを出力しない。外部HTTPレスポンスは従来の汎用503のまま。
+- **テスト**：`cloud/test/worker-error-diagnostics.test.js` に機密値の無漏えい・安全な段階/理由コード・wrapped causeの分類を追加し、npm test/checkに組み込んだ。コードとCIの状態を確認してからだけ次のステップへ進める。
+- **実環境**：この診断は現在の旧active revisionにも、すでに0%でstage済みの旧候補revisionにも未配備。新コードをテスト後に0%で再stageし、候補認証/Google Sheets/Firestore設定を検証する。**完了前にpromoteしない・Schedulerを手動実行しない・既存new/queuedを再投入しない。** ユーザーのコマンド作業を繰り返さないよう可能な範囲はこのWorkで続ける。
