@@ -30,3 +30,14 @@ test('staging release never sets env vars, deploys at zero traffic and requires 
   assert.doesNotMatch(source, /^\s*gcloud run deploy.*--set-secrets/m);
   assert.doesNotMatch(source, /(?:allUsers|allAuthenticatedUsers).*roles\/run\.invoker.*add-iam-policy/);
 });
+
+
+test('promotion cannot proceed with disabled Chat intake or command write gates', () => {
+  assert.match(source, /TV2_RELEASE_MODE="\$MODE" python3/);
+  assert.match(source, /if os\.environ\.get\("TV2_RELEASE_MODE"\) == "promote"/);
+  for (const gate of [
+    'TV2_ENABLE_WRITES', 'TV2_ENABLE_COMMAND_QUEUE',
+    'TV2_ENABLE_COMMAND_WORKER', 'TV2_ENABLE_GOOGLE_SHEETS_INTAKE'
+  ]) assert.match(source, new RegExp(gate));
+  assert.match(source, /BLOCKED: Chat write\/queue\/intake worker features are disabled/);
+});
