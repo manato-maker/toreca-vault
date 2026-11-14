@@ -170,3 +170,28 @@ test('a matching lotId does not override a contradictory category, product or se
   assert.equal(buybackForLot([{ ...keyed, unit: undefined }], lot, NOW).status, 'missing');
   assert.equal(buybackForLot([{ ...keyed, productKey: undefined }], lot, NOW).status, 'missing');
 });
+
+
+test('later revoked or expired shop posting prevents earlier still-valid high price from reappearing', () => {
+  const previous = { ...mimi, price: 24000, postedAt: '2026-11-14T02:00:00Z' };
+  const ended = { ...mimi, price: 20000, status: 'unavailable',
+    postedAt: '2026-11-14T04:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456704' };
+  assert.equal(buybackOffersForLot([previous, ended], lot, NOW).length, 0);
+  assert.notEqual(buybackForLot([previous, ended], lot, NOW).status, 'current');
+  assert.equal(buybackForLot([previous, ended, kuro], lot, NOW).price, 18500);
+});
+
+test('shop latest-time selection compares absolute instants, not ISO offset strings', () => {
+  const early = { ...mimi, price: 27000,
+    postedAt: '2026-11-14T12:00:00+09:00' };
+  const later = { ...mimi, price: 18000,
+    postedAt: '2026-11-14T04:30:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456719' };
+  assert.equal(buybackForLot([early, later], lot, NOW).price, 18000);
+});
+
+test('missing real shop identity or post timing never values an inventory lot', () => {
+  assert.equal(buybackForLot([{ ...mimi, postedAt: '2026-11-14' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...mimi, postUrl: '' }], lot, NOW).status, 'missing');
+});
