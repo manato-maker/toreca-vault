@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { renderDashboard } from '../src/dashboard-view.js';
 import { createIapVerifier } from '../src/dashboard-auth.js';
 import { createDashboardServer } from '../src/dashboard-server.js';
@@ -208,4 +209,19 @@ test('handover links require the same verified IAP identity as the dashboard', a
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+
+test('staging dashboard deploy script enforces request-based low-cost private settings', () => {
+  const shell = readFileSync(new URL('../scripts/deploy-dashboard-staging.sh', import.meta.url), 'utf8');
+  for (const flag of [
+    '--no-allow-unauthenticated', '--min-instances=0', '--max-instances=1',
+    '--cpu=1', '--memory=512Mi', '--cpu-throttling',
+    '--concurrency=40', '--timeout=30s'
+  ]) {
+    assert.ok(shell.includes(flag), 'missing safeguard: ' + flag);
+  }
+  assert.ok(shell.includes('toreca-vault-ui-staging'));
+  assert.ok(shell.includes('roles/datastore.viewer'));
+  assert.ok(shell.includes('IAP'));
 });
