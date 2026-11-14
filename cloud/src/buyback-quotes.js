@@ -135,17 +135,28 @@ export function buybackOffersForLot(quotes, lot, now = new Date()) {
   for (const quote of Array.isArray(quotes) ? quotes : []) {
     if (!compatible(quote, lot)) continue;
     const shop = shopFor({ ...quote, category: lot.category });
-    if (!shop || !confirmed(quote, shop, nowMs)) continue;
+    // First select the latest trustworthy shop posting INCLUDING a later
+    // withdrawal/expiry. Otherwise an older higher "verified" quote could
+    // reappear after a shop has explicitly ended it.
+    if (!shop || !validSourceUrl(quote, shop)
+      || !['verified', 'expired', 'superseded', 'unavailable'].includes(String(quote.status || '').toLowerCase())) continue;
+    const posted = String(quote.postedAt || '');
+    if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(posted)
+      || stamp(posted) === null || stamp(posted) > nowMs + 10 * 60 * 1000) continue;
     if (!groups.has(shop.key)) groups.set(shop.key, []);
-    groups.get(shop.key).push(quote);
+    groups.get(shop.key).push({ quote, shop, postedAtMs: stamp(posted) });
   }
   const live = [];
   for (const offers of groups.values()) {
-    offers.sort((a,b) => String(b.postedAt).localeCompare(String(a.postedAt)));
-    const latestTime = String(offers[0]?.postedAt || '');
-    const latest = offers.filter(x => String(x.postedAt) === latestTime);
-    if (latest.some(x => quotePrice(x) !== quotePrice(latest[0]))) continue;
-    live.push(latest[0]);
+    offers.sort((a,b) => b.postedAtMs - a.postedAtMs);
+    const latestTime = offers[0]?.postedAtMs;
+    const latest = offers.filter(x => x.postedAtMs === latestTime);
+    // Two contradictory updates at the same instant require shop review.
+    if (latest.some(x => quotePrice(x.quote) !== quotePrice(latest[0].quote)
+      || x.quote.status !== latest[0].quote.status
+      || validSourceUrl(x.quote, x.shop) !== validSourceUrl(latest[0].quote, latest[0].shop))) continue;
+    if (!confirmed(latest[0].quote, latest[0].shop, nowMs)) continue;
+    live.push(latest[0].quote);
   }
   return live.sort((a,b) => quotePrice(b) - quotePrice(a)
     || String(b.postedAt).localeCompare(String(a.postedAt)));
