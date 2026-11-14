@@ -41,3 +41,11 @@
 - 最新のCI結果を確認し、`test`と`firestore-emulator`がともにsuccessであることを条件とする。
 
 **未完成の別工程:** Gmail実OAuthと本番メール分類、X投稿画像からの実相場更新、バックアップ復元ドリル、旧V2正本の移行、既存未登録売却8件の在庫照合。これらも含めた完全な運用開始は上記staging一連の成功だけで宣言しない。
+
+
+## 2026-11-14 受付再試行の追加ガード
+
+- 同一requestIdで`queue.enqueue`が`accepted: true, duplicate: true`を返しても、Sheetは`queued/accepted`のまま扱う。独立した業務重複だけ`duplicate/business-duplicate`にする。
+- providerはD列が`new`の時のみ`queued/review/duplicate`へ、`queued`の時のみ`v2-applied/review/duplicate`へ更新する。確定済行を変更しない。同じ最終結果の再試行はD:G完全一致のreadbackで成功とする。
+- Firestore queue側は`intakeReceipt`のSheet IDハッシュ・行番号が一致する場合しか同一requestIdの受付リトライを許容しない。別シート/別行/元APIからの受付はID衝突を返す。
+- 自動テストCI https://github.com/manato-maker/toreca-vault/actions/runs/43559680508 成功。デプロイ時は`--no-allow-unauthenticated`を保持。これらの安全策はCloud Runへ最新版を配備した後に初めて有効になる。
