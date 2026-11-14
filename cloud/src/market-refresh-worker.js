@@ -25,16 +25,13 @@ function validQuote(value, target, checkedAt) {
     || value.category !== target.category
     || !String(value.productKey || '').trim()
     || valueKey(value.productKey) !== valueKey(target.productKey || target.product)
-    || !Object.hasOwn(value, 'condition')
+    || typeof value.condition !== 'string'
     || !['box', 'pack', 'card', 'case', 'BOX', 'パック', 'カード', 'カートン'].includes(String(value.unit || ''))) {
     return false;
   }
   // A price without a dated verified shop posting may be MSRP, a selling
   // price or a stale image. It must not enter the current buyback ledger.
-  const checked = {
-    ...value, productKey: target.productKey || target.product,
-    category: target.category, condition: target.condition || target.shrinkStatus || ''
-  };
+  const checked = value; // Do not fill missing provider identity/condition from the target.
   const lot = { category: target.category, productKey: target.productKey || target.product,
     condition: target.condition || target.shrinkStatus || '' };
   const matched = buybackForLot([checked], lot, checkedAt);
