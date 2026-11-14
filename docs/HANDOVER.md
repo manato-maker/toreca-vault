@@ -1353,3 +1353,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **CI結果**: [Actions #43527682483](https://github.com/manato-maker/toreca-vault/actions/runs/43527682483) にてコードテストとFirestore Emulator両方success（途中失敗したテストは修正済み）。
 - **まだ実施していない**: Cloud Run APIへのコード配備、Google Sheetsの受付編集経路を通常Chatから新規実取引でE2E試験すること、Scheduler/IAM実動作検証、FireStore canonical readback、アプリ画面での実取引反映。既存`new`行や旧売却8件を再発行しない。一般利用開始を完成としない。
 - **次工程**: GCP権限を持つWork/Cloud Shellでstaging APIの設定・Cloud Schedulerの15分triggerとサービスアカウントのSheets権限を安全に照合、コードデプロイ、新規報告1件の同一IDエンドツーエンド検証。元APIにIAP追加・旧V2移行・無関係な正本更新は禁止。
+
+
+### 2026-11-14 JST — 無料枠優先のstaging事前監査（未デプロイ）
+
+- **目的**：通常Chatからの報告登録を無料枠内中心で運用する。ただし請求有効化済み環境で月額0円を保証しない。
+- **コード変更**：`cloud/scripts/deploy-dashboard-staging.sh`のUIデプロイにrequest-basedを指定する`--cpu-throttling`、concurrency 40、timeout 30秒を追加。既存min0/max1/1CPU/512MiBは維持。Cloud Runにはまだデプロイしていない。
+- **新規監査ツール**：`cloud/scripts/audit-free-tier-staging.py`（読み取り専用）。Cloud Shellの対象リポジトリで`python3 cloud/scripts/audit-free-tier-staging.py`を実行し、プロジェクト番号、両Cloud Runサービスのmin/max/CPU課金方式、Firestoreデータベース、東京Schedulerのジョブ数、Billing有効状態を点検。請求詳細/予算設定/他リージョンや他プロジェクトは未確認として残す。プロジェクトのリソース/権限/機密情報を変更しない。
+- **設計判断**：Schedulerは請求先アカウントにつき3ジョブまで無料（停止中含む）、Firestoreの無料枠は対象DBに限定、Artifact Registryは月0.5GiBまで無料。X有料API/画像AIを自動有効化しない。Google Cloud Budget通知だけでは課金を止められない。
+- **価格出典と全工程**：`docs/FREE_TIER_STAGING_COST_PLAN.md`。次は実際のCloud Shell監査、当月の請求明細照合、既存Worker/Scheduler/IAMを保護したstaging配備、Chat→Intake→Firestore正本→UIの1件E2Eを行う。旧売却8件の新ID再送は禁止。
