@@ -88,10 +88,22 @@ def service_config():
         raise Blocked("GCP project number mismatch")
     data = cli_json("run", "services", "describe", SERVICE, "--project", PROJECT,
                     "--region", REGION, "--format=json")
-    spec = data.get("spec", {}).get("template", {}).get("spec", {})
+    traffic = (data.get("status") or {}).get("traffic") or []
+    active = [item for item in traffic if item.get("percent", 0) > 0]
+    if len(active) != 1 or active[0].get("percent") != 100:
+        raise Blocked("serving traffic is split or unavailable; inspect before diagnosis")
+    revision_name = active[0].get("revisionName")
+    if (not isinstance(revision_name, str)
+        or not revision_name.startswith(SERVICE + "-")):
+        raise Blocked("serving Cloud Run revision identity is invalid")
+    # Service template can point to a 0%-traffic candidate. We MUST query the
+    # actual serving revision to reproduce the recurring old 503 safely.
+    serving = cli_json("run", "revisions", "describe", revision_name,
+                       "--project", PROJECT, "--region", REGION, "--format=json")
+    spec = serving.get("spec", {})
     containers = spec.get("containers", [])
     if not containers or not isinstance(containers[0], dict):
-        raise Blocked("Cloud Run serving service configuration missing")
+        raise Blocked("Cloud Run serving revision configuration missing")
     env = {row.get("name"): row.get("value") for row in containers[0].get("env", [])}
     identity = spec.get("serviceAccountName")
     if not isinstance(identity, str) or not identity.endswith(".gserviceaccount.com"):
@@ -240,7 +252,7 @@ def main():
     if len(sys.argv) != 1:
         raise Blocked("no command-line arguments are accepted")
     identity, sheet, audience, oidc_identity, base_url = service_config()
-    print("PASS: exact staging project, Cloud Run identity and required gates")
+    print("PASS: exact staging project, active 100%-traffic revision identity and required gates")
     scheduler_check(audience, oidc_identity, base_url)
     current_error_count()
     token = read_only_service_token(identity)
