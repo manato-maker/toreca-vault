@@ -43,3 +43,21 @@ TV_TMP="$(mktemp -d)" && git clone --quiet --single-branch --branch build/cloudr
 - `docs/BUYBACK_IMPORT_RUNBOOK.md` — 正式なX一次投稿だけを買取価格として取り込む手順
 - `docs/FREE_TIER_STAGING_COST_PLAN.md` — 無料枠の想定、費用監査、課金通知の制約
 - `docs/NEW_DESIGN_HANDOVER.md` と非公開Google Doc `Toreca Vault Handoff (CURRENT)` — 開発とChatの共通正本
+
+
+## 2026-11-14 — Intake 503の安全な一括診断（既存候補は0%のまま）
+
+2026-11-14にAndroid Cloud Shellで確認した内容：
+- Cloud Schedulerの`toreca-vault-staging-intake`は15分間隔、`ENABLED`だが直近はCODE 14。Cloud Runの旧revision `toreca-vault-staging-00004-nfr`が15分ごとに`/internal/worker/sheets-intake`でHTTP 500/503を返している。
+- APIは起動し、writes/command queue/command worker/Sheets intakeの4フラグは全て`true`。したがって有効/無効だけでは原因を断定できない。
+- 新候補revision `00005`は0%トラフィックでデプロイ成功。**まだpromoteやScheduler手動実行をしていない**。
+
+今回`cloud/scripts/diagnose-intake-staging.py`を追加。既存Cloud Runのサービスアカウントで読み取り権限を一括検査し、Scheduler送信先・OIDC audienceと主体、Google Sheetsの専用Intakeメタデータと読み取り、Firestore staging canonicalとcursor、および直近HTTP5xx件数を**要約だけ**出力。Cloud IAMを変更しない。workerは呼び出さず、受付データ、原価、在庫、売却、正本に書き込まない。ログ・機密トークン・個人取引内容は出力しない。既存Cloud Runと同様のGoogle Sheets / Firestoreスコープで最長10分の一時トークンを作るため、認証済みCloud Shellの利用者に既存Cloud Run service accountへのimpersonation権限が必要。権限不足時は`BLOCKED`で停止し、**IAM権限を勝手に付与してはならない**。
+
+既にGitHub作業ブランチのディレクトリにいる場合は、最新の安全な診断だけを実施：
+
+```bash
+git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py
+```
+
+`PASS`は依存先の**読み取り権限**しか保証せず、受付処理のPOSTやFirestore書込み権限を保証しない。表示された`BLOCKED`の種類だけをWorkに報告し、SAメール・トークン等は貼らない。原因がわかるまでは`promote`や`gcloud scheduler jobs run`を行わない。CIには`cloud/test/test_diagnose_intake_staging.py`を追加した。
