@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import { applyTransaction, emptyV2 } from '../../v2/core.js';
 import { createMarketRefreshHandler, marketTargetKey, refreshMarketQuotes } from '../src/market-refresh-worker.js';
 
+function sourcedBuyback(target, price = 1500) {
+  return {
+    targetKey: target.targetKey, productKey: target.productKey, category: target.category,
+    condition: target.condition, unit: 'box', price, buybackYen: price,
+    source: '買取ミミ', sourceStore: '買取ミミ', status: 'verified',
+    postedAt: '2026-11-07T02:00:00.000Z', validUntil: '2026-11-07',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456789'
+  };
+}
+
 function sampleState() {
   let state = applyTransaction(emptyV2(), {
     id: 'market-purchase', type: 'purchase', product: 'Box X', productKey: 'box-x',
@@ -45,7 +55,7 @@ test('market refresh records only sourced quotes and verifies revision readback'
     runAt: '2026-11-07T04:45:00.000Z',
     provider: { async lookupMany(targets) {
       requestedTargets = targets;
-      return [{ targetKey: targets[0].targetKey, price: 1500, source: 'Verified shop' }];
+      return [sourcedBuyback(targets[0], 1500)];
     } }
   });
   const saved = await store.read();
@@ -58,8 +68,11 @@ test('market refresh records only sourced quotes and verifies revision readback'
     checkedAt: '2026-11-07T04:45:00.000Z'
   });
   assert.equal(saved.payload.marketQuotes[0].price, 1500);
-  assert.equal(saved.payload.marketQuotes[0].source, 'Verified shop');
-  assert.equal(saved.payload.marketQuotes[0].quotedAt, '2026-11-07T04:45:00.000Z');
+  assert.equal(saved.payload.marketQuotes[0].source, '買取ミミ');
+  assert.equal(saved.payload.marketQuotes[0].priceBasis, 'buyback');
+  assert.equal(saved.payload.marketQuotes[0].status, 'verified');
+  assert.equal(saved.payload.marketQuotes[0].postUrl, 'https://x.com/mimi_kaitori/status/1234567890123456789');
+  assert.equal(saved.payload.marketQuotes[0].quotedAt, '2026-11-07T02:00:00.000Z');
   assert.equal(saved.payload.marketQuotes[0].fresh, true);
   assert.deepEqual(saved.payload.transactions, initial.transactions);
   assert.deepEqual(saved.payload.inventoryLots, initial.inventoryLots);
@@ -143,7 +156,7 @@ test('scheduled market handler uses the stable daily key and planned time', asyn
   const handler = createMarketRefreshHandler({
     store,
     provider: { async lookupMany(targets) {
-      return [{ targetKey: targets[0].targetKey, price: 1600, source: 'Verified shop' }];
+      return [sourcedBuyback(targets[0], 1600)];
     } }
   });
   const result = await handler({
@@ -154,4 +167,30 @@ test('scheduled market handler uses the stable daily key and planned time', asyn
   assert.equal(result.checkedAt, '2026-11-07T04:45:00.000Z');
   assert.equal((await store.read()).payload.lastMutationId, 'market-refresh:2026-11-07');
   await assert.rejects(handler({ kind: 'market-refresh', jobKey: 'invalid', scheduledAt: new Date() }), /scheduled daily/);
+});
+
+
+test('retail MSRP, mismatched units, missing original posting or expired shop offers do not overwrite a previous quote', async () => {
+  const badCases = [
+    target => ({ ...sourcedBuyback(target, 7200), source: '公式定価', sourceStore: '公式定価' }),
+    target => ({ ...sourcedBuyback(target), status: 'review' }),
+    target => ({ ...sourcedBuyback(target), postUrl: '' }),
+    target => ({ ...sourcedBuyback(target), unit: 'case' }),
+    target => ({ ...sourcedBuyback(target), condition: 'なし' }),
+    target => ({ ...sourcedBuyback(target), validUntil: '2026-11-06' }),
+    target => ({ ...sourcedBuyback(target), source: '参考', sourceStore: '参考' })
+  ];
+  for (const build of badCases) {
+    const store = memoryStore(sampleState());
+    const result = await refreshMarketQuotes({
+      store, mutationId: 'market-refresh:2026-11-07',
+      runAt: '2026-11-07T04:45:00.000Z',
+      provider: { async lookupMany(targets) { return [build(targets[0])]; } }
+    });
+    assert.equal(result.refreshedCount, 0);
+    assert.equal(result.staleCount, 1);
+    const quote = (await store.read()).payload.marketQuotes[0];
+    assert.equal(quote.price, 1250);
+    assert.equal(quote.fresh, false);
+  }
 });
