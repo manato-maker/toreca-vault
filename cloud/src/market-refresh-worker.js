@@ -1,4 +1,5 @@
 import { positiveMarketTargets, validateState } from '../../v2/core.js';
+import { buybackForLot } from './buyback-quotes.js';
 
 const MAX_TARGETS_PER_REFRESH = 500;
 
@@ -18,10 +19,24 @@ export function marketTargetKey(target) {
   ]);
 }
 
-function validQuote(value) {
-  return value && Number.isSafeInteger(value.price) && value.price >= 0
-    && typeof value.source === 'string' && value.source.trim().length > 0
-    && value.source.trim().length <= 120;
+function validQuote(value, target, checkedAt) {
+  if (!value || !Number.isSafeInteger(value.price) || value.price <= 0
+    || typeof value.source !== 'string' || value.source.trim().length > 120
+    || (value.category && value.category !== target.category)
+    || (value.productKey && valueKey(value.productKey) !== valueKey(target.productKey || target.product))
+    || (value.condition !== undefined && String(value.condition) !== String(target.condition || target.shrinkStatus || ''))) {
+    return false;
+  }
+  // A price without a dated verified shop posting may be MSRP, a selling
+  // price or a stale image. It must not enter the current buyback ledger.
+  const checked = {
+    ...value, productKey: target.productKey || target.product,
+    category: target.category, condition: target.condition || target.shrinkStatus || ''
+  };
+  const lot = { category: target.category, productKey: target.productKey || target.product,
+    condition: target.condition || target.shrinkStatus || '' };
+  const matched = buybackForLot([checked], lot, checkedAt);
+  return matched.status === 'current' && matched.price === value.price;
 }
 
 function findQuoteIndex(quotes, target, key) {
@@ -95,7 +110,7 @@ export async function refreshMarketQuotes({
     const result = ambiguousResponseKeys.has(targetKey) ? null : responseByKey.get(targetKey);
     const index = findQuoteIndex(next.marketQuotes, target, targetKey);
     const previous = index >= 0 ? next.marketQuotes[index] : null;
-    if (validQuote(result)) {
+    if (validQuote(result, target, checkedAt)) {
       const quote = {
         ...(previous || {}),
         targetKey,
@@ -103,8 +118,18 @@ export async function refreshMarketQuotes({
         category: target.category,
         condition: target.condition || target.shrinkStatus || '',
         price: result.price,
+        buybackYen: result.price,
         source: result.source.trim(),
-        quotedAt: refreshedAt,
+        sourceStore: String(result.sourceStore || result.source).trim(),
+        priceBasis: 'buyback',
+        status: 'verified',
+        postedAt: String(result.postedAt),
+        postUrl: String(result.postUrl || result.sourceUrl),
+        quotedAt: String(result.postedAt),
+        validUntil: String(result.validUntil || ''),
+        unit: String(result.unit || ''),
+        quoteType: String(result.quoteType || 'regular'),
+        availabilityConfirmed: result.availabilityConfirmed === true,
         lastCheckedAt: refreshedAt,
         fresh: true,
         trend: 'current'
