@@ -1503,3 +1503,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - PR #105 commit `9d48594936aa865bc277bb8321f1480d83aa31f3` adds a private GET `/health/intake` that uses the Cloud Run runtime identity to read only Sheet metadata/header A1:G1 and the Firestore cursor. It returns fixed categories only and does not inspect report rows, call the worker, or write data.
 - The Android launcher's stage mode now runs this read-only probe automatically after zero-traffic deployment. Once CI succeeds, one command from the existing repo root updates and stages the candidate: `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage`. It never promotes or manually runs Scheduler.
 - CI run #43598298266 passed tests and Firestore Emulator. This does not resolve the active revision's 500/503 yet. The read-only candidate probe must run first; even a pass does not prove write/queue processing or Chat-to-UI E2E. No Intake rows, old V2, pending sales, IAM or active traffic changed.
+
+
+## 2026-11-14 JST — zero-traffic candidate Intake read probe passed
+
+- User ran the single Cloud Shell stage command. Cloud Run deployed revision `toreca-vault-staging-00006-lug` tagged `chat-candidate` at 0% traffic; active API traffic stayed on the prior revision.
+- The candidate's automatic private read-only `GET /health/intake` returned `HTTP 200` and `{ok:true,sheetsReadable:true,cursorReadable:true}`. This proves runtime identity can read the dedicated Intake sheet metadata/header and Firestore cursor. It does not prove queue writes, receipt writes, scheduler execution, or an Intake row's end-to-end reflection; HTTP 500/503 cause remains open.
+- The prior `/health/scheduler` result had null timestamps because this candidate has no traffic and did not run Scheduler. Do not treat it as a failure of the active revision.
+- No worker/Scheduler was manually invoked, no Intake rows/statuses were changed, and no old V2, pending sale, IAM, or active traffic was changed.
+- Next diagnostic is Cloud Logging for the existing 500/503 with sanitized `stage`/`reasonCode`; do not process or replay the current `new`/ `queued` rows until row-level duplicate mapping and queue/canonical reconciliation are verified. Do not promote the candidate on the read probe alone.
