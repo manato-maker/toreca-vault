@@ -128,6 +128,7 @@ export async function refreshMarketQuotes({
     const candidates = [...(responseByKey.get(targetKey)?.values() || [])];
     const accepted = candidates.filter(result => validQuote(result, target, checkedAt));
     let acceptedForTarget = 0;
+    let rejectedOlderReplay = false;
 
     for (const result of accepted) {
       const shop = String(result.sourceStore || result.source).trim();
@@ -143,10 +144,14 @@ export async function refreshMarketQuotes({
           || (currentPosted === oldPosted
             && (previous.price !== result.price
               || (previous.postUrl && previous.postUrl !== (result.postUrl || result.sourceUrl)))))) {
+        rejectedOlderReplay = true;
         continue;
       }
       if (previous && previous.postUrl && previous.postUrl === (result.postUrl || result.sourceUrl)
-        && previous.price !== result.price) continue;
+        && previous.price !== result.price) {
+        rejectedOlderReplay = true;
+        continue;
+      }
       const quote = {
         targetKey,
         productKey: target.productKey || target.product,
@@ -184,6 +189,13 @@ export async function refreshMarketQuotes({
     }
 
     if (acceptedForTarget === 0) {
+      if (rejectedOlderReplay) {
+        // An outdated provider cache is not evidence that a more recent
+        // already-verified shop posting has become invalid. Leave the saved
+        // quote untouched; the renderer still enforces its expiration.
+        staleCount += 1;
+        continue;
+      }
       const index = findQuoteIndex(next.marketQuotes, target, targetKey);
       const previous = index >= 0 ? next.marketQuotes[index] : null;
       const quote = {
