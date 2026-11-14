@@ -44,7 +44,10 @@ function shopFor(quote) {
 
 function compatible(quote, lot) {
   if (!quote || !lot || !shopFor({ ...quote, category: lot.category })) return false;
-  if (String(quote.basis || quote.priceBasis || quote.priceKind || '').match(NON_BUYBACK)) return false;
+  // All provenance fields must describe a BUYBACK offer. A recognizable shop
+  // name in sourceStore must never mask source="公式定価" or basis="MSRP".
+  if ([quote.source, quote.sourceStore, quote.basis, quote.priceBasis, quote.priceKind, quote.quoteType]
+    .some(value => NON_BUYBACK.test(String(value || '')))) return false;
   // lotId is only a supplementary correlation ID. It must never override
   // a contradictory product, category or selling unit supplied by a shop.
   if (!quote.category || String(quote.category) !== String(lot.category)) return false;
