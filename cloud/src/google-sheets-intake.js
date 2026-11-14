@@ -154,9 +154,12 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
           businessEventKey: parsed.businessEventKey,
           intakeReceipt: { spreadsheetIdHash, rowNumber: row.rowNumber }
         });
-      } catch {
-        // Leave the source row as `new`; a later tick retries with the same requestId.
-        throw new Error('Google Sheets command enqueue failed');
+      } catch (error) {
+        // Preserve the nested cause for fixed-category diagnostics only. The raw
+        // exception is never logged or returned to the caller.
+        throw Object.assign(new Error('Google Sheets command enqueue failed', { cause: error }), {
+          intakeStage: 'intake'
+        });
       }
 
       if (queued?.businessDuplicate) {
