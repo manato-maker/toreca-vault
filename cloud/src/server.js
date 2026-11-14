@@ -6,6 +6,7 @@ import { createCommandBatchWorker } from './command-batch-worker.js';
 import { createGoogleSchedulerAuthorizer } from './google-scheduler-authorizer.js';
 import { createGoogleSheetsIntakeProcessor } from './google-sheets-intake.js';
 import { createGoogleSheetsIntakeStatusProcessor } from './google-sheets-intake-status.js';
+import { logIntakeFailure } from './worker-error-diagnostics.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
 import { createFirestoreGoogleSheetsIntakeCursorStore } from './firestore-google-sheets-intake-cursor.js';
 import {
@@ -134,7 +135,10 @@ export function createServer({
           }
         }
         return send(response, 200, body);
-      } catch {
+      } catch (error) {
+        // Log only fixed diagnostic categories. Never log an exception
+        // message, stack, access token, spreadsheet ID or receipt contents.
+        logIntakeFailure(console.error, error?.intakeStage, error);
         return send(response, 503, { ok: false, error: 'Google Sheets intake failed' });
       }
     }
@@ -459,8 +463,20 @@ export async function start() {
     });
     const statusWorker = createGoogleSheetsIntakeStatusProcessor({ provider, queue: commandQueue, spreadsheetId, maxRowsPerRun: 20 });
     sheetsIntakeWorker = async (input) => {
-      const intake = await intakeWorker(input);
-      const statusReconciliation = await statusWorker(input);
+      let intake;
+      try {
+        intake = await intakeWorker(input);
+      } catch (error) {
+        // Keep the original error as the cause for internal classification
+        // without revealing its raw text to logs or clients.
+        throw Object.assign(new Error('intake failed', { cause: error }), { intakeStage: 'intake' });
+      }
+      let statusReconciliation;
+      try {
+        statusReconciliation = await statusWorker(input);
+      } catch (error) {
+        throw Object.assign(new Error('reconciliation failed', { cause: error }), { intakeStage: 'reconciliation' });
+      }
       return { ...intake, statusReconciliation };
     };
   }
