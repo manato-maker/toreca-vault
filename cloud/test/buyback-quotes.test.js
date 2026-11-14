@@ -106,7 +106,7 @@ test('partially priced inventory never computes profit for unknown-cost lot', ()
   const noCost = { id: 'lot-other', product: 'Card X', productKey: 'Card X', category: 'カード',
     condition: '', quantity: 1, unitCost: null };
   const singleQuote = {
-    lotId: noCost.id, category: 'カード', condition: '', price: 2500, status: 'verified',
+    lotId: noCost.id, productKey: 'Card X', category: 'カード', condition: '', unit: 'card', price: 2500, status: 'verified',
     sourceStore: 'カードラッシュ', sourceUrl: 'https://www.cardrush-pokemon.jp/',
     postedAt: '2026-11-14T03:00:00Z', validUntil: '2026-11-14'
   };
@@ -163,4 +163,7 @@ test('a matching lotId does not override a contradictory category, product or se
   assert.equal(buybackForLot([{ ...keyed, productKey: 'different-product' }], lot, NOW).status, 'missing');
   assert.equal(buybackForLot([{ ...keyed, unit: 'card' }], lot, NOW).status, 'missing');
   assert.equal(buybackForLot([{ ...keyed, unit: 'pack' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, unit: '' }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, unit: undefined }], lot, NOW).status, 'missing');
+  assert.equal(buybackForLot([{ ...keyed, productKey: undefined }], lot, NOW).status, 'missing');
 });
