@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buybackForLot, buybackSourceUrl } from '../src/buyback-quotes.js';
+import { buybackForLot, buybackOffersForLot, buybackSourceUrl } from '../src/buyback-quotes.js';
 import { renderDashboard } from '../src/dashboard-view.js';
 
 const NOW = new Date('2026-11-14T06:00:00.000Z');
@@ -118,4 +118,38 @@ test('partially priced inventory never computes profit for unknown-cost lot', ()
   assert.match(html, /参考評価差額/);
   assert.match(html, /22,000/);
   assert.doesNotMatch(html, /24,500/);
+});
+
+test('later lower quote from the same shop supersedes a still-valid older high quote', () => {
+  const previous = { ...mimi, price: 24000, postedAt: '2026-11-14T02:00:00Z' };
+  const revised = { ...mimi, price: 18000, postedAt: '2026-11-14T04:00:00Z',
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456700' };
+  const picked = buybackForLot([previous, revised], lot, NOW);
+  assert.equal(picked.status, 'current');
+  assert.equal(picked.price, 18000);
+  assert.equal(buybackOffersForLot([previous, revised], lot, NOW).length, 1);
+});
+
+test('same-time contradictory posts from one shop are omitted, but other shops still count', () => {
+  const contradictory = { ...mimi, price: 29000,
+    postUrl: 'https://x.com/mimi_kaitori/status/1234567890123456701' };
+  const offers = buybackOffersForLot([mimi, contradictory, kuro], lot, NOW);
+  assert.equal(offers.length, 1);
+  assert.equal(offers[0].sourceStore, 'トレカショップKURO');
+  assert.equal(buybackForLot([mimi, contradictory, kuro], lot, NOW).price, 18500);
+});
+
+test('inventory shows distinct shop offers and original post links without substituting cost', () => {
+  const html = renderDashboard({
+    schemaVersion: 2, inventoryLots: [lot],
+    marketQuotes: [mimi, kuro], transactions: [], lotteries: []
+  }, 1, '2026-11', NOW);
+  assert.match(html, /店舗別の有効な参考買取価格/);
+  assert.match(html, /買取ミミ/);
+  assert.match(html, /トレカショップKURO/);
+  assert.match(html, /18,200/);
+  assert.match(html, /18,500/);
+  assert.match(html, /出典/);
+  assert.match(html, /mimi_kaitori\/status/);
+  assert.match(html, /kuro_tcg\/status/);
 });
