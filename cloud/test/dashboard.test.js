@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { renderDashboard } from '../src/dashboard-view.js';
 import { createIapVerifier } from '../src/dashboard-auth.js';
 import { createDashboardServer } from '../src/dashboard-server.js';
@@ -224,4 +226,20 @@ test('staging dashboard deploy script enforces request-based low-cost private se
   assert.ok(shell.includes('toreca-vault-ui-staging'));
   assert.ok(shell.includes('roles/datastore.viewer'));
   assert.ok(shell.includes('IAP'));
+});
+
+
+test('free-tier staging audit parses as Python without running cloud commands', (t) => {
+  const file = fileURLToPath(new URL('../scripts/audit-free-tier-staging.py', import.meta.url));
+  const py = spawnSync('python3', ['-c',
+    'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))',
+    file], { encoding: 'utf8', timeout: 5000 });
+  if (py.error?.code === 'ENOENT') return t.skip('Python not installed in this environment');
+  assert.equal(py.status, 0, py.stderr);
+  const source = readFileSync(file, 'utf8');
+  for (const command of ['run("projects", "describe"', 'run("run", "services", "describe"',
+    'run("firestore", "databases", "list")', 'run("scheduler", "jobs", "list"']) {
+    assert.ok(source.includes(command), 'missing audit read: ' + command);
+  }
+  assert.doesNotMatch(source, /subprocess\.run\(\s*\["gcloud",\s*"(?:run|firestore|scheduler)",\s*"(?:deploy|update|delete|create|jobs run)"/);
 });
