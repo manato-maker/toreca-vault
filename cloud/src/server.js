@@ -111,7 +111,10 @@ export function createServer({
       }
       try {
         if (!await sheetsIntakeAuthorize(request)) return send(response, 401, { ok: false, error: 'unauthorized' });
-      } catch {
+      } catch (error) {
+        // Emit only the fixed authorization stage/reason code. Never expose the
+        // token, verifier response, exception message, or stack.
+        logIntakeFailure(intakeDiagnosticLogger, 'authorization', error);
         return send(response, 503, { ok: false, error: 'intake authorization unavailable' });
       }
       if (String(request.headers['x-cloudscheduler'] || '').toLowerCase() !== 'true') {
