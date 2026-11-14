@@ -44,9 +44,14 @@ function findQuoteIndex(quotes, target, key, sourceStore = '') {
       && valueKey(quote.productKey) === valueKey(target.productKey)
       && String(quote.condition || '') === String(target.condition || target.shrinkStatus || ''));
   if (sourceStore) {
-    // Never replace shop A's source evidence with shop B's price.
-    return quotes.findIndex(quote => matchingTarget(quote)
-      && valueKey(quote.sourceStore || quote.source) === valueKey(sourceStore));
+    // Prefer the latest matching shop offer, not an older superseded record.
+    // This works for both legacy single-price rows and dated offer history.
+    const candidates = quotes.map((quote, index) => ({ quote, index }))
+      .filter(({ quote }) => matchingTarget(quote)
+        && valueKey(quote.sourceStore || quote.source) === valueKey(sourceStore));
+    candidates.sort((a, b) => (Date.parse(b.quote.postedAt || b.quote.quotedAt || '') || 0)
+      - (Date.parse(a.quote.postedAt || a.quote.quotedAt || '') || 0));
+    return candidates[0]?.index ?? -1;
   }
   return quotes.findIndex(matchingTarget);
 }
@@ -87,19 +92,27 @@ export async function refreshMarketQuotes({
   if (targets.length > maxTargets) throw new RangeError('Market target count exceeds the configured limit');
 
   let responseByKey = new Map();
-  const ambiguousResponseKeys = new Set();
+  const ambiguousShopKeys = new Set();
   try {
-    const response = await provider.lookupMany(targets.map((target) => ({ ...target, targetKey: marketTargetKey(target) })));
+    const response = await provider.lookupMany(targets.map((target) => ({
+      ...target, targetKey: marketTargetKey(target)
+    })));
     if (Array.isArray(response)) {
       for (const item of response) {
         if (!item || typeof item.targetKey !== 'string') continue;
-        if (responseByKey.has(item.targetKey)) {
-          responseByKey.delete(item.targetKey);
-          ambiguousResponseKeys.add(item.targetKey);
+        const shopKey = valueKey(item.sourceStore || item.source);
+        const pairKey = JSON.stringify([item.targetKey, shopKey]);
+        if (!responseByKey.has(item.targetKey)) responseByKey.set(item.targetKey, new Map());
+        const byShop = responseByKey.get(item.targetKey);
+        if (ambiguousShopKeys.has(pairKey)) continue;
+        if (byShop.has(shopKey)) {
+          // Conflicting or repeated provider records from the same shop are
+          // ambiguous; reject that shop only, not competitors' verified quotes.
+          byShop.delete(shopKey);
+          ambiguousShopKeys.add(pairKey);
           continue;
         }
-        if (ambiguousResponseKeys.has(item.targetKey)) continue;
-        responseByKey.set(item.targetKey, item);
+        byShop.set(shopKey, item);
       }
     }
   } catch {
@@ -112,14 +125,29 @@ export async function refreshMarketQuotes({
   let staleCount = 0;
   for (const target of targets) {
     const targetKey = marketTargetKey(target);
-    const result = ambiguousResponseKeys.has(targetKey) ? null : responseByKey.get(targetKey);
-    const accepted = validQuote(result, target, checkedAt);
-    const index = findQuoteIndex(next.marketQuotes, target, targetKey,
-      accepted ? String(result.sourceStore || result.source).trim() : '');
-    const previous = index >= 0 ? next.marketQuotes[index] : null;
-    if (accepted) {
+    const candidates = [...(responseByKey.get(targetKey)?.values() || [])];
+    const accepted = candidates.filter(result => validQuote(result, target, checkedAt));
+    let acceptedForTarget = 0;
+
+    for (const result of accepted) {
+      const shop = String(result.sourceStore || result.source).trim();
+      const index = findQuoteIndex(next.marketQuotes, target, targetKey, shop);
+      const previous = index >= 0 ? next.marketQuotes[index] : null;
+      const currentPosted = Date.parse(result.postedAt);
+      const oldPosted = Date.parse(previous?.postedAt || previous?.quotedAt || '');
+      // A provider cache can return yesterday's high price after a shop
+      // lowered its offer. Reject backwards timestamps and conflicting reuse
+      // of the same timestamp or individual posting URL.
+      if (Number.isFinite(oldPosted)
+        && (currentPosted < oldPosted
+          || (currentPosted === oldPosted
+            && (previous.price !== result.price
+              || (previous.postUrl && previous.postUrl !== (result.postUrl || result.sourceUrl)))))) {
+        continue;
+      }
+      if (previous && previous.postUrl && previous.postUrl === (result.postUrl || result.sourceUrl)
+        && previous.price !== result.price) continue;
       const quote = {
-        ...(previous || {}),
         targetKey,
         productKey: target.productKey || target.product,
         category: target.category,
@@ -127,7 +155,7 @@ export async function refreshMarketQuotes({
         price: result.price,
         buybackYen: result.price,
         source: result.source.trim(),
-        sourceStore: String(result.sourceStore || result.source).trim(),
+        sourceStore: shop,
         priceBasis: 'buyback',
         status: 'verified',
         postedAt: String(result.postedAt),
@@ -141,10 +169,23 @@ export async function refreshMarketQuotes({
         fresh: true,
         trend: 'current'
       };
-      if (index >= 0) next.marketQuotes[index] = quote;
-      else next.marketQuotes.push(quote);
+      if (index >= 0 && previous?.postUrl === quote.postUrl) {
+        next.marketQuotes[index] = { ...previous, ...quote };
+      } else {
+        // Retain the prior posting as history, rather than replacing it with
+        // a different URL or collapsing two shop offers into a single price.
+        if (previous && index >= 0 && previous.status === 'verified') {
+          next.marketQuotes[index] = { ...previous, status: 'superseded', fresh: false, trend: 'stale' };
+        }
+        next.marketQuotes.push(quote);
+      }
+      acceptedForTarget += 1;
       refreshedCount += 1;
-    } else {
+    }
+
+    if (acceptedForTarget === 0) {
+      const index = findQuoteIndex(next.marketQuotes, target, targetKey);
+      const previous = index >= 0 ? next.marketQuotes[index] : null;
       const quote = {
         ...(previous || {}),
         targetKey,
