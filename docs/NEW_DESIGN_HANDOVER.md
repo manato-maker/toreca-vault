@@ -1104,3 +1104,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **セキュリティ・費用**: GitHubリポジトリは公開。Google Sheets生ID・tokenや個人の取引記録を新規コードに埋め込まない方針に修正（過去コミット履歴の書換は未実施）。Cloud Run staging UIのmin0/max1、request-based運用。Cloud Build/Artifact Registryの費用はリリース時に監査。旧売却8件と旧Queue・本番V2・Firestore正本のデータは変更なし。
 - **手順正本**: `docs/CHAT_STAGING_RELEASE_RUNBOOK.md`にWork/Cloud Shell実環境リリースと最終Chat→Intake→canonical→UI E2E、失敗時の切り分け・旧V2保護のルールを記録。
 - **未完了**: GCP請求と権限の実監査、Cloud Run API/UIへ今回の変更をデプロイ、OIDC/Scheduler実起動の確認、通常Chatから未登録の実報告を投入したcanonical読戻しとスマホ表示検証、Gmail実OAuth・X画像相場の実取得・バックアップ復元ドリル・旧売却未処理の安全な処理。CI成功≠実運用完成。PR #105は引き続きdraft/open。
+
+
+### 2026-11-14 JST — Driveの旧JSONはV2正本ではない
+
+- 非公開Driveフォルダ「Toreca Vault Private」内の `toreca-vault-data.json` を読み取り専用で確認。ファイル更新は2026-10-05で、トップレベル`schemaVersion=1`、内部データもV1形式。`data`の集計はlotteries 285、purchases 37、boxes 6、packs 0、cards 13、openings 2、sales 27（内容・個人情報はGitHubに転載しない）。
+- **重要**：これは現在のV2 schemaVersion 2の正本を証明するものではない。2026-10-05以降の記録が欠ける可能性が高いため、これを最新canonicalとしてFirestoreにインポートしてはならない。V2正本のApps Script `TV_V2_DATA_FILE_ID` の実設定、現在のV2 JSONのschemaVersion/revision/hash/更新日を認証付き環境で照合する。
+- 今回の調査ではDrive上の最新V2 JSON正本は未確定。既存canonical・旧Queue・在庫・売却は変更していない。V1→V2変換も実行しない。
