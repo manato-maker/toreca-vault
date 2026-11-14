@@ -39,7 +39,9 @@ test('dashboard escapes product names and shows read-only stock, calendar and pr
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
   assert.match(html, /相場未取得/);
-  assert.match(html, /原価を代用/);
+  assert.match(html, /定価・購入原価は買取価格に代用していません/);
+  assert.match(html, /参考買取評価額/);
+  assert.match(html, /買取相場未取得/);
 });
 test('invalid month falls back to current JST calendar and does not inject HTML', () => {
   const html = renderDashboard(SNAPSHOT, 1, '2026-11"><script>', new Date('2026-11-13T04:00:00Z'));
