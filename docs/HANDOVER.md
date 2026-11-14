@@ -1463,3 +1463,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 診断は`BLOCKED: could not impersonate Cloud Run service identity for read-only checks`で停止。これは**Cloud Shell操作ユーザーがサービスアカウントの一時アクセストークンを取得できなかった**という診断権限の制限であり、**実行中Cloud Run自身のGoogle Sheets/Firestore権限不足の証明ではない**。安易にService Account Token Creator等の権限付与を行わない。Cloud RunとIntakeを公開しない。
 - 接続済みGoogle Driveの`Toreca Vault New App Intake`メタデータを直接確認し、**Googleサービスアカウント1件にwriter共有権限がある**ことを確認。ただしこのアカウントが稼働中revisionの`spec.serviceAccountName`と同一かは未照合。共有権限の有無だけでSheetsアクセス成功は断定できない。
 - 新revision`00005`は0%トラフィックのまま。Cloud Run/Schedulerの設定変更・Firestore/Sheet書込み・未処理報告の再投入は実施していない。次の調査では、稼働中SAとIntake writerの同一性を**読み取り専用で照合**し、実行時権限の問題とAPI処理の問題を切り分ける。
+
+
+### 2026-11-14 JST — 稼働中Cloud RunとIntake編集者の同一性を確認
+
+- Android Cloud Shellで稼働中revision `toreca-vault-staging-00004-nfr` のサービスアカウントとGoogle Sheetsの`Toreca Vault New App Intake`にwriter共有済みのサービスアカウントの照合を実施し、**MATCH**を確認した。
+- このWorkからGoogle Driveファイル権限を読み、共有先はユーザーownerとGoogleサービスアカウントwriterの2件を確認。**アカウントの不一致とシート未共有という原因候補は除外**できる。ただしOAuthスコープ、Sheets API、実際のCloud Run権限・Firestoreアクセスが成功する証明にはならない。
+- 前の`BLOCKED: could not impersonate Cloud Run service identity`はCloud Shellユーザーの代理トークン発行権限不足であり、稼働中Cloud Runサービスアカウント自体の権限不足ではない。**IAMのToken Creator付与や一般公開を行わない**。
+- 2026-11-14に接続済みIntake!A1:G22を再読。受付8行で`v2-applied`1、`queued`1、`new`3、`review`3。8行すべてのA列requestIdとB列JSON requestId一致・JSON構文は有効。よって「入力行全件のJSONが壊れて503」という説は支持されない。業務内容/購入原価/個人情報は記録していない。
+- 15分間隔で`/internal/worker/sheets-intake`にHTTP500/503が継続している根本原因は依然未特定。現在のコードでは `sheetsIntakeWorker`失敗を503として返し、候補版に`worker-error-diagnostics.js`の固定コード分類ログが用意されている。candidate 0%を本番切替せず、候補の検証とFirestore/Sheets実行時アクセスを安全に確かめることが次のゲート。実データ変更・Scheduler手動runは未実施。
