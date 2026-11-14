@@ -166,9 +166,13 @@ export function createGoogleSheetsIntakeProcessor({ provider, queue, cursorStore
         }, parsed.requestId);
         result.duplicate++;
       } else if (queued?.accepted) {
+        // A request-ID retry is the SAME accepted report, not an independent
+        // business duplicate. A crash after enqueue but before receipt writes
+        // must leave the row queued so reconciliation can later mark it
+        // v2-applied. Only an independently identified business duplicate is
+        // terminally classified as duplicate.
         await provider.writeReceipt(row.rowNumber, {
-          status: queued.duplicate ? 'duplicate' : 'queued',
-          resultCode: queued.duplicate ? 'request-duplicate' : 'accepted',
+          status: 'queued', resultCode: 'accepted',
           acceptedRequestId: parsed.requestId,
           processedAtMs: now()
         }, parsed.requestId);
