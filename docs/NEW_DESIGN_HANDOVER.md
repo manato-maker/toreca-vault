@@ -1124,3 +1124,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **テスト**：`cloud/test/google-sheets-intake.test.js`、`google-sheets-intake-provider.test.js`、`firestore-command-queue.test.js` に再実行・最終結果保護・衝突・安全なリトライの回帰テストを追加。CI v2-ci #43559680508（test + Firestore Emulator）ともにsuccess。
 - **変更範囲**：GitHub PR #105作業ブランチのみ。実staging Worker/Sheet/Firestore正本/旧V2データ/旧Queueには変更なし。Sheets APIは複数Scheduler実行間で完全なatomic CASではないので、単一定期ジョブ運用とFirestore側の冪等性も必須。
 - **残り**：認証済みGoogle Cloudで費用・Cloud Run・Scheduler・IAM・staging canonicalを監査、対象stagingへ段階的デプロイ後、通常Chat→Intake→正本readback→スマホUIの1件E2Eを確認するまでは運用開始済みとしない。
+
+
+### 2026-11-14 JST — 「完了させて」対応：ステージング本番切替前の追加修正
+
+- **依頼**：このWorkスレッド内でChat日常報告の完成まで進める。別Workへの引き継ぎは不要。通常Chatは報告、Workは開発・運用。
+- **今回の修正**：`cloud/scripts/release-chat-staging.sh` の`promote`時、Cloud Runサービスに設定された `TV2_ENABLE_WRITES`、`TV2_ENABLE_COMMAND_QUEUE`、`TV2_ENABLE_COMMAND_WORKER`、`TV2_ENABLE_GOOGLE_SHEETS_INTAKE` の4機能が全て`true`でない場合は**切替中止**する安全ゲートを追加。以前のチェックは無効な機能を表示するだけで切替を防止していなかった。安全性と運用の成功条件を混同しないための変更。
+- **テスト**：`cloud/test/release-chat-staging.test.js`へ回帰テスト追加。GitHub Actions [#43561882965](https://github.com/manato-maker/toreca-vault/actions/runs/43561882965) は通常テスト・Firestore Emulatorともにsuccess。
+- **実環境の確認**：接続済み専用Google Sheets IntakeのD:Gを再読。状態は`v2-applied/canonical-readback-verified` 1件、`queued`1件、`new`3件、`review`3件。既存行を更新せず、未処理レコードを別requestIdで再投入しなかった。**実環境のワーカー/Schedulerが動くことは依然未証明**。
+- **重要な制約**：この会話のGitHub/Google Drive接続は有効だが、**Google Cloud Console/Cloud Run/Cloud Scheduler/Cloud Billing/Firestoreに対する認証付き操作ツールは未提供**。このため`check→stage→promote`コマンドはCloud Shellで未実行。CI成功はデプロイ成功ではなく、Chatからの報告→Firestore canonical→スマホUIの実E2Eは未完了。月額0円も未保証。
+- **次の唯一の実環境ゲート**：認証済みGoogle Cloud Shellにて `cloud/scripts/audit-free-tier-staging.py`、`cloud/scripts/release-chat-staging.sh check` を実行して既存サービスと費用を監査。安全なら `stage`→候補のIAP/OIDC/worker/設定と費用を独立確認→`promote`→Chat実報告1件のcanonicalとUI読み戻し。Cloud Shell権限なしに「完成」と表示しない。旧V2の書込み・本番移行は別途承認を要する。
