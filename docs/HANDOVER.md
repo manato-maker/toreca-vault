@@ -1419,3 +1419,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - `cloud/src/buyback-quotes.js` のlotId付き記録も商品・カテゴリ・販売単位が違えば拒否。カード価格をBOXに適用しない。
 - 追加テストは `cloud/test/market-refresh-worker.test.js` と `cloud/test/buyback-quotes.test.js`。Actions [#43571906100](https://github.com/manato-maker/toreca-vault/actions/runs/43571906100)のtestとFirestore Emulatorともにsuccess。
 - 最新店舗X本人投稿の当日買取額を独立に確認できておらず実価格は未書込。Cloud Run staging再デプロイとFirestore readbackも未実施。APIトークン/旧V2本番/原価/在庫/売却履歴へ変更なし。続きは `docs/BUYBACK_IMPORT_RUNBOOK.md`。
+
+
+### 2026-11-14 JST — 参考買取価格の誤結合と買取終了後の旧高値復活を防止
+
+- 指示「進めて」によりGitHub PR #105作業ブランチを継続。現在価格の適用条件を強化し、`lotId`の一致だけで商品名・カテゴリ・販売単位が違う買取額を採用しない。商品名とunit/box/pack/card/caseを必須とする。
+- 店舗名と元投稿の見た目が正しくてもsource/basisに公式定価・販売価格・MSRPの表記が混在した相場は採用しない。
+- 同一店の後日の買取終了・期限切れ投稿があれば、古い高価買取提示額を現在の参考価格として復活させない。投稿時刻は時差を考慮して比較、日時不明は過去のverifiedにも表示しない。他店舗の有効提示額は別に採用可能。
+- `cloud/test/buyback-quotes.test.js`に再発防止のテスト追加。CI [#43572888397](https://github.com/manato-maker/toreca-vault/actions/runs/43572888397)でNode testとFirestore Emulator双方success。
+- 実店舗Xの11/14当日価格の全面照合、Cloud Run再デプロイ、Firestore.marketQuotesの実更新、スマホ画面readbackは未実施。GitHubコード・文書・テストのみ。旧V2や在庫/売却原本に変更なし。
