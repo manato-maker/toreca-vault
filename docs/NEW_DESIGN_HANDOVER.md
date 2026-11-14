@@ -1082,3 +1082,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **検証**: GitHub Actions [v2-ci #43527682483](https://github.com/manato-maker/toreca-vault/actions/runs/43527682483) が`test`および`firestore-emulator`ともにsuccess。receiptの空ID/別ID、確定済みスクリーンショット、重複報告、未確定・日付不正報告、抽選原価非計上のテストを追加。
 - **未完了**: `toreca-vault-staging`への改修デプロイ、15分間隔のprivate Sheets intake workerの最新稼働確認、新Chatの報告→Sheet追加→Queue→canonical→スマホ画面の実E2E、外部応募IDが無い結果・受取の取り扱い。GCPの認証付き操作経路がこのチャットにないため、Firestore実データ、旧キュー、旧売却8件、staging UIは変更していない。
 - **次工程**: Work/Cloud Shellで既存環境設定を読み取り、デプロイ前後の構成比較→APIだけ更新→Intake Scheduler/IAM/Sheets accessを安全に検証→既存`new`の重複/状態を確認→新規の実報告1件でE2E readback。必要な所有者操作があれば権限確認を求める。旧V2本番/IAPを変更しない。
+
+
+### 2026-11-14 JST — 無料枠優先監査とCloud Run UI低コスト設定
+
+- **ユーザーの「無料枠内でいける？ → すすめて」への対応**：通常Chat報告機能の継続開発は月額0円を目標にし、課金や既存IAP/Workerを勝手に変更しない。Google Cloud公式料金を再確認し、請求実績/設定を見ないで「無料確定」とは断言しない。
+- **旧→新**：`cloud/scripts/deploy-dashboard-staging.sh` はUIのmin0/max1/CPU1/RAM512MiBは既存。新たに`--cpu-throttling --concurrency=40 --timeout=30s`を明示してリクエストベースの課金設定を維持する（コード変更のみ、Cloud Run未適用）。
+- **追加した監査ツール**：`cloud/scripts/audit-free-tier-staging.py`。Google Cloud Shellで `python3 cloud/scripts/audit-free-tier-staging.py`を実行すると、固定stagingプロジェクト番号を検証後、Cloud Run UI/APIのmin/max/CPU課金方式、Firestoreデータベース一覧、Schedulerの東京リージョンジョブ数、billing有効状況を**読み取り専用**で点検する。権限/情報不足はUNVERIFIED扱い。アカウントIDや認証情報は出力しない。GCPの書込みなし。
+- **無料枠の落とし穴**：Scheduler無料3ジョブは同一billing account全体（pauseも数える）。Firestoreはeligibleなデータベース1個のみ。Cloud Runの無料CPU/RAM/リクエスト枠やArtifact Registryの保存容量はbilling account単位。Cloud Build・保存容量・ネットワーク・バックアップも実請求確認。予算通知だけで支出は停止しない。有料X APIや画像AIの定期実行は費用確認まで保留。
+- **詳細**：`docs/FREE_TIER_STAGING_COST_PLAN.md`を追加。旧売却8件・旧キュー・Firestore正本・UI本番設定には変更なし。
+- **未完了**：Cloud Shellで実監査/当月請求確認、API/Worker/Service Account/Schedulerの実稼働点検、staging再デプロイと通常ChatからのE2E readback。低コスト設定と運用開始は別の検証項目。
