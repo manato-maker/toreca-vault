@@ -83,3 +83,13 @@ TV2_VERIFIED_BUYBACK_IMPORT=YES TV2_BACKUP_VERIFIED=YES \
 - [ ] 完全自動X更新は正規API/OCR利用条件・料金・本人確認を検証後に別工程で導入
 
 この文書が完了しても**実データが更新済みとは主張しない**。
+
+
+## 2026-11-14 JST — 定期相場更新の複数店舗処理・古い値への巻き戻りを修正
+
+- **修正前の問題**：`cloud/src/market-refresh-worker.js` の`lookupMany()`は同じ商品targetKeyを重複と扱い、ミミ・アリウム・KUROの複数の適切な買取提示額をまとめて返すと、その商品全体をあいまいとして無視していた。
+- **修正後**：`(targetKey, sourceStore)`の組を識別し、**別店舗の値なら同一商品でも3店舗を独立受理**。同じ店舗から同じ対象へ2件返り、どちらが正しいか不明なときは**その店舗だけを無効**にし、他店舗の元投稿は採用可能。現在の出典・カテゴリ・シュリンク・単位・期限検証は継続。
+- **時間順序**：すでに記録された新しい店舗投稿より前の日付のキャッシュや、同一URL/同時刻で異なる金額を返す入力は拒否。既存の新しい確認済みの提示は改変せず、レンダラー側の有効期限判定を優先する。新たな投稿は旧投稿をsupersededにして店舗ごとの履歴を保持。
+- **別商品の混同防止**：`cloud/src/buyback-quotes.js`は`lotId`の一致だけで商品名・カテゴリ・販売単位の矛盾を許可しない。BOXにカード単体の単位が付いた提示は採用しない。
+- **検証**：`cloud/test/market-refresh-worker.test.js` と `cloud/test/buyback-quotes.test.js` に3店舗同時取得、同店舗矛盾/他店のみ採用、値下げ後の旧高値不採用、古いキャッシュ入力の拒否、lotIdのカテゴリ衝突試験を追加。GitHub Actions [#43571906100](https://github.com/manato-maker/toreca-vault/actions/runs/43571906100)のtest/Firestore Emulatorは両方success。
+- **実運用**：これはGitHub開発ブランチ上の実装修正であり、Cloud Run/Firestoreの実サービスへは未デプロイ。11/14本人一次X投稿の金額・単位と期限を検証できていないため、価格の実登録は今回も行っていない。認証済みFirebase/Google Cloudの接続と、実在庫に一致する元投稿を確認した後にstagingからE2E検証する。
