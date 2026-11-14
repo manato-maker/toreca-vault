@@ -1395,3 +1395,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 最新CI [#43561882965](https://github.com/manato-maker/toreca-vault/actions/runs/43561882965) は test と firestore-emulatorともに成功。
 - Google Sheetsの現在の受付状態：反映済み1、処理中`queued`1、未受付`new`3、確認待ち`review`3。原本を変更せず、同じ業務事実での再投入を行っていない。
 - **未完了/外部権限の境界**：このスレッドのツールにはGoogle Cloudデプロイ/請求/IAM/Schedulerの認証付き操作がなく、稼働中Cloud Runサービスは更新されていない。実際のデプロイ・ログ・トリガー・Firestore canonical E2E・スマホ表示を確認するまで「完成」「報告運用開始可能」と称しない。既存の`docs/CHAT_STAGING_RELEASE_RUNBOOK.md`を用い、認証済みCloud Shellで作業する。旧V2・売却未処理8件へ手動書込み禁止。
+
+
+### 2026-11-14 JST — 参考価格=定価のバグ修正、買取実勢価格の参照ゲート追加
+
+- **原因**：ステージングの `dashboard-view.js` は買取相場が見つからないBOX/パックの`assetEstimate`を `lot.unitCost` で代替。その原価に定価が使われていたため参考価格が定価と同じになった。
+- **修正**：原価代用を廃止し、`参考買取評価額`は最新/有効/店舗出典確認済の買取提示のみの部分評価。相場なしは未算定、旧価格は過去値と表示、定価・原価・売却額は別値。 `cloud/src/buyback-quotes.js`を新設、`dashboard-view.js`と`market-refresh-worker.js`を修正。Xの直接元投稿、投稿日、条件、商品/単位、verified、期限を検証。画像の色レイアウトは`docs/X_BUYBACK_QUOTES_SPEC.md`（買取ミミ、アリウム、KURO）を参照。
+- **テスト**：`cloud/test/buyback-quotes.test.js`と相場refresh/UI回帰テストを追加、Node test・Firestore Emulator成功。
+- **注意**：11/13時点のアリウム/KUROの30th BOX 18,500円（シュリンク有）/17,500円（無）は前日比較サイト値であり、当日11/14の実店舗最新X価格としては未検証。原価や定価をこれらに置換せず、最新元ポスト確認前に正本へ登録しない。
+- **未完了**：PR #105ブランチのコード変更のみ。現行Cloud Run UI/Firestoreにデプロイ・買取数値の実書込は行っていない。GCP認証付き環境で新UI配備、買取元投稿の照合→marketQuotes更新→Firestore readback→スマホ表示検証を実施する必要がある。現行の個人取引/在庫/売却8件/旧V2には無変更。
