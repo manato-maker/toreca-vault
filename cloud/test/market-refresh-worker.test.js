@@ -177,6 +177,10 @@ test('retail MSRP, mismatched units, missing original posting or expired shop of
     target => ({ ...sourcedBuyback(target), postUrl: '' }),
     target => ({ ...sourcedBuyback(target), unit: 'case' }),
     target => ({ ...sourcedBuyback(target), condition: 'なし' }),
+    target => ({ ...sourcedBuyback(target), category: undefined }),
+    target => ({ ...sourcedBuyback(target), productKey: undefined }),
+    target => ({ ...sourcedBuyback(target), condition: undefined }),
+    target => ({ ...sourcedBuyback(target), unit: undefined }),
     target => ({ ...sourcedBuyback(target), validUntil: '2026-11-06' }),
     target => ({ ...sourcedBuyback(target), source: '参考', sourceStore: '参考' })
   ];
