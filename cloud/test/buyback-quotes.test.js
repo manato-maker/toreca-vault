@@ -22,6 +22,9 @@ test('verified same-day store buyback offers beat the MSRP, but are not derived 
     { ...mimi, price: 7200, sourceStore: '公式定価' },
     { ...mimi, price: 7200, sourceStore: 'ポケモン公式' },
     { ...mimi, price: 7200, sourceStore: '参考' },
+    { ...mimi, price: 7200, source: '公式定価', sourceStore: '買取ミミ' },
+    { ...mimi, price: 7200, source: '買取ミミ', priceBasis: 'MSRP' },
+    { ...mimi, price: 7200, source: '買取ミミ', quoteType: '販売価格' },
     mimi, kuro
   ];
   const answer = buybackForLot(quotes, lot, NOW);
