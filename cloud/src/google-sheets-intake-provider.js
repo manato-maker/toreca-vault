@@ -102,20 +102,40 @@ export function createGoogleSheetsIntakeProvider({
         throw new Error('intake row request ID changed before receipt write');
       }
       const range = encodeURIComponent(`${SHEET_NAME}!D${rowNumber}:G${rowNumber}`);
+      const readbackUrl = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+      const expected = [receipt.status, receipt.resultCode, receipt.acceptedRequestId, receipt.processedAtMs];
+      const priorStatus = String(sourceRows[0].values[3] ?? '').trim();
+      // A delayed Scheduler tick must never undo a verified/final receipt.
+      // Reconciliation is allowed only from an accepted queued row. A retry
+      // of the exact same final receipt is a verified no-op.
+      const transitions = {
+        new: new Set(['queued', 'review', 'duplicate']),
+        queued: new Set(['v2-applied', 'duplicate', 'review'])
+      };
+      if (!transitions[priorStatus]?.has(receipt.status)) {
+        if (priorStatus !== receipt.status) {
+          throw new Error('intake receipt transition would overwrite a finalized or unexpected row');
+        }
+        const previous = await request(readbackUrl, { method: 'GET' }, 'Google Sheets existing receipt readback');
+        const current = Array.isArray(previous.values) && previous.values.length === 1
+          && Array.isArray(previous.values[0]) ? previous.values[0].slice(0, 4) : [];
+        if (current.length !== 4 || current.some((value, index) => value !== expected[index])) {
+          throw new Error('intake receipt changed since finalization; manual review required');
+        }
+        return { updated: true };
+      }
       const url = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?valueInputOption=RAW`;
       const body = {
         majorDimension: 'ROWS',
-        values: [[receipt.status, receipt.resultCode, receipt.acceptedRequestId, receipt.processedAtMs]]
+        values: [expected]
       };
       const result = await request(url, { method: 'PUT', body: JSON.stringify(body) }, 'Google Sheets intake receipt write');
       if (!Number.isSafeInteger(result.updatedCells) || result.updatedCells !== 4) {
         throw new Error('Google Sheets did not confirm all receipt cells');
       }
-      const readbackUrl = `${API_ROOT}/${encodeURIComponent(id)}/values/${range}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
       const readback = await request(readbackUrl, { method: 'GET' }, 'Google Sheets intake receipt readback');
       const actual = Array.isArray(readback.values) && readback.values.length === 1 && Array.isArray(readback.values[0])
         ? readback.values[0].slice(0, 4) : [];
-      const expected = [receipt.status, receipt.resultCode, receipt.acceptedRequestId, receipt.processedAtMs];
       if (actual.length !== 4 || actual.some((value, index) => value !== expected[index])) {
         throw new Error('Google Sheets intake receipt readback did not match');
       }
