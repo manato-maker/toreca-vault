@@ -1,4 +1,4 @@
-import { buybackForLot, buybackSourceUrl, buybackTimestamp } from './buyback-quotes.js';
+import { buybackForLot, buybackOffersForLot, buybackSourceUrl, buybackTimestamp } from './buyback-quotes.js';
 
 const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 const jstDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -70,7 +70,7 @@ function calendar(month, events, today) {
     '<div class="calendar-grid">' + ['日','月','火','水','木','金','土'].map((s,i) => '<span class="weekday w'+i+'">' + s + '</span>').join('') +
     grid.join('') + '</div>';
 }
-function inventoryCard(lot, picked) {
+function inventoryCard(lot, picked, offers = []) {
   const n = num(lot.quantity);
   const c = category(lot);
   const active = picked.status === 'current';
@@ -82,9 +82,18 @@ function inventoryCard(lot, picked) {
   const source = active ? '参考買取価格' : stale ? '過去の買取提示額・要更新' : '買取相場確認待ち';
   const evidence = shop ? ' · ' + esc(shop) + (quoteDate ? ' (' + esc(quoteDate) + ')' : '') : '';
   const link = sourceUrl ? ' <a class="quote-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">元投稿</a>' : '';
+  const shopOffers = offers.length
+    ? '<div class="shop-offers" aria-label="店舗別の有効な参考買取価格">' +
+      offers.slice(0, 4).map(q => {
+        const url = buybackSourceUrl(q);
+        const shopName = esc(q.sourceStore || q.source || '店舗');
+        const value = esc(money(q.buybackYen ?? q.price));
+        const reference = url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">出典</a>' : '';
+        return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
+      }).join('') + '</div>' : '';
   return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(lot.product || lot.productKey || '商品名未設定') +
     '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
-    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div></div>' +
+    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
@@ -99,6 +108,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   let noPrice = 0, unknownCost = 0, comparableQuantity = 0;
   const categoryTotals = { 'BOX': 0, 'パック': 0, 'カード': 0 };
   const pickedByLot = new Map();
+  const offersByLot = new Map();
   for (const lot of lots) {
     const quantity = num(lot.quantity), kind = category(lot);
     categoryTotals[kind] = (categoryTotals[kind] || 0) + quantity;
@@ -106,6 +116,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     else unknownCost += quantity;
     const picked = buybackForLot(quotes, lot, now);
     pickedByLot.set(lot, picked);
+    offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
     if (picked.status === 'current') {
       buybackTotal += picked.price * quantity;
       pricedCount += quantity;
@@ -188,7 +199,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.metric,.panel{background:var(--card);border:1px solid var(--line);border-radius:17px}.metric{padding:18px 15px;min-width:0}.metric>div,.metric small{color:var(--muted);font-size:11px}.metric strong{display:block;font-size:clamp(17px,5vw,30px);letter-spacing:-.04em;margin:7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric small{display:block}
 .panel{padding:18px;margin-top:18px;scroll-margin-top:16px}.panel-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.panel-top h2{margin:0}.minor{font-size:12px;color:var(--muted)}
 .warning{border:1px solid #5c4d39;background:#29261f;color:#f7d79f;border-radius:10px;padding:12px;margin-top:14px;font-size:12px}.stock-row,.event,.history-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.stock-row:last-child,.event:last-child,.history-row:last-child{border:0}
-.stock-main{min-width:0;flex:1}.stock-name{font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px}.quote-link{color:var(--aqua);text-decoration:underline}
+.stock-main{min-width:0;flex:1}.stock-name{font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px}.quote-link{color:var(--aqua);text-decoration:underline}.shop-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.shop-offer{font-size:10px;color:var(--muted);background:#202f40;border:1px solid var(--line);border-radius:7px;padding:4px 6px}.shop-offer a{color:var(--aqua);text-decoration:underline}
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day small{color:var(--aqua);font-size:10px}
 .history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
@@ -211,7 +222,7 @@ ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に
 </div>
 <div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
+${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
 ${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
