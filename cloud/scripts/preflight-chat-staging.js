@@ -5,8 +5,6 @@
  * No writes to Firestore, Sheets, Cloud Run or Cloud Scheduler.
  */
 import { pathToFileURL } from 'node:url';
-import { Firestore } from '@google-cloud/firestore';
-import { GoogleAuth } from 'google-auth-library';
 import { validateState } from '../../v2/core.js';
 import { createFirestoreStore } from '../src/firestore-store.js';
 
@@ -28,10 +26,16 @@ async function sheetsGet(client, path) {
 }
 
 export async function preflight({
-  createStore = async () => createFirestoreStore(new Firestore({ projectId: PROJECT }), DOCUMENT),
-  createClient = async () => (await new GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-  }).getClient()),
+  createStore = async () => {
+    const { Firestore } = await import('@google-cloud/firestore');
+    return createFirestoreStore(new Firestore({ projectId: PROJECT }), DOCUMENT);
+  },
+  createClient = async () => {
+    const { GoogleAuth } = await import('google-auth-library');
+    return new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    }).getClient();
+  },
   readSheet = sheetsGet,
   output = console.log
 } = {}) {
