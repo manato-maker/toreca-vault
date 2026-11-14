@@ -1172,3 +1172,9 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The chained command `android-staging-launch.sh stage && diagnose-intake-staging.py` reached diagnosis, implying stage exited successfully. Stage mode deploys private `chat-candidate` at 0% traffic. The exact candidate revision is not visible in the screenshot; promotion is not confirmed.
 - Read-only diagnosis: active 100%-traffic revision/project/gates PASS; Scheduler OIDC, endpoint, method match; 30 HTTP 500/503 in the prior 24 hours. Service identity impersonation was BLOCKED; no IAM changes. No internal worker reason code was obtained, so root cause remains unresolved.
 - No worker POST or manual Scheduler run. Existing Intake rows and old V2 were not changed. Continue via read-only runtime evidence without processing existing new/queued rows.
+
+
+### 2026-11-14 JST — Cloud Run traffic readback follow-up
+
+- User screenshot of the read-only traffic query confirms `toreca-vault-staging-00004-nfr` at 100% and `toreca-vault-staging-00005-foq` tagged `chat-candidate`; treat the tagged candidate as 0% traffic. The candidate revision identity is now verified and has not been promoted.
+- No candidate worker execution/reasonCode was observed; the active revision's 500/503 cause remains unknown. The Code OSS agent restart notification is separate from Cloud Run status.
