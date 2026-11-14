@@ -1569,3 +1569,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - User's latest Cloud Shell screenshot confirms revision `toreca-vault-staging-00007-yaf` deployed successfully and serves 0% traffic. It is tagged `chat-candidate`; the prior active revision and API traffic remain unchanged.
 - Automatic read-only `GET /health/intake` returned `HTTP 200`, `sheetsReadable=true`, `cursorReadable=true`. This candidate includes the nested-cause and Intake authorization safe-classification changes. The probe does not run the worker or Scheduler and does not test writes or Chat-to-UI reflection.
 - No Intake rows/statuses, old V2, pending sales, IAM, or active traffic changed. The old active revision's recurring 503 root cause remains unknown. Do not promote or trigger processing until a non-mutating reconciliation of the risky existing rows and queue/canonical records is complete.
+
+
+## 2026-11-14 JST — read-only Intake/queue/canonical preview added
+
+- Added a private `GET /health/intake` diagnostic that reads the current bounded Intake page, cursor, correlated Firestore queue receipts/request records/business-event index, and canonical snapshot. It simulates pending receipt-linked commands and current `new` rows against an in-memory copy only, returning counts, row numbers, and a fixed preview outcome/reason code. It never claims leases, enqueues, writes Sheets, advances cursor, or saves canonical state.
+- Response shaping is allowlisted: no request IDs, command JSON, product/store text, tokens, raw exception messages, or stack traces are returned.
+- Code commit `14eca041c6a76124bc247aef2f770d257795ef4f`; GitHub Actions `v2-ci` #1037 completed successfully (test and Firestore Emulator jobs).
+- Deployed candidate `00007-yaf` does not contain this addition and remains at 0% traffic. No worker/Scheduler, row mutation, old V2 write, pending-sale replay, IAM or traffic change was performed. Root cause remains open pending read-only preview on a newly staged candidate.
