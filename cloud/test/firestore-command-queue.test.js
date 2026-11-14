@@ -165,3 +165,46 @@ test('intake receipt references are hashed, bounded, and disappear from the pend
     intakeReceipt: { spreadsheetIdHash: 'short', rowNumber: 2 }
   }), /intake receipt reference is invalid/);
 });
+
+
+test('a request-ID replay from the same Intake row remains correlated for status readback', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  const requestId = 'sheet:purchase:replay';
+  const command = { requestId, type: 'purchase', product: '商品A', quantity: 1 };
+  const source = { spreadsheetIdHash: 'a'.repeat(64), rowNumber: 42 };
+  assert.deepEqual(await queue.enqueue({ requestId, command, intakeReceipt: source, now: 10 }),
+    { status: 'pending', accepted: true, duplicate: false });
+  assert.deepEqual(await queue.enqueue({ requestId, command, intakeReceipt: source, now: 20 }),
+    { status: 'pending', accepted: true, duplicate: true });
+  const refs = await queue.listIntakeReceipts();
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0].rowNumber, 42);
+});
+
+test('a request ID from another Intake row cannot attach to an unrelated existing queue receipt', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  const requestId = 'sheet:purchase:collision';
+  const command = { requestId, type: 'purchase', product: '商品A', quantity: 1 };
+  const source = { spreadsheetIdHash: 'a'.repeat(64), rowNumber: 7 };
+  await queue.enqueue({ requestId, command, intakeReceipt: source, now: 10 });
+  assert.deepEqual(await queue.enqueue({ requestId, command,
+    intakeReceipt: { spreadsheetIdHash: 'a'.repeat(64), rowNumber: 8 }, now: 20 }),
+    { status: 'collision', accepted: false });
+  assert.deepEqual(await queue.enqueue({ requestId, command,
+    intakeReceipt: { spreadsheetIdHash: 'b'.repeat(64), rowNumber: 7 }, now: 20 }),
+    { status: 'collision', accepted: false });
+  const refs = await queue.listIntakeReceipts();
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0].rowNumber, 7);
+});
+
+test('direct API command with the same request ID must not masquerade as a Sheets receipt', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  const requestId = 'shared:api:purchase';
+  const command = { requestId, type: 'purchase', product: '商品A', quantity: 1 };
+  await queue.enqueue({ requestId, command, now: 1 });
+  assert.deepEqual(await queue.enqueue({ requestId, command,
+    intakeReceipt: { spreadsheetIdHash: 'c'.repeat(64), rowNumber: 10 }, now: 2 }),
+    { status: 'collision', accepted: false });
+  assert.deepEqual(await queue.listIntakeReceipts(), []);
+});
