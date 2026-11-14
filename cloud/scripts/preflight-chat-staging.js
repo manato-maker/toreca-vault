@@ -10,14 +10,13 @@ import { createFirestoreStore } from '../src/firestore-store.js';
 
 const PROJECT = 'project-8ff0bbc4-675d-4596-a8a';
 const DOCUMENT = 'torecaVaultStaging/canonical';
-const SHEET_ID = '14rWGcmJnqFOdh9VfTlHZvC5wjcBdsW0D5XvYh8DQOAc';
-const SHEET_ROOT = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID;
+const SHEET_ROOT = 'https://sheets.googleapis.com/v4/spreadsheets/';
 
-async function sheetsGet(client, path) {
+async function sheetsGet(client, path, spreadsheetId) {
   const auth = await client.getAccessToken();
   const token = typeof auth === 'string' ? auth : auth?.token;
   if (!token) throw new Error('Sheets authentication unavailable');
-  const response = await fetch(SHEET_ROOT + path, {
+  const response = await fetch(SHEET_ROOT + encodeURIComponent(spreadsheetId) + path, {
     headers: { authorization: 'Bearer ' + token },
     signal: AbortSignal.timeout(15_000)
   });
@@ -37,8 +36,12 @@ export async function preflight({
     }).getClient();
   },
   readSheet = sheetsGet,
+  spreadsheetId = process.env.TV2_NEW_APP_INTAKE_SPREADSHEET_ID || '',
   output = console.log
 } = {}) {
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(spreadsheetId)) {
+    throw new Error('dedicated intake spreadsheet ID must be supplied securely through the environment');
+  }
   const result = { canonical: false, sheet: false, warnings: [] };
   const store = await createStore();
   const current = await store.read();
@@ -56,14 +59,14 @@ export async function preflight({
   if (current.revision === 0) result.warnings.push('canonical revision is zero; verify initialization provenance');
 
   const client = await createClient();
-  const metadata = await readSheet(client, '?fields=' + encodeURIComponent('properties.title,sheets.properties.title'));
+  const metadata = await readSheet(client, '?fields=' + encodeURIComponent('properties.title,sheets.properties.title'), spreadsheetId);
   const titles = (metadata.sheets || []).map(s => s.properties?.title);
   if (metadata.properties?.title !== 'Toreca Vault New App Intake' || !titles.includes('Intake')) {
     throw new Error('isolated intake spreadsheet metadata does not match');
   }
   result.sheet = true;
   const range = encodeURIComponent('Intake!D2:G1000');
-  const cells = await readSheet(client, '/values/' + range + '?valueRenderOption=UNFORMATTED_VALUE');
+  const cells = await readSheet(client, '/values/' + range + '?valueRenderOption=UNFORMATTED_VALUE', spreadsheetId);
   const counts = {};
   for (const row of Array.isArray(cells.values) ? cells.values : []) {
     const state = String(row?.[0] ?? '');
