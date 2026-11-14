@@ -61,3 +61,6 @@ git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py
 ```
 
 `PASS`は依存先の**読み取り権限**しか保証せず、受付処理のPOSTやFirestore書込み権限を保証しない。表示された`BLOCKED`の種類だけをWorkに報告し、SAメール・トークン等は貼らない。原因がわかるまでは`promote`や`gcloud scheduler jobs run`を行わない。CIには`cloud/test/test_diagnose_intake_staging.py`を追加した。
+
+
+**診断のrevision選択（安全策）**：既存サービスに0%トラフィックの候補（例 00005）があっても、その候補の最新テンプレートを「現在のエラー原因」として診断しない。Cloud Run `status.traffic`から**100%配信中のrevision**（例 00004）を厳密に特定して、そのrevisionのサービスアカウントと環境変数を調べる。50/50などの分割配信や不明なrevisionは自動推測せず`BLOCKED`。最新候補はこの段階で動かさない。
