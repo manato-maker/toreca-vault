@@ -202,3 +202,19 @@ test('mismatched legacy kind is reviewed, not turned into a different lottery ev
   assert.equal(provider.receipts[0].resultCode, 'lottery-kind-mismatch');
   assert.equal(queueCalls, 0);
 });
+
+
+test('a retry after queue acceptance but before Sheets receipt does not mislabel the report terminal duplicate', async () => {
+  const command = { requestId: 'chat:purchase:interrupted', type: 'purchase', product: '商品A', quantity: 1 };
+  const provider = fakeProvider([row(command.requestId, command)]);
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 5000,
+    queue: { async enqueue() { return { accepted: true, duplicate: true, status: 'pending' }; } }
+  });
+  assert.deepEqual(await run(), { seen: 1, enqueued: 0, duplicate: 1, review: 0, skipped: 0 });
+  assert.deepEqual(provider.receipts[0], {
+    rowNumber: 2, status: 'queued', resultCode: 'accepted',
+    acceptedRequestId: command.requestId, processedAtMs: 5000
+  });
+  assert.equal(provider.sourceIds[0], command.requestId);
+});
