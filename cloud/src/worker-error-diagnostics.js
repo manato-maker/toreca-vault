@@ -23,12 +23,18 @@ const ERROR_REASONS = Object.freeze({
 /** Always return a fixed safe stage and reason; do not return exception strings. */
 export function classifyIntakeFailure(stage, error) {
   const safeStage = SAFE_STAGES.has(stage) ? stage : 'unknown';
-  const candidate = [error, error?.cause].find(x => x && typeof x === 'object');
-  const name = String(candidate?.name || '').slice(0, 80);
-  const cause = error?.cause && typeof error.cause === 'object' ? error.cause : null;
-  const message = [error?.message, cause?.message].filter(x => typeof x === 'string').join(' ');
+  const chain = [];
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === 'object' && !seen.has(current) && chain.length < 5) {
+    chain.push(current);
+    seen.add(current);
+    current = current.cause;
+  }
+  const names = chain.map((item) => String(item.name || '')).join(' ');
+  const message = chain.map((item) => typeof item.message === 'string' ? item.message : '').join(' ');
   for (const [reasonCode, pattern] of Object.entries(ERROR_REASONS)) {
-    if (pattern.test(message) || (reasonCode === 'google-api-timeout' && /^(?:AbortError|TimeoutError)$/.test(name))) {
+    if (pattern.test(message) || (reasonCode === 'google-api-timeout' && /(?:AbortError|TimeoutError)/.test(names))) {
       return { stage: safeStage, reasonCode };
     }
   }
