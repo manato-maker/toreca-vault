@@ -1245,3 +1245,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - User's `git status --short` output contained only two untracked generated directories: `cloud/node_modules/` and `cloud/scripts/__pycache__/`; no tracked source edits were shown. These were created by earlier dependency/Python runs.
 - Added exact ignore entries for those two paths in `.gitignore` (commit `0b8c54fa9ed3e20e14a674598efff946593854cd`). Existing local files are not deleted. After a fast-forward pull, Git should omit these generated folders from porcelain status and the release guard can proceed, provided no other local changes exist.
 - No stage retry/deployment has run yet. Active traffic remains unchanged and candidate is still `00006-lug` until the user pulls and stages.
+
+
+## 2026-11-14 JST — diagnostic candidate 00007 staged safely
+
+- User's latest Cloud Shell screenshot confirms revision `toreca-vault-staging-00007-yaf` deployed successfully and serves 0% traffic. It is tagged `chat-candidate`; the prior active revision and API traffic remain unchanged.
+- Automatic read-only `GET /health/intake` returned `HTTP 200`, `sheetsReadable=true`, `cursorReadable=true`. This candidate includes the nested-cause and Intake authorization safe-classification changes. The probe does not run the worker or Scheduler and does not test writes or Chat-to-UI reflection.
+- No Intake rows/statuses, old V2, pending sales, IAM, or active traffic changed. The old active revision's recurring 503 root cause remains unknown. Do not promote or trigger processing until a non-mutating reconciliation of the risky existing rows and queue/canonical records is complete.
