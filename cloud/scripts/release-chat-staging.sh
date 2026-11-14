@@ -29,8 +29,8 @@ chmod 700 "$WORKDIR"
 
 gcloud run services describe "$SERVICE" --project="$PROJECT" --region="$REGION" \
   --format=json > "$WORKDIR/service.json"
-python3 - "$WORKDIR/service.json" <<'PY'
-import json, sys, hashlib
+TV2_RELEASE_MODE="$MODE" python3 - "$WORKDIR/service.json" <<'PY'
+import json, sys, hashlib, os
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 container = data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
 if not container:
@@ -48,9 +48,17 @@ if not isinstance(sheet_id, str) or hashlib.sha256(sheet_id.encode("utf-8")).hex
 if not values.get("TV2_SCHEDULER_AUDIENCE") or not values.get("TV2_SCHEDULER_SERVICE_ACCOUNT_EMAIL"):
     raise SystemExit("BLOCKED: OIDC config not present")
 print("PASS: expected staging document, isolated intake, and OIDC bindings.")
-for key in ("TV2_ENABLE_WRITES", "TV2_ENABLE_COMMAND_QUEUE",
-            "TV2_ENABLE_COMMAND_WORKER", "TV2_ENABLE_GOOGLE_SHEETS_INTAKE"):
+required = ("TV2_ENABLE_WRITES", "TV2_ENABLE_COMMAND_QUEUE",
+            "TV2_ENABLE_COMMAND_WORKER", "TV2_ENABLE_GOOGLE_SHEETS_INTAKE")
+for key in required:
     print("FLAG " + key + ": " + ("enabled" if values.get(key) == "true" else "disabled"))
+# A healthy preflight does not imply a functional Chat intake if any writer
+# switch remains disabled. Do not silently release a revision that cannot
+# complete Intake -> queue -> canonical -> receipt.
+if os.environ.get("TV2_RELEASE_MODE") == "promote":
+    disabled = [key for key in required if values.get(key) != "true"]
+    if disabled:
+        raise SystemExit("BLOCKED: Chat write/queue/intake worker features are disabled")
 print("No token or private record value printed.")
 PY
 gcloud run services get-iam-policy "$SERVICE" --project="$PROJECT" \
