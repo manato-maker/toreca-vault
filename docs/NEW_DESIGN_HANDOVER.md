@@ -1238,3 +1238,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - User ran `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage` from the development checkout. Pull fast-forwarded to the branch head; the launcher then stopped at its `git status --porcelain` guard with `BLOCKED: local changes must be reviewed before release.`
 - The guard exits before remote-head verification, cost/auth checks, Cloud Run build/deploy, or the candidate health probe. Therefore this attempt made no Cloud Run revision, traffic, IAM, Firestore, Sheets, old V2, or pending-sale changes. Candidate remains `00006-lug` at 0% traffic.
 - The local changes are not identified yet. Inspect with `git status --short`; do not run reset, clean, stash, or checkout commands until each entry is reviewed.
+
+
+## 2026-11-14 JST — staging guard resolved as generated artifacts
+
+- User's `git status --short` output contained only two untracked generated directories: `cloud/node_modules/` and `cloud/scripts/__pycache__/`; no tracked source edits were shown. These were created by earlier dependency/Python runs.
+- Added exact ignore entries for those two paths in `.gitignore` (commit `0b8c54fa9ed3e20e14a674598efff946593854cd`). Existing local files are not deleted. After a fast-forward pull, Git should omit these generated folders from porcelain status and the release guard can proceed, provided no other local changes exist.
+- No stage retry/deployment has run yet. Active traffic remains unchanged and candidate is still `00006-lug` until the user pulls and stages.
