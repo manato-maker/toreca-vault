@@ -17,7 +17,7 @@ test('staging release never sets env vars, deploys at zero traffic and requires 
   for (const marker of [
     'project-8ff0bbc4-675d-4596-a8a', '235108293761',
     'toreca-vault-staging', 'torecaVaultStaging/canonical',
-    '14rWGcmJnqFOdh9VfTlHZvC5wjcBdsW0D5XvYh8DQOAc',
+    'a191bc306fcfb2898af83fd66f72808f9f1a4b553805319cbf62e80fb29565ad',
     '--no-traffic', '--tag=chat-candidate', '--min-instances=0',
     '--max-instances=1', '--cpu-throttling', 'TV2_STAGING_RELEASE_REVIEWED',
     'preflight-chat-staging.js', '--to-revisions=',
