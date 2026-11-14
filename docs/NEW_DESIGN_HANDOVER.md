@@ -1164,3 +1164,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - PR #105の最新コードには固定reasonCodeによるIntake例外分類があるが、稼働revisionへの適用と実ログの読み取りは未確認。HTTP 500/503の根本原因、staging canonical反映、Android UI E2Eは未解決。
 - このWork環境ではCloud Shellが利用不可で、認証済みGCP CLI/Cloud Run/Firestore接続もなかったため、read-only実環境診断は行えていない。今回、デプロイ・Scheduler実行・IAM/traffic変更は行わず、通常Chatデータの投入もしていない。
 - 続きは認証済みGCP経路でserving revisionを再読し、原因を特定してから安全なcandidate検証へ進む。既存行の再送、旧V2書込み、未処理売却の再投入は禁止。
+
+
+### 2026-11-14 JST — Android Cloud Shell evidence follow-up
+
+- User-provided screenshot confirms Android Cloud Shell is available; the previous browser's Site Unavailable was specific to the Work browser. A fresh clone was used after an initial git pull from outside a repository failed.
+- The chained command `android-staging-launch.sh stage && diagnose-intake-staging.py` reached diagnosis, implying stage exited successfully. Stage mode deploys private `chat-candidate` at 0% traffic. The exact candidate revision is not visible in the screenshot; promotion is not confirmed.
+- Read-only diagnosis: active 100%-traffic revision/project/gates PASS; Scheduler OIDC, endpoint, method match; 30 HTTP 500/503 in the prior 24 hours. Service identity impersonation was BLOCKED; no IAM changes. No internal worker reason code was obtained, so root cause remains unresolved.
+- No worker POST or manual Scheduler run. Existing Intake rows and old V2 were not changed. Continue via read-only runtime evidence without processing existing new/queued rows.
