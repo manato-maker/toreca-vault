@@ -174,7 +174,8 @@ export function buybackForLot(quotes, lot, now = new Date()) {
     return { status: 'current', quote: live[0], price: quotePrice(live[0]) };
   }
   const historical = matches.filter(q => ['verified', 'superseded', 'expired'].includes(String(q.status || '').toLowerCase())
-    && !!buybackSourceUrl(q) && stamp(q.postedAt || q.quotedAt || q.checkedAt) !== null);
+    && !!buybackSourceUrl(q) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(String(q.postedAt || ''))
+    && stamp(q.postedAt) !== null);
   historical.sort((a, b) => (stamp(b.postedAt || b.quotedAt || b.checkedAt) || 0)
     - (stamp(a.postedAt || a.quotedAt || a.checkedAt) || 0));
   const old = historical[0] || null;
