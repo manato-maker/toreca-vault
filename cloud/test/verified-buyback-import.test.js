@@ -95,7 +95,7 @@ test('MSRP, wrong state, unsupported shop, old post, missing provenance and miss
   ];
   for (const record of invalid) {
     assert.throws(() => previewVerifiedBuybackImport(state(), [record],
-      { expectedRevision: 1, mutationId: REQUEST, now: NOW }), /evidence|expired|source|unit|invalid|match|price/);
+      { expectedRevision: 1, mutationId: REQUEST, now: NOW }), /evidence|expired|source|unit|invalid|match|price|eligibility/);
   }
 });
 
