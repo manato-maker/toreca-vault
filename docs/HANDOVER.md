@@ -1387,3 +1387,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **結果改ざん防止**：providerはsourceRequestIdだけでなく行の現statusを比較し、D:Gの`v2-applied`/最終`review`/`duplicate`を古い`queued`状態に戻さない。再実行時に同じ最終receiptなら値を再取得して整合性を確認し、上書きせず成功。衝突は調査待ちで停止。
 - **IDの紐付け**：Firestore queueは同じrequestIdのリプレイ時に元受付のSheet ID hashとrow numberが一致することを必須にした。別行またはAPIからの同一IDは衝突として拒否し、ghost receiptを作らない。
 - **テスト**：GitHub Actions https://github.com/manato-maker/toreca-vault/actions/runs/43559680508 で通常コードテストとFirestore Emulatorともに成功。PR #105はdraft/open。**GitHubのみ更新**。Cloud Run実機配備・canonical readback・通常Chatの実登録・スマホUI検証は未完了。既存の取引/在庫/未処理キューは書き換えていない。
+
+
+### 2026-11-14 JST — 完了依頼の実行境界と切替安全ガード
+
+- ステージングAPIの `release-chat-staging.sh promote` に、writes/command-queue/command-worker/Sheets-intakeの4環境フラグが全て`true`の場合のみ切替を許可するゲートを追加。検出した無効設定はユーザー向け値を出さずに切替を停止。変更は作業ブランチのみ。
+- 最新CI [#43561882965](https://github.com/manato-maker/toreca-vault/actions/runs/43561882965) は test と firestore-emulatorともに成功。
+- Google Sheetsの現在の受付状態：反映済み1、処理中`queued`1、未受付`new`3、確認待ち`review`3。原本を変更せず、同じ業務事実での再投入を行っていない。
+- **未完了/外部権限の境界**：このスレッドのツールにはGoogle Cloudデプロイ/請求/IAM/Schedulerの認証付き操作がなく、稼働中Cloud Runサービスは更新されていない。実際のデプロイ・ログ・トリガー・Firestore canonical E2E・スマホ表示を確認するまで「完成」「報告運用開始可能」と称しない。既存の`docs/CHAT_STAGING_RELEASE_RUNBOOK.md`を用い、認証済みCloud Shellで作業する。旧V2・売却未処理8件へ手動書込み禁止。
