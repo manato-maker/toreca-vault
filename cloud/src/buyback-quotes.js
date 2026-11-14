@@ -51,15 +51,19 @@ function compatible(quote, lot) {
   if (quote.lotId && String(quote.lotId) !== String(lot.id || '')) return false;
   const quoteProduct = normalize(quote.productKey || quote.product);
   const lotProduct = normalize(lot.productKey || lot.product);
-  if (!quote.lotId && (!quoteProduct || quoteProduct !== lotProduct)) return false;
-  if (quote.lotId && quoteProduct && quoteProduct !== lotProduct) return false;
+  // A bare lotId or guessed unit is not evidence of the product's identity.
+  // The actual product and the selling unit must be independently supplied.
+  if (!quoteProduct || !lotProduct || quoteProduct !== lotProduct) return false;
   // Do not apply a shrink price to a no-shrink item, and do not reuse
-  // case/carton prices for individual BOX or packs.
-  const unit = String(quote.unit || quote.salesUnit || '').toLowerCase();
-  if ((unit === 'case' || unit === 'carton' || unit === 'カートン') && lot.category !== 'カートン') return false;
-  if (unit && (unit === 'pack' || unit === 'パック') && lot.category !== 'パック') return false;
-  if (unit && (unit === 'box' || unit === 'box単品') && lot.category !== 'BOX') return false;
-  if (unit && (unit === 'card' || unit === 'カード') && lot.category !== 'カード') return false;
+  // carton/case or pack prices for individual BOX units.
+  const unit = normalize(quote.unit || quote.salesUnit);
+  const allowedUnit = {
+    BOX: ['box', 'box単品'],
+    'パック': ['pack', 'パック'],
+    'カード': ['card', 'カード'],
+    'カートン': ['case', 'carton', 'カートン']
+  }[lot.category];
+  if (!allowedUnit || !allowedUnit.includes(unit)) return false;
   if (quote.condition === undefined || quote.condition === null || String(quote.condition).trim() === '') {
     if (lot.condition) return false;
   } else if (conditionKey(quote.condition) !== conditionKey(lot.condition)) return false;
