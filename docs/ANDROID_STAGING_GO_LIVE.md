@@ -64,3 +64,14 @@ git pull --ff-only && python3 cloud/scripts/diagnose-intake-staging.py
 
 
 **診断のrevision選択（安全策）**：既存サービスに0%トラフィックの候補（例 00005）があっても、その候補の最新テンプレートを「現在のエラー原因」として診断しない。Cloud Run `status.traffic`から**100%配信中のrevision**（例 00004）を厳密に特定して、そのrevisionのサービスアカウントと環境変数を調べる。50/50などの分割配信や不明なrevisionは自動推測せず`BLOCKED`。最新候補はこの段階で動かさない。
+
+
+### 2026-11-14 — one-command read-only Intake probe
+
+Run from the existing clone root after CI is green:
+
+```bash
+git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage
+```
+
+The stage script deploys the reviewed candidate at zero API traffic, then calls its private `GET /health/intake` using the signed-in Cloud Shell account. The endpoint checks only the dedicated spreadsheet title/tab/header and the Firestore intake cursor using the Cloud Run service identity. It returns fixed reason codes and does not read Intake command rows, run the worker, or mutate data. Do not promote based on this probe alone; it does not test receipt writes or end-to-end UI reflection.

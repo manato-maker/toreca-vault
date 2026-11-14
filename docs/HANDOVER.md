@@ -1495,3 +1495,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 
 - User screenshot of the read-only traffic query confirms `toreca-vault-staging-00004-nfr` at 100% and `toreca-vault-staging-00005-foq` tagged `chat-candidate`; treat the tagged candidate as 0% traffic. The candidate revision identity is now verified and has not been promoted.
 - No candidate worker execution/reasonCode was observed; the active revision's 500/503 cause remains unknown. The Code OSS agent restart notification is separate from Cloud Run status.
+
+
+### 2026-11-14 JST — read-only candidate Intake health probe
+
+- The user-provided candidate `/health` result confirms Firestore canonical can be read and is initialized. Candidate scheduler health is stale because the candidate is at zero traffic; this does not diagnose active revision execution.
+- PR #105 commit `9d48594936aa865bc277bb8321f1480d83aa31f3` adds a private GET `/health/intake` that uses the Cloud Run runtime identity to read only Sheet metadata/header A1:G1 and the Firestore cursor. It returns fixed categories only and does not inspect report rows, call the worker, or write data.
+- The Android launcher's stage mode now runs this read-only probe automatically after zero-traffic deployment. Once CI succeeds, one command from the existing repo root updates and stages the candidate: `git pull --ff-only && bash cloud/scripts/android-staging-launch.sh stage`. It never promotes or manually runs Scheduler.
+- CI run #43598298266 passed tests and Firestore Emulator. This does not resolve the active revision's 500/503 yet. The read-only candidate probe must run first; even a pass does not prove write/queue processing or Chat-to-UI E2E. No Intake rows, old V2, pending sales, IAM or active traffic changed.
