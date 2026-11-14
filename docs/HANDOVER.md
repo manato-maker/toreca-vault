@@ -1472,3 +1472,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - 前の`BLOCKED: could not impersonate Cloud Run service identity`はCloud Shellユーザーの代理トークン発行権限不足であり、稼働中Cloud Runサービスアカウント自体の権限不足ではない。**IAMのToken Creator付与や一般公開を行わない**。
 - 2026-11-14に接続済みIntake!A1:G22を再読。受付8行で`v2-applied`1、`queued`1、`new`3、`review`3。8行すべてのA列requestIdとB列JSON requestId一致・JSON構文は有効。よって「入力行全件のJSONが壊れて503」という説は支持されない。業務内容/購入原価/個人情報は記録していない。
 - 15分間隔で`/internal/worker/sheets-intake`にHTTP500/503が継続している根本原因は依然未特定。現在のコードでは `sheetsIntakeWorker`失敗を503として返し、候補版に`worker-error-diagnostics.js`の固定コード分類ログが用意されている。candidate 0%を本番切替せず、候補の検証とFirestore/Sheets実行時アクセスを安全に確かめることが次のゲート。実データ変更・Scheduler手動runは未実施。
+
+
+### 2026-11-14 JST — Intake 500/503調査セッションの記録
+
+- 調査開始時のPR #105 branch head `dccc15fda0048e9ba39efcd53b7b9278217f40cc` とCI run #43593537098（v2-ci、success）を確認。PR #105/#106はDraft/openのまま。CI successはCloud Runの稼働確認を意味しない。
+- 接続済みIntakeの読み取り結果は `v2-applied=1 / queued=1 / new=3 / review=3`。既存行を再投入・編集していない。旧V2および未処理売却8件にも書込みなし。
+- PR #105の最新コードには固定reasonCodeによるIntake例外分類があるが、稼働revisionへの適用と実ログの読み取りは未確認。HTTP 500/503の根本原因、staging canonical反映、Android UI E2Eは未解決。
+- このWork環境ではCloud Shellが利用不可で、認証済みGCP CLI/Cloud Run/Firestore接続もなかったため、read-only実環境診断は行えていない。今回、デプロイ・Scheduler実行・IAM/traffic変更は行わず、通常Chatデータの投入もしていない。
+- 続きは認証済みGCP経路でserving revisionを再読し、原因を特定してから安全なcandidate検証へ進む。既存行の再送、旧V2書込み、未処理売却の再投入は禁止。
