@@ -88,6 +88,7 @@ if [[ "$MODE" == "stage" ]]; then
   gcloud run deploy "$SERVICE" --source="$WORKDIR/build" \
     --project="$PROJECT" --region="$REGION" \
     --no-traffic --tag=chat-candidate \
+    --no-allow-unauthenticated \
     --min-instances=0 --max-instances=1 --cpu-throttling \
     --quiet
   echo "STAGED AT ZERO TRAFFIC; verify candidate health, IAP/OIDC, Scheduler, intake, and inventory."
