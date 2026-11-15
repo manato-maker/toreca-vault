@@ -20,12 +20,13 @@ test('staging release never sets env vars, deploys at zero traffic and requires 
     'a191bc306fcfb2898af83fd66f72808f9f1a4b553805319cbf62e80fb29565ad',
     '--no-traffic', '--tag=chat-candidate', '--min-instances=0',
     '--max-instances=1', '--cpu-throttling', '--no-allow-unauthenticated', 'TV2_STAGING_RELEASE_REVIEWED',
-    'preflight-chat-staging.js', '--to-revisions=',
-    'services get-iam-policy'
+    'health/intake', 'gcloud auth print-identity-token', '--to-revisions=',
+    'services get-iam-policy', 'canonicalInitialized', 'cursorReadable'
   ]) {
     assert.ok(source.includes(marker), 'missing protection: ' + marker);
   }
   assert.ok(source.includes('no --set-env-vars or --set-secrets'));
+  assert.ok(!source.includes('node cloud/scripts/preflight-chat-staging.js'), 'promotion must use the candidate runtime identity probe');
   assert.doesNotMatch(source, /^\s*gcloud run deploy.*--set-env-vars/m);
   assert.doesNotMatch(source, /^\s*gcloud run deploy.*--set-secrets/m);
   assert.doesNotMatch(source, /(?:allUsers|allAuthenticatedUsers).*roles\/run\.invoker.*add-iam-policy/);
