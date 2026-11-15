@@ -216,14 +216,14 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     'このChatは購入・受取・開封・売却・抽選など日々の報告窓口です。Workはアプリ開発専用です。',
     'Intake受付と新アプリ正本・画面への反映を区別し、反映済みと確認できるまでは重複報告を再登録しません。',
     '共通引き継ぎ資料: ' + commonHandoffUrl
-  ].join('\\n');
+  ].join('\n');
   const workHandoffText = [
     'Toreca Vault Work用引き継ぎ',
     '共通引き継ぎ資料の最新版を読み、GitHubとGoogle Docsの最新状態から続けてください。通常Chatは日々の報告、Workは開発用です。',
     'Intake HTTP 500/503の根本原因と、通常Chatの報告が新アプリ正本・画面まで届く経路を調査してください。',
     '重複登録・旧V2への書き込み・未処理売却の再投入は禁止。既存在庫・履歴を維持し、受付／正本反映／画面確認を区別してください。',
     '共通引き継ぎ資料: ' + commonHandoffUrl
-  ].join('\\n');
+  ].join('\n');
   const handoffDialog = '<dialog class="handoff-dialog" id="handoff-dialog" aria-labelledby="handoff-title">' +
     '<div class="handoff-dialog-head"><h2 id="handoff-title">Chat / Work 共通引き継ぎ</h2><button class="handoff-close" type="button" data-close-handoff aria-label="閉じる">×</button></div>' +
     '<p class="meta">用途を選んで、最新の案内文をコピーできます。</p>' +
