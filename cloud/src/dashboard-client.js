@@ -3,11 +3,13 @@ export const dashboardClientScript = `
   const dialog = document.getElementById('handoff-dialog');
   const openButton = document.querySelector('[data-open-handoff]');
   const closeButton = document.querySelector('[data-close-handoff]');
+  const refreshButton = document.querySelector('[data-refresh-handoff]');
   const copyStatus = document.getElementById('handoff-copy-status');
   const fallback = document.getElementById('handoff-fallback');
   const liveStatus = document.getElementById('handoff-live-status');
   const liveContent = document.getElementById('handoff-live-content');
   let latestHandoff = '';
+  let refreshTimer = null;
 
   async function loadHandoff() {
     latestHandoff = '';
@@ -43,13 +45,29 @@ export const dashboardClientScript = `
       else dialog.setAttribute('open', '');
       openButton.setAttribute('aria-expanded', 'true');
       void loadHandoff().catch(() => {});
+      if (refreshTimer) window.clearInterval(refreshTimer);
+      refreshTimer = window.setInterval(() => {
+        if (!document.hidden && dialog.open) void loadHandoff().catch(() => {});
+      }, 60000);
     });
-    dialog.addEventListener('close', () => openButton.setAttribute('aria-expanded', 'false'));
+    dialog.addEventListener('close', () => {
+      openButton.setAttribute('aria-expanded', 'false');
+      if (refreshTimer) window.clearInterval(refreshTimer);
+      refreshTimer = null;
+    });
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) dialog.close();
     });
   }
   if (dialog && closeButton) closeButton.addEventListener('click', () => dialog.close());
+  if (refreshButton) {
+    refreshButton.addEventListener('click', async () => {
+      refreshButton.disabled = true;
+      try { await loadHandoff(); }
+      catch {}
+      finally { refreshButton.disabled = false; }
+    });
+  }
 
   document.querySelectorAll('[data-copy-handoff]').forEach((button) => {
     button.addEventListener('click', async () => {
