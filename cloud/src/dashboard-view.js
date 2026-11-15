@@ -191,19 +191,13 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       (profit !== null ? '<small>確定利益 ' + esc(money(profit)) + '</small>' :
         t.type === 'sale' ? '<small>原価未確認</small>' : '') + '</div></div>';
   }).join('') : '<p class="empty">この種別の取引記録はありません。</p>';
-  // The Google Docs document is the single private handover source. Export on
-  // click, rather than caching or copying sensitive text into Firestore or GitHub.
-  const validHandoverId = typeof handoverDocId === 'string' &&
-    /^[A-Za-z0-9_-]{20,120}$/.test(handoverDocId) ? handoverDocId : '';
-  const handoverBase = validHandoverId
-    ? 'https://docs.google.com/document/d/' + validHandoverId : '';
-  const handoverSection = handoverBase
-    ? '<section class="panel" id="handover"><div class="panel-top"><h2>引き継ぎ</h2><span class="minor">Chat / Work 共通</span></div>' +
-      '<p class="meta">共通正本はGoogle Docsに保存されています。更新後は、リンクを開くかダウンロードするとその時点の内容を取得できます。</p>' +
-      '<div class="handover-actions"><a class="btn" href="' + handoverBase + '/edit" target="_blank" rel="noopener noreferrer">最新版を開く</a>' +
-      '<a class="btn" href="' + handoverBase + '/export?format=txt" target="_blank" rel="noopener noreferrer">引き継ぎをダウンロード (.txt)</a></div>' +
-      '<p class="meta">Googleアカウントで文書の閲覧権限が必要です。ダウンロードしたファイルは機密情報として扱ってください。ここからは編集・自動登録しません。</p></section>'
-    : '';
+  // Both visible handoff actions use the shared Drive Markdown source.
+  const handoverSection =
+    '<section class="panel" id="handover"><div class="panel-top"><h2>引き継ぎ</h2><span class="minor">Chat / Work 共通</span></div>' +
+    '<p class="meta">共通のMarkdown資料を使います。ダウンロード時にDriveから最新版を取得します。</p>' +
+    '<div class="handover-actions"><a class="btn" href="/api/handoff/download" download="Toreca_Vault_Common_Handoff_2026-11-14.md">最新版をダウンロード (.md)</a>' +
+    '<a class="btn" href="https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view" target="_blank" rel="noopener noreferrer">共通資料をDriveで開く</a></div>' +
+    '<p class="meta">画面下部の「引継ぎ」から内容確認、更新、Chat / Work用のコピーができます。ここから在庫等のデータは編集しません。</p></section>';
   const inventoryFilters = '<nav class="inventory-filters" aria-label="在庫の種類">' +
     '<button class="inventory-filter selected" type="button" data-inventory-filter="all" aria-pressed="true">すべて</button>' +
     '<button class="inventory-filter" type="button" data-inventory-filter="BOX" aria-pressed="false">BOX</button>' +
