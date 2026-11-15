@@ -1328,3 +1328,14 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Latest connected Sheet aggregate is 3 `v2-applied`, 0 queued, 5 review. The earlier queued receipt is now canonical-readback verified; the previous health-count discrepancy is resolved. The UI shows canonical revision 2927; no duplicate inventory item appeared.
 - The normal-Chat evidence fallback has passed CI (#1052–#1054) but remains on the 0% candidate until guarded staging promotion. A new post-promotion normal-Chat event still needs end-to-end verification.
 - Historical HTTP 500/503 entries remain unclassified, though the latest scheduled receipt completed. Existing review items remain untouched. No old V2 write or pending-sale replay occurred.
+
+
+
+### 2026-11-15 JST — guarded promotion confirmed; current readback
+
+- Latest user Cloud Shell screenshot confirms guarded promotion and 100% staging traffic on `toreca-vault-staging-00010-qar`; no production/V2 traffic change is indicated.
+- Post-promotion read-only Android UI shows STAGING, canonical revision 2927, 34 inventory lots, and 99 transaction-history entries. The 2026-11-06 purchase appears once; the existing 2026-09-30 30th CELEBRATION lot appears once. No duplicate was observed.
+- Fresh Sheet read of `Intake!D2:E9`: 3 rows `v2-applied / canonical-readback-verified`, 0 queued, and 5 review. No `new` rows remain. Review rows were left untouched; no source cells were edited or resubmitted.
+- This verifies staging promotion and readback of existing records. A new post-promotion normal-Chat report has not been verified end-to-end. The normal-Chat evidence fallback has passing CI, but live behavior still needs a naturally submitted new event and matching canonical/UI readback.
+- Historical HTTP 500/503 entries remain unclassified; the precise earlier cause is unknown. A recent scheduled receipt completed, but uninterrupted Scheduler stability is not proven.
+- No old V2 write, pending-sale replay, manual Scheduler/worker run, or review-row mutation occurred. Keep full daily-operation completion open pending a new report's single-pass Intake → staging canonical → UI verification and scheduled stability checks.
