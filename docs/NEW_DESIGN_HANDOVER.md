@@ -1349,3 +1349,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - GitHub handoff update CI run #1056 completed successfully. PR #105 remains open and Draft.
 - Cloud Shell was attempted once and reloaded once in this Work browser; both views returned “Site Unavailable / Unable to access this site.” No GCP CLI or connected runtime/logging connector is available in this Work environment; the optional Firebase plugin is listed as uninstalled and has not been connected. Therefore current Scheduler last-attempt state and Cloud Logging reason codes could not be independently read here. Do not infer continuing 5xx or continuous success from this limitation.
 - No Cloud Run/Scheduler/Intake/Firestore writes or manual job runs occurred. Exact historical HTTP 500/503 cause and multiple-cycle stability remain open. Continue with authenticated Cloud Shell read-only logs/status when an accessible session is available; do not replay Intake or old sales.
+
+
+
+### 2026-11-15 JST — user-provided sanitized Cloud Logging result
+
+- The screenshot of the read-only Logging query shows five HTTP 503 request entries from revision `toreca-vault-staging-00004-nfr`, at approximately 02:30–03:30 JST in 15-minute intervals. The displayed `stage` and `reasonCode` fields are blank.
+- These entries belong to the earlier revision, before guarded promotion to `00010-qar`; they do not show whether the current revision has 5xx failures. Blank fields on the old revision do not classify the underlying cause. Historical 500/503 root cause remains unknown.
+- Next read-only check: filter Cloud Logging to revision `toreca-vault-staging-00010-qar` for either HTTP 5xx or `toreca-vault-intake-failure`, and read the Intake Scheduler's lastAttemptTime/status. Do not replay or manually run the job.
+- No application, traffic, Intake, Firestore, old V2, or pending-sale state was changed by this log review.
