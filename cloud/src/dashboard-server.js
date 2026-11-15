@@ -3,13 +3,14 @@ import { pathToFileURL } from 'node:url';
 import { createFirestoreStore } from './firestore-store.js';
 import { createIapVerifier } from './dashboard-auth.js';
 import { renderDashboard } from './dashboard-view.js';
+import { dashboardClientScript } from './dashboard-client.js';
 
 const securityHeaders = {
   'cache-control': 'private, no-store, max-age=0',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   'x-frame-options': 'DENY',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+  'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
   'permissions-policy': 'camera=(), microphone=(), geolocation=()'
 };
 
@@ -26,13 +27,17 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     let url;
     try { url = new URL(request.url || '/', 'http://localhost'); }
     catch { return reply(response, 400, 'Invalid URL'); }
-    if (url.pathname !== '/' && url.pathname !== '/app') return reply(response, 404, 'Not found');
+    if (!['/', '/app', '/dashboard.js'].includes(url.pathname)) return reply(response, 404, 'Not found');
     if (request.method !== 'GET' && request.method !== 'HEAD') return reply(response, 405, 'Method not allowed');
     if (!request.headers['x-goog-iap-jwt-assertion']) return reply(response, 401, 'Google login required');
     let allowed = false;
     try { allowed = await verifyIap(request); }
     catch { allowed = false; }
     if (!allowed) return reply(response, 403, 'Access denied');
+    if (url.pathname === '/dashboard.js') {
+      response.writeHead(200, { ...securityHeaders, 'content-type': 'application/javascript; charset=utf-8' });
+      return response.end(request.method === 'HEAD' ? undefined : dashboardClientScript);
+    }
     try {
       const snapshot = await store.read();
       if (!snapshot?.payload) return reply(response, 503, 'Staging data is not initialized');
