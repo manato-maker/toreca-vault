@@ -139,7 +139,7 @@ if not revision.startswith("toreca-vault-staging-") or not url.startswith("https
     raise SystemExit("BLOCKED: tagged canary revision or private URL not found")
 print(revision, url)
 PY
-)"
+)
 # The user identity may not have direct Sheets/Firestore read access. Verify
 # the candidate using the same Cloud Run runtime identity that will process
 # Intake; this GET is private and strictly read-only. Do not impersonate an SA.
