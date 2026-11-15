@@ -1295,7 +1295,7 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 
 ### 2026-11-15 JST — guarded promotion retry status (CI reconciled)
 
-- GitHub PR #105 remains Draft/open; current development branch HEAD is `e0d4491cfc6d75f7a8a66c4e004fde39e0f57052`. GitHub Actions `v2-ci` run #1047 completed successfully on this exact HEAD; both the test job and Firestore Emulator job passed. Run #1046 also completed successfully. The earlier #1042 syntax failure was fixed before these passing runs.
+- GitHub PR #105 remains Draft/open. The guarded release code fix is at `08e8e7185048200488dcca105009cd9665b9e05d`; `v2-ci` run #1046 passed both test and Firestore Emulator jobs. Subsequent handoff-only commits put the branch at `450174ab9100337a833473043f5a46d21b50cccb`; `v2-ci` run #1048 also passed. Earlier run #1042's syntax error was fixed before these passing runs.
 - This CI result verifies code only. It does not verify Cloud Run traffic, Intake writes, Scheduler execution, Firestore canonical updates, or Android UI reflection.
 - The user's latest Cloud Shell screenshot shows the previous promotion attempt stopped at the operator-ADC readiness probe. It made no traffic switch, worker/Scheduler call, Intake/canonical write, IAM change, old V2 write, or pending-sale replay.
 - The release script was updated on the development branch to use the candidate's authenticated private, read-only `GET /health/intake` instead of requiring direct operator ADC access to Sheets/Firestore. It requires a fresh clean clone at the current branch head and exits without switching traffic if the runtime probe or preview checks fail.
