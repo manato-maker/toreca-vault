@@ -1675,3 +1675,14 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - These entries belong to the earlier revision, before guarded promotion to `00010-qar`; they do not show whether the current revision has 5xx failures. Blank fields on the old revision do not classify the underlying cause. Historical 500/503 root cause remains unknown.
 - Next read-only check: filter Cloud Logging to revision `toreca-vault-staging-00010-qar` for either HTTP 5xx or `toreca-vault-intake-failure`, and read the Intake Scheduler's lastAttemptTime/status. Do not replay or manually run the job.
 - No application, traffic, Intake, Firestore, old V2, or pending-sale state was changed by this log review.
+
+
+
+### 2026-11-15 JST — post-promotion runtime log and Scheduler readback
+
+- User-provided Cloud Shell screenshot shows a read-only Cloud Logging query scoped to revision `toreca-vault-staging-00010-qar`, the preceding 24 hours, HTTP 5xx, and the fixed Intake failure event. The query returned no rows.
+- The same screenshot shows `toreca-vault-staging-intake` state `ENABLED`, lastAttemptTime `2026-11-15T04:30:05.481156Z` (13:30:05 JST), and empty status (no reported scheduler error). This is one successful scheduled attempt observed after promotion; it is not multiple-cycle stability proof.
+- Fresh Intake!D2:E9 read remains 3 `v2-applied / canonical-readback-verified`, 0 queued, and 5 review. No new/queued items and no source edits/resubmissions.
+- Prior 02:30–03:30 JST 503 entries are isolated to old revision `00004-nfr`; their blank stage/reason fields remain unexplained. Current revision had no matching 5xx/diagnostic entry in the queried 24-hour window.
+- No worker/Scheduler was manually triggered, and no Intake, Firestore, old V2, pending sale, IAM, or traffic state was changed by this readback.
+- Current staging is serving and its latest scheduled execution showed no error. Keep absolute daily-operation completion open until a naturally occurring post-promotion normal-Chat report is observed through Intake → canonical → UI, plus additional scheduled cycles. Do not synthesize or replay an event.
