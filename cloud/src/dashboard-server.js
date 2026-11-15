@@ -10,7 +10,7 @@ const DEFAULT_COMMON_HANDOVER_FILE_ID = '1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7';
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const HANDOVER_MAX_BYTES = 1_000_000;
 
-async function fetchCommonHandoff(fileId, fetchImpl = fetch, knownModifiedTime = '') {
+async function fetchCommonHandoff(fileId, fetchImpl = fetch) {
   if (!/^[A-Za-z0-9_-]{20,120}$/.test(String(fileId || ''))) throw new Error('handoff source is not configured');
   const auth = new GoogleAuth({ scopes: [DRIVE_READ_SCOPE] });
   const client = await auth.getClient();
@@ -24,7 +24,6 @@ async function fetchCommonHandoff(fileId, fetchImpl = fetch, knownModifiedTime =
   const metadata = await metadataResponse.json();
   if (metadata.mimeType !== 'text/markdown') throw new Error('handoff must be a Markdown file');
   const modifiedTime = String(metadata.modifiedTime || '');
-  if (knownModifiedTime && modifiedTime === knownModifiedTime) return { notModified: true, modifiedTime };
   const contentResponse = await fetchImpl(url + '?alt=media', { headers });
   if (!contentResponse.ok) throw new Error('handoff content unavailable');
   const content = await contentResponse.text();
@@ -41,12 +40,12 @@ const securityHeaders = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()'
 };
 
-function reply(response, status, content, contentType = 'text/plain; charset=utf-8') {
-  response.writeHead(status, { ...securityHeaders, 'content-type': contentType });
+function reply(response, status, content, contentType = 'text/plain; charset=utf-8', extraHeaders = {}) {
+  response.writeHead(status, { ...securityHeaders, ...extraHeaders, 'content-type': contentType });
   response.end(content);
 }
 
-export function createDashboardServer({ store, verifyIap, now = () => new Date(), handoverDocId = '', commonHandoverFileId = DEFAULT_COMMON_HANDOVER_FILE_ID, readHandoff = knownModifiedTime => fetchCommonHandoff(commonHandoverFileId, fetch, knownModifiedTime) }) {
+export function createDashboardServer({ store, verifyIap, now = () => new Date(), handoverDocId = '', commonHandoverFileId = DEFAULT_COMMON_HANDOVER_FILE_ID, readHandoff = () => fetchCommonHandoff(commonHandoverFileId) }) {
   if (typeof store?.read !== 'function') throw new TypeError('read-only store is required');
   if (typeof verifyIap !== 'function') throw new TypeError('signed IAP verifier is required');
 
@@ -54,8 +53,8 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     let url;
     try { url = new URL(request.url || '/', 'http://localhost'); }
     catch { return reply(response, 400, 'Invalid URL'); }
-    if (!['/', '/app', '/dashboard.js', '/api/handoff'].includes(url.pathname)) return reply(response, 404, 'Not found');
-    if (url.pathname === '/api/handoff' ? request.method !== 'GET' : (request.method !== 'GET' && request.method !== 'HEAD')) return reply(response, 405, 'Method not allowed');
+    if (!['/', '/app', '/dashboard.js', '/api/handoff', '/api/handoff/download'].includes(url.pathname)) return reply(response, 404, 'Not found');
+    if (url.pathname.startsWith('/api/') ? request.method !== 'GET' : (request.method !== 'GET' && request.method !== 'HEAD')) return reply(response, 405, 'Method not allowed');
     if (!request.headers['x-goog-iap-jwt-assertion']) return reply(response, 401, 'Google login required');
     let allowed = false;
     try { allowed = await verifyIap(request); }
@@ -65,12 +64,14 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
       response.writeHead(200, { ...securityHeaders, 'content-type': 'application/javascript; charset=utf-8' });
       return response.end(request.method === 'HEAD' ? undefined : dashboardClientScript);
     }
-    if (url.pathname === '/api/handoff') {
+    if (url.pathname === '/api/handoff' || url.pathname === '/api/handoff/download') {
       try {
-        const handoff = await readHandoff(url.searchParams.get('modifiedTime') || '');
-        if (handoff?.notModified) {
-          response.writeHead(304, securityHeaders);
-          return response.end();
+        const handoff = await readHandoff();
+        if (typeof handoff?.content !== 'string') throw new Error('handoff content unavailable');
+        if (url.pathname === '/api/handoff/download') {
+          return reply(response, 200, handoff.content, 'text/markdown; charset=utf-8', {
+            'content-disposition': 'attachment; filename="Toreca_Vault_Common_Handoff_2026-11-14.md"'
+          });
         }
         return reply(response, 200, JSON.stringify(handoff), 'application/json; charset=utf-8');
       } catch {
