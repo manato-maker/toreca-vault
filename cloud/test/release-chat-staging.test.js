@@ -21,7 +21,8 @@ test('staging release never sets env vars, deploys at zero traffic and requires 
     '--no-traffic', '--tag=chat-candidate', '--min-instances=0',
     '--max-instances=1', '--cpu-throttling', '--no-allow-unauthenticated', 'TV2_STAGING_RELEASE_REVIEWED',
     'health/intake', 'gcloud auth print-identity-token', '--to-revisions=',
-    'services get-iam-policy', 'canonicalInitialized', 'cursorReadable'
+    'services get-iam-policy', 'canonicalInitialized', 'cursorReadable',
+    'git ls-remote origin', 'git status --porcelain'
   ]) {
     assert.ok(source.includes(marker), 'missing protection: ' + marker);
   }
