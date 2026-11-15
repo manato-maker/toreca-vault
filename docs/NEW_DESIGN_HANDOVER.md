@@ -1320,3 +1320,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Latest observed staging remains on revision `toreca-vault-staging-00008-jid` at 100% traffic. The 10:00 JST Scheduler attempt reported no status error; the read-only Intake health probe passed. Historical HTTP 500/503 entries remain unclassified, so the exact old failure cause and continuous stability are not proven.
 - Connected Sheet state is 2 `v2-applied`, 1 `queued`, and 5 `review`. This conflicts with a health count that reported zero queued receipts while one receipt was correlated; use the Sheet receipt as authoritative until a read-only reconciliation explains the mismatch. No rows were edited or resubmitted.
 - The code change is not yet confirmed deployed. Do not replay old V2 queue items or pending sales. A fresh post-promotion normal-Chat report has not yet been verified through canonical readback and the Android UI.
+
+
+## 2026-11-15 — Candidate staged and Intake receipt reconciled
+
+- Staging candidate `toreca-vault-staging-00010-gaf` is tagged at 0% traffic. Its private GET-only Intake probe returned HTTP 200, confirmed Sheets/cursor/canonical readability, and reported canonical revision 2927. Cursor next row is 10; zero scanned rows and an empty preview mean the existing rows are behind the cursor, not absent. No worker or Scheduler was triggered by this probe.
+- Latest connected Sheet aggregate is 3 `v2-applied`, 0 queued, 5 review. The earlier queued receipt is now canonical-readback verified; the previous health-count discrepancy is resolved. The UI shows canonical revision 2927; no duplicate inventory item appeared.
+- The normal-Chat evidence fallback has passed CI (#1052–#1054) but remains on the 0% candidate until guarded staging promotion. A new post-promotion normal-Chat event still needs end-to-end verification.
+- Historical HTTP 500/503 entries remain unclassified, though the latest scheduled receipt completed. Existing review items remain untouched. No old V2 write or pending-sale replay occurred.
