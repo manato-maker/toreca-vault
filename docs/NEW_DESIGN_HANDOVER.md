@@ -1426,3 +1426,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Root cause found in source: the visible card pointed to the legacy Google Docs CURRENT document and its `.txt` export, while the live dialog and direct endpoint read the common Drive Markdown file.
 - Patched `cloud/src/dashboard-view.js` on PR #107 at code commit `f3323e3e45f6b251119b8f9725446d32de165284`: the visible card now uses the same live Markdown download endpoint and Drive source. The patch is not deployed yet. Next is dashboard-only staging deployment and Android verification.
 - No tests were run; no Intake/API, Firestore canonical, inventory, Scheduler, old V2, or pending-sale data changed. Intake HTTP 500/503 and normal Chat exactly-once processing remain unresolved.
+
+
+### 2026-11-15 JST — aligned handoff card deployed
+
+- Cloud Shell confirms the latest dashboard-only staging deploy created revision `toreca-vault-ui-staging-00004-99m` with 100% traffic. It includes the visible-card fix from code commit `f3323e3e45f6b251119b8f9725446d32de165284`, which points the app's in-page download to the same shared Markdown endpoint as the direct link.
+- Android reload and behavior verification remain pending: in-page .md download, live handoff dialog, Chat/Work copy, date tap, complete sale history, and inventory filters. Deployment output does not prove UI behavior.
+- No Intake/API or canonical data was changed by this deploy. Intake HTTP 500/503 and normal Chat exactly-once path remain unresolved; no old V2 writes or pending-sale replays.
