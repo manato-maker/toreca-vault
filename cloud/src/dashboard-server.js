@@ -10,7 +10,7 @@ const DEFAULT_COMMON_HANDOVER_FILE_ID = '1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7';
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const HANDOVER_MAX_BYTES = 1_000_000;
 
-async function fetchCommonHandoff(fileId, fetchImpl = fetch) {
+async function fetchCommonHandoff(fileId, fetchImpl = fetch, knownModifiedTime = '') {
   if (!/^[A-Za-z0-9_-]{20,120}$/.test(String(fileId || ''))) throw new Error('handoff source is not configured');
   const auth = new GoogleAuth({ scopes: [DRIVE_READ_SCOPE] });
   const client = await auth.getClient();
@@ -23,11 +23,13 @@ async function fetchCommonHandoff(fileId, fetchImpl = fetch) {
   if (!metadataResponse.ok) throw new Error('handoff metadata unavailable');
   const metadata = await metadataResponse.json();
   if (metadata.mimeType !== 'text/markdown') throw new Error('handoff must be a Markdown file');
+  const modifiedTime = String(metadata.modifiedTime || '');
+  if (knownModifiedTime && modifiedTime === knownModifiedTime) return { notModified: true, modifiedTime };
   const contentResponse = await fetchImpl(url + '?alt=media', { headers });
   if (!contentResponse.ok) throw new Error('handoff content unavailable');
   const content = await contentResponse.text();
   if (Buffer.byteLength(content, 'utf8') > HANDOVER_MAX_BYTES) throw new Error('handoff is too large');
-  return { content, modifiedTime: String(metadata.modifiedTime || ''), name: String(metadata.name || 'Common handoff') };
+  return { content, modifiedTime, name: String(metadata.name || 'Common handoff') };
 }
 
 const securityHeaders = {
@@ -44,7 +46,7 @@ function reply(response, status, content, contentType = 'text/plain; charset=utf
   response.end(content);
 }
 
-export function createDashboardServer({ store, verifyIap, now = () => new Date(), handoverDocId = '', commonHandoverFileId = DEFAULT_COMMON_HANDOVER_FILE_ID, readHandoff = () => fetchCommonHandoff(commonHandoverFileId) }) {
+export function createDashboardServer({ store, verifyIap, now = () => new Date(), handoverDocId = '', commonHandoverFileId = DEFAULT_COMMON_HANDOVER_FILE_ID, readHandoff = knownModifiedTime => fetchCommonHandoff(commonHandoverFileId, fetch, knownModifiedTime) }) {
   if (typeof store?.read !== 'function') throw new TypeError('read-only store is required');
   if (typeof verifyIap !== 'function') throw new TypeError('signed IAP verifier is required');
 
@@ -65,7 +67,11 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     }
     if (url.pathname === '/api/handoff') {
       try {
-        const handoff = await readHandoff();
+        const handoff = await readHandoff(url.searchParams.get('modifiedTime') || '');
+        if (handoff?.notModified) {
+          response.writeHead(304, securityHeaders);
+          return response.end();
+        }
         return reply(response, 200, JSON.stringify(handoff), 'application/json; charset=utf-8');
       } catch {
         return reply(response, 503, JSON.stringify({ error: 'handoff_unavailable' }), 'application/json; charset=utf-8');
