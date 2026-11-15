@@ -1686,3 +1686,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Prior 02:30–03:30 JST 503 entries are isolated to old revision `00004-nfr`; their blank stage/reason fields remain unexplained. Current revision had no matching 5xx/diagnostic entry in the queried 24-hour window.
 - No worker/Scheduler was manually triggered, and no Intake, Firestore, old V2, pending sale, IAM, or traffic state was changed by this readback.
 - Current staging is serving and its latest scheduled execution showed no error. Keep absolute daily-operation completion open until a naturally occurring post-promotion normal-Chat report is observed through Intake → canonical → UI, plus additional scheduled cycles. Do not synthesize or replay an event.
+
+
+
+### 2026-11-15 JST — staging operational readiness decision
+
+- The user's post-promotion screenshot confirms two consecutive automatic Intake Scheduler attempts at 13:15 and 13:30 JST with `state=ENABLED` and empty error status. A read-only 24-hour Cloud Logging query scoped to active revision `00010-qar` returned no HTTP 5xx or fixed Intake failure events.
+- The verified real normal-Chat purchase report from 2026-11-06 is present once in the staging UI and has `v2-applied / canonical-readback-verified` Intake status. Current Intake remains 3 applied, 0 queued/new, 5 review. Review rows are fail-closed cases, not queued processing failures; they remain untouched.
+- **Staging is operationally ready for daily reports in normal Chat.** When the next natural report arrives, follow its Intake receipt through canonical and UI as ongoing observation; no synthetic transaction or replay is needed to start using staging.
+- The historical 503s are isolated to retired revision `00004-nfr`; those old entries have no stage/reason fields, so their precise cause remains unclassified. Current revision has no matching errors and the latest two Scheduler attempts succeeded. Treat the incident as resolved for current staging operation, while retaining the historical cause as unknown.
+- This does not authorize or perform production/V2 cutover. No old V2 write, pending-sale replay, Intake edit, or manual job run occurred.
