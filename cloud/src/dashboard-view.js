@@ -148,7 +148,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   // Keep the overview short; category-specific views must not hide older sales.
   const types = ['all', 'purchase', 'sale', 'opening'];
   const selectedType = types.includes(historyType) ? historyType : 'all';
-  const selectedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(dateOverride || '')) && String(dateOverride).slice(0, 7) === month
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateOverride || '')) && String(dateOverride).slice(0, 7) === month
     ? String(dateOverride) : '';
   const sorted = [...transactions].sort((a,b) =>
     String(b.date || '').localeCompare(String(a.date || '')) ||
