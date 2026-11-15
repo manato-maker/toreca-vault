@@ -222,7 +222,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   ].join('\n');
   const handoffDialog = '<dialog class="handoff-dialog" id="handoff-dialog" data-handoff-url="' + commonHandoffUrl + '" aria-labelledby="handoff-title">' +
     '<div class="handoff-dialog-head"><h2 id="handoff-title">Chat / Work 共通引き継ぎ</h2><button class="handoff-close" type="button" data-close-handoff aria-label="閉じる">×</button></div>' +
-    '<p class="meta">画面を開く時・更新時・コピー時に最新版を取得します。更新後の資料はここからダウンロードできます。</p>' +
+    '<p class="meta">画面を開く時・アプリに戻った時・更新時・コピー時に最新版を取得します。資料はここからダウンロードできます。</p>' +
     '<a class="handoff-doc-link" href="' + commonHandoffUrl + '" target="_blank" rel="noopener noreferrer">共通引き継ぎ資料を開く ↗</a>' +
     '<a class="handoff-download-link" href="/api/handoff/download" download="Toreca_Vault_Common_Handoff_2026-11-14.md">最新版をダウンロード (.md)</a>' +
     '<button class="handoff-refresh" type="button" data-refresh-handoff>今すぐ更新</button>' +
