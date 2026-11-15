@@ -1379,3 +1379,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **Staging is operationally ready for daily reports in normal Chat.** When the next natural report arrives, follow its Intake receipt through canonical and UI as ongoing observation; no synthetic transaction or replay is needed to start using staging.
 - The historical 503s are isolated to retired revision `00004-nfr`; those old entries have no stage/reason fields, so their precise cause remains unclassified. Current revision has no matching errors and the latest two Scheduler attempts succeeded. Treat the incident as resolved for current staging operation, while retaining the historical cause as unknown.
 - This does not authorize or perform production/V2 cutover. No old V2 write, pending-sale replay, Intake edit, or manual job run occurred.
+
+
+### 2026-11-15 JST — shared live handoff source in dashboard
+
+- The user asked that updates to the shared handoff made from either normal Chat or Work become visible in the app. The dashboard source in PR #107 now reads the one shared Drive Markdown file on panel open, every 60 seconds while the panel is open and visible, and immediately before either role-specific copy action. A manual refresh control and Drive modified time are shown.
+- The IAP-protected dashboard uses a read-only `GET /api/handoff` endpoint with `cache: no-store`. It fetches the Drive file at request time instead of bundling or persisting a snapshot. If access/read fails, the UI reports the failure and refuses to copy stale content.
+- The dedicated dashboard service account is a Drive reader for this handoff file only. `cloud/scripts/deploy-dashboard-staging.sh` passes `TV2_COMMON_HANDOVER_FILE_ID` explicitly.
+- This is source configuration only for now. PR #107 remains Draft/open/mergeable. Staging deployment and Android readback are pending because `gcloud` is absent in this Work runtime and the prior Cloud Shell attempt returned “Site Unavailable”. Do not claim the live app reflects the change until deployment and readback are confirmed.
+- No tests were added or run. No Intake rows, canonical Firestore, inventory, Scheduler, old V2, old queue, or pending sales were modified or replayed. Production cutover remains unauthorized.
