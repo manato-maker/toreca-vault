@@ -108,32 +108,45 @@ fi
   echo "BLOCKED: verified canary not approved. TV2_STAGING_RELEASE_REVIEWED=YES required." >&2
   exit 2
 }
-command -v node >/dev/null || { echo "BLOCKED: node required." >&2; exit 2; }
-# Extract the private spreadsheet binding only into this process environment.
-export TV2_NEW_APP_INTAKE_SPREADSHEET_ID="$(python3 - "$WORKDIR/service.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1], encoding="utf-8"))
-containers = data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-if not containers:
-    containers = data.get("template", {}).get("containers", [])
-match = next((e.get("value", "") for e in containers[0].get("env", [])
-              if e.get("name") == "TV2_NEW_APP_INTAKE_SPREADSHEET_ID"), "")
-print(match)
-PY
-)"
-node cloud/scripts/preflight-chat-staging.js
+# Resolve the exact zero-traffic candidate before checking it.
 gcloud run services describe "$SERVICE" --project="$PROJECT" \
   --region="$REGION" --format=json > "$WORKDIR/candidate.json"
-REVISION="$(python3 - "$WORKDIR/candidate.json" <<'PY'
+read -r REVISION CANDIDATE_URL < <(python3 - "$WORKDIR/candidate.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 traffic = data.get("status", {}).get("traffic", [])
-revision = next((x.get("revisionName") for x in traffic if x.get("tag") == "chat-candidate"), "")
-if not revision.startswith("toreca-vault-staging-"):
-    raise SystemExit("BLOCKED: tagged canary revision not found")
-print(revision)
+candidate = next((x for x in traffic if x.get("tag") == "chat-candidate"), {})
+revision = candidate.get("revisionName", "")
+url = candidate.get("url", "")
+if not revision.startswith("toreca-vault-staging-") or not url.startswith("https://"):
+    raise SystemExit("BLOCKED: tagged canary revision or private URL not found")
+print(revision, url)
 PY
 )"
+# The user identity may not have direct Sheets/Firestore read access. Verify
+# the candidate using the same Cloud Run runtime identity that will process
+# Intake; this GET is private and strictly read-only. Do not impersonate an SA.
+ID_TOKEN="$(gcloud auth print-identity-token)"
+curl --fail --silent --show-error --max-time 30 \
+  -H "Authorization: Bearer ${ID_TOKEN}" \
+  "${CANDIDATE_URL}/health/intake" > "$WORKDIR/intake-health.json"
+unset ID_TOKEN
+python3 - "$WORKDIR/intake-health.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+if data.get("ok") is not True or data.get("sheetsReadable") is not True \
+        or data.get("cursorReadable") is not True or data.get("canonicalInitialized") is not True \
+        or not isinstance(data.get("canonicalRevision"), int):
+    raise SystemExit("BLOCKED: candidate runtime read-only Intake/queue/canonical probe failed")
+allowed = {"would-apply", "canonical-duplicate", "queue-record-present",
+           "request-id-collision", "business-duplicate", "business-collision", "review"}
+previews = data.get("previews")
+if not isinstance(previews, list) or any(row.get("outcome") not in allowed for row in previews):
+    raise SystemExit("BLOCKED: candidate preview contains an unknown outcome")
+print("PASS: candidate runtime identity read Intake, cursor, queue and canonical state.")
+print("Read-only preview rows: " + str(len(previews)))
+print("No row status, queue, cursor, or canonical data was changed by this check.")
+PY
 gcloud run services update-traffic "$SERVICE" --project="$PROJECT" \
   --region="$REGION" --to-revisions="$REVISION=100" --quiet
 echo "STAGING CANARY PROMOTED; still requires live Chat->Sheet->Firestore->UI readback verification."
