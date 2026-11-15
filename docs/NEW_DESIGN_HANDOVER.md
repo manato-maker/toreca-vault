@@ -1312,3 +1312,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Read-only Android staging UI loaded at canonical revision 2926 and showed the existing inventory/history. One already canonical-verified event matched the UI; the related ambiguous receipt stayed in review, so no duplicate inventory was created.
 - Confirmed Chat lottery applications require explicit `evidenceType=chat-report` (or screenshot provenance) plus complete fields for the conservative internal deduplication fingerprint. Existing rows missing that evidence remain review and were not edited. The previous active revision's exact 500/503 cause is still unknown; the latest scheduled execution on the promoted revision did not show an error.
 - Full unattended normal-Chat reporting is not yet declared complete: confirm multiple natural Scheduler cycles and future reports through Intake, canonical, and UI without resubmission.
+
+
+## 2026-11-15 — Staging intake reconciliation and Chat evidence fallback
+
+- CI runs #1052 and #1053 passed for the normal-Chat lottery evidence fallback and regression coverage. The feature branch can infer only the internal `chat-report` evidence type from the dedicated `normalchat:` request-ID namespace when a confirmed lottery command otherwise has the required title, store, owner, and application date. It does not invent a retailer application ID and does not affect purchases, sales, or receipts.
+- Latest observed staging remains on revision `toreca-vault-staging-00008-jid` at 100% traffic. The 10:00 JST Scheduler attempt reported no status error; the read-only Intake health probe passed. Historical HTTP 500/503 entries remain unclassified, so the exact old failure cause and continuous stability are not proven.
+- Connected Sheet state is 2 `v2-applied`, 1 `queued`, and 5 `review`. This conflicts with a health count that reported zero queued receipts while one receipt was correlated; use the Sheet receipt as authoritative until a read-only reconciliation explains the mismatch. No rows were edited or resubmitted.
+- The code change is not yet confirmed deployed. Do not replay old V2 queue items or pending sales. A fresh post-promotion normal-Chat report has not yet been verified through canonical readback and the Android UI.
