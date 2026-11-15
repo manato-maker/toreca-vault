@@ -9,6 +9,7 @@ export const dashboardClientScript = `
   const liveStatus = document.getElementById('handoff-live-status');
   const liveContent = document.getElementById('handoff-live-content');
   let latestHandoff = '';
+  let lastResumeRefreshAt = 0;
 
   async function loadHandoff() {
     if (liveStatus) liveStatus.textContent = '共通引き継ぎ資料の最新版を取得中…';
@@ -50,6 +51,15 @@ export const dashboardClientScript = `
     });
   }
   if (dialog && closeButton) closeButton.addEventListener('click', () => dialog.close());
+  function refreshOnReturn() {
+    if (!dialog?.open || document.hidden) return;
+    const now = Date.now();
+    if (now - lastResumeRefreshAt < 1500) return;
+    lastResumeRefreshAt = now;
+    void loadHandoff().catch(() => {});
+  }
+  window.addEventListener('focus', refreshOnReturn);
+  document.addEventListener('visibilitychange', refreshOnReturn);
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
       refreshButton.disabled = true;
