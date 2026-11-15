@@ -108,6 +108,23 @@ fi
   echo "BLOCKED: verified canary not approved. TV2_STAGING_RELEASE_REVIEWED=YES required." >&2
   exit 2
 }
+for prog in git; do
+  command -v "$prog" >/dev/null || { echo "BLOCKED: git required." >&2; exit 2; }
+done
+[[ "$(git branch --show-current)" == "$BRANCH" ]] || {
+  echo "BLOCKED: wrong development branch." >&2
+  exit 2
+}
+[[ -z "$(git status --porcelain)" ]] || {
+  echo "BLOCKED: local changes must be reviewed before release." >&2
+  exit 2
+}
+LOCAL_HEAD="$(git rev-parse HEAD)"
+REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+[[ -n "$REMOTE_HEAD" && "$LOCAL_HEAD" == "$REMOTE_HEAD" ]] || {
+  echo "BLOCKED: checkout is stale or remote cannot be verified." >&2
+  exit 2
+}
 # Resolve the exact zero-traffic candidate before checking it.
 gcloud run services describe "$SERVICE" --project="$PROJECT" \
   --region="$REGION" --format=json > "$WORKDIR/candidate.json"
