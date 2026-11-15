@@ -53,7 +53,7 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     try { url = new URL(request.url || '/', 'http://localhost'); }
     catch { return reply(response, 400, 'Invalid URL'); }
     if (!['/', '/app', '/dashboard.js', '/api/handoff'].includes(url.pathname)) return reply(response, 404, 'Not found');
-    if (request.method !== 'GET' && request.method !== 'HEAD') return reply(response, 405, 'Method not allowed');
+    if (url.pathname === '/api/handoff' ? request.method !== 'GET' : (request.method !== 'GET' && request.method !== 'HEAD')) return reply(response, 405, 'Method not allowed');
     if (!request.headers['x-goog-iap-jwt-assertion']) return reply(response, 401, 'Google login required');
     let allowed = false;
     try { allowed = await verifyIap(request); }
