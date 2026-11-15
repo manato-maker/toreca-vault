@@ -1339,3 +1339,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - This verifies staging promotion and readback of existing records. A new post-promotion normal-Chat report has not been verified end-to-end. The normal-Chat evidence fallback has passing CI, but live behavior still needs a naturally submitted new event and matching canonical/UI readback.
 - Historical HTTP 500/503 entries remain unclassified; the precise earlier cause is unknown. A recent scheduled receipt completed, but uninterrupted Scheduler stability is not proven.
 - No old V2 write, pending-sale replay, manual Scheduler/worker run, or review-row mutation occurred. Keep full daily-operation completion open pending a new report's single-pass Intake → staging canonical → UI verification and scheduled stability checks.
+
+
+
+### 2026-11-15 JST — follow-up verification and access limit
+
+- Re-read Intake!D2:E9: 3 `v2-applied / canonical-readback-verified`, 0 queued, and 5 review; no new rows. No changes were made.
+- Reopened the staging UI: canonical revision 2927, 34 inventory lots, 99 transaction-history entries; the verified 2026-11-06 purchase is present once. No duplicate was observed.
+- GitHub handoff update CI run #1056 completed successfully. PR #105 remains open and Draft.
+- Cloud Shell was attempted once and reloaded once in this Work browser; both views returned “Site Unavailable / Unable to access this site.” No GCP connector is available in this Work environment. Therefore current Scheduler last-attempt state and Cloud Logging reason codes could not be independently read here. Do not infer continuing 5xx or continuous success from this limitation.
+- No Cloud Run/Scheduler/Intake/Firestore writes or manual job runs occurred. Exact historical HTTP 500/503 cause and multiple-cycle stability remain open. Continue with authenticated Cloud Shell read-only logs/status when an accessible session is available; do not replay Intake or old sales.
