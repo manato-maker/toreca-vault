@@ -1410,3 +1410,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Screenshot from the user's Android browser confirms the staging dashboard opens after IAP setup, with transaction history and a visible legacy handoff card.
 - The visible card links to Google Docs and exports a .txt file. The newly implemented shared Drive-Markdown live-sync and role-specific copy controls are in the modal opened by the fixed bottom 「引継ぎ」 button. The screenshot did not capture that modal; the legacy card and modal coexist and may confuse users. Do not claim the live handoff actions are mobile-verified yet.
 - Continue by verifying the modal's latest Drive content, manual refresh, Chat/Work copy, and .md download; then verify calendar-date navigation, complete canonical sales list, and inventory filters. Intake HTTP 500/503 and normal Chat exactly-once staging verification remain unresolved. Do not replay pending sales or write old V2.
+
+
+### 2026-11-15 JST — app handoff download failed; Drive API enabled
+
+- The Android request to the IAP-protected `/api/handoff/download` returned `{"error":"handoff_unavailable"}`; no file downloaded. The dashboard route hides the underlying Drive-read cause behind a generic 503.
+- The user enabled `drive.googleapis.com` in the staging project; Cloud Shell confirmed success. The app endpoint must be retried before treating this as fixed.
+- If it still fails, inspect Cloud Run logs and confirm the dashboard service account can read the specific Markdown file; add safe error-class logging if needed. The private Drive file remains a direct fallback.
+- No Intake, canonical Firestore, inventory, Scheduler, old V2, or pending sale data was changed by enabling the API. Intake HTTP 500/503 remains a separate unresolved issue.
