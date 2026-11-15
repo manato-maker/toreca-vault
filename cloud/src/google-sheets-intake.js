@@ -24,9 +24,14 @@ function parseJsonCell(value, label, optional = false) {
  * independent fingerprint only for a fully specified, confirmed application.
  * It is NOT an applicationId and must never be copied into the retailer-ID field.
  */
-function confirmedChatLotteryFingerprint(command) {
+function confirmedChatLotteryFingerprint(command, requestId) {
+  // The dedicated normalchat: request-ID namespace is assigned by the normal
+  // Chat intake writer. It may stand in for omitted evidenceType on older
+  // chat-originated rows; it is never an external retailer application ID.
+  const evidenceType = command.evidenceType
+    || (requestId.startsWith('normalchat:') ? 'chat-report' : null);
   if (command.type !== 'lottery' || command.status !== '応募済'
-    || !['screenshot', 'chat-report'].includes(command.evidenceType)) return null;
+    || !['screenshot', 'chat-report'].includes(evidenceType)) return null;
   const canonical = (value) => String(value || '').normalize('NFKC').trim()
     .toLocaleLowerCase('ja').replace(/[\s\u3000]+/g, ' ');
   const store = canonical(command.store);
@@ -44,11 +49,11 @@ function confirmedChatLotteryFingerprint(command) {
   return 'lottery:confirmed-report:v1:' + createHash('sha256').update(payload).digest('hex');
 }
 
-function parseIdentity(value, command) {
+function parseIdentity(value, command, requestId) {
   const kind = EVENT_KINDS.get(String(command.type || ''));
   if (value === null) {
     if (kind === 'application') {
-      const fingerprint = confirmedChatLotteryFingerprint(command);
+      const fingerprint = confirmedChatLotteryFingerprint(command, requestId);
       if (fingerprint) return { businessEventKey: fingerprint };
     }
     if (kind) throw Object.assign(new Error('lottery identity is required'), { reasonCode: 'lottery-identity-missing' });
@@ -82,7 +87,7 @@ export function parseGoogleSheetsIntakeRow(row) {
     throw Object.assign(new Error('request ID does not match the command'), { reasonCode: 'request-id-mismatch' });
   }
   const identity = parseJsonCell(row.values?.[2], 'business event identity', true);
-  return { requestId, command, ...parseIdentity(identity, command) };
+  return { requestId, command, ...parseIdentity(identity, command, requestId) };
 }
 
 function safeCount(value) {
