@@ -1418,3 +1418,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The user enabled `drive.googleapis.com` in the staging project; Cloud Shell confirmed success. The app endpoint must be retried before treating this as fixed.
 - If it still fails, inspect Cloud Run logs and confirm the dashboard service account can read the specific Markdown file; add safe error-class logging if needed. The private Drive file remains a direct fallback.
 - No Intake, canonical Firestore, inventory, Scheduler, old V2, or pending sale data was changed by enabling the API. Intake HTTP 500/503 remains a separate unresolved issue.
+
+
+### 2026-11-15 JST — visible handoff card aligned with working dynamic download
+
+- The user confirmed that the direct IAP-protected `/api/handoff/download` downloaded a file after `drive.googleapis.com` was enabled, while the in-app handoff card still appeared unchanged.
+- Root cause found in source: the visible card pointed to the legacy Google Docs CURRENT document and its `.txt` export, while the live dialog and direct endpoint read the common Drive Markdown file.
+- Patched `cloud/src/dashboard-view.js` on PR #107 at code commit `f3323e3e45f6b251119b8f9725446d32de165284`: the visible card now uses the same live Markdown download endpoint and Drive source. The patch is not deployed yet. Next is dashboard-only staging deployment and Android verification.
+- No tests were run; no Intake/API, Firestore canonical, inventory, Scheduler, old V2, or pending-sale data changed. Intake HTTP 500/503 and normal Chat exactly-once processing remain unresolved.
