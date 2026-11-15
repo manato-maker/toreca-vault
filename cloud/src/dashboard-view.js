@@ -211,29 +211,27 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '<button class="inventory-filter" type="button" data-inventory-filter="カード" aria-pressed="false">シングルカード</button>' +
     '<button class="inventory-filter" type="button" data-inventory-filter="その他" aria-pressed="false">その他</button></nav>';
   const commonHandoffUrl = 'https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view';
-  const chatHandoffText = [
+  const chatHandoffPrefix = [
     'Toreca Vault 通常Chat用引き継ぎ',
     'このChatは購入・受取・開封・売却・抽選など日々の報告窓口です。Workはアプリ開発専用です。',
-    'Intake受付と新アプリ正本・画面への反映を区別し、反映済みと確認できるまでは重複報告を再登録しません。',
-    '共通引き継ぎ資料: ' + commonHandoffUrl
+    '以下は共通引き継ぎ資料の最新内容です。'
   ].join('\n');
-  const workHandoffText = [
+  const workHandoffPrefix = [
     'Toreca Vault Work用引き継ぎ',
-    '共通引き継ぎ資料の最新版を読み、GitHubとGoogle Docsの最新状態から続けてください。通常Chatは日々の報告、Workは開発用です。',
-    'Intake HTTP 500/503の根本原因と、通常Chatの報告が新アプリ正本・画面まで届く経路を調査してください。',
-    '重複登録・旧V2への書き込み・未処理売却の再投入は禁止。既存在庫・履歴を維持し、受付／正本反映／画面確認を区別してください。',
-    '共通引き継ぎ資料: ' + commonHandoffUrl
+    '以下の共通引き継ぎ資料を読み、通常Chatの報告が新アプリ正本・画面に届く状態まで開発を続けてください。'
   ].join('\n');
-  const handoffDialog = '<dialog class="handoff-dialog" id="handoff-dialog" aria-labelledby="handoff-title">' +
+  const handoffDialog = '<dialog class="handoff-dialog" id="handoff-dialog" data-handoff-url="' + commonHandoffUrl + '" aria-labelledby="handoff-title">' +
     '<div class="handoff-dialog-head"><h2 id="handoff-title">Chat / Work 共通引き継ぎ</h2><button class="handoff-close" type="button" data-close-handoff aria-label="閉じる">×</button></div>' +
-    '<p class="meta">用途を選んで、最新の案内文をコピーできます。</p>' +
+    '<p class="meta">共通資料を開くたびに最新版を読み込み、用途別の文面と一緒にコピーします。</p>' +
     '<a class="handoff-doc-link" href="' + commonHandoffUrl + '" target="_blank" rel="noopener noreferrer">共通引き継ぎ資料を開く ↗</a>' +
+    '<p class="handoff-live-status" id="handoff-live-status" role="status" aria-live="polite">最新版を読み込むには、この画面を開いてください。</p>' +
+    '<pre class="handoff-live-content" id="handoff-live-content">共通引き継ぎ資料は未読込です。</pre>' +
     '<section class="handoff-copy-card"><h3>通常Chat · 日々の報告</h3><p>購入・受取・開封・売却・抽選の報告を続けるための案内。</p><button class="handoff-copy-button" type="button" data-copy-handoff="chat">通常Chat用をコピー</button></section>' +
     '<section class="handoff-copy-card"><h3>Work · アプリ開発</h3><p>障害調査・開発の引き継ぎと、重複防止などの運用ルール。</p><button class="handoff-copy-button" type="button" data-copy-handoff="work">Work用をコピー</button></section>' +
     '<textarea class="handoff-fallback" id="handoff-fallback" readonly hidden aria-label="コピーする引き継ぎ文"></textarea>' +
     '<p class="handoff-copy-status" id="handoff-copy-status" role="status" aria-live="polite"></p>' +
-    '<textarea id="chat-handoff-text" hidden readonly>' + esc(chatHandoffText) + '</textarea>' +
-    '<textarea id="work-handoff-text" hidden readonly>' + esc(workHandoffText) + '</textarea>' +
+    '<textarea id="chat-handoff-prefix" hidden readonly>' + esc(chatHandoffPrefix) + '</textarea>' +
+    '<textarea id="work-handoff-prefix" hidden readonly>' + esc(workHandoffPrefix) + '</textarea>' +
     '</dialog>';
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#93a5bc;--aqua:#70e4d2;--purple:#9888ff}
@@ -250,7 +248,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
 .inventory-filters{display:flex;gap:7px;overflow-x:auto;padding:7px 0 12px;scrollbar-width:thin}.inventory-filter{flex:none;min-height:38px;border:1px solid var(--line);border-radius:20px;background:#202f40;color:var(--muted);padding:7px 11px;font:inherit;font-size:11px;cursor:pointer}.inventory-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.inventory-filter:focus-visible,.handoff-copy-button:focus-visible,.bottom button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 .bottom a,.bottom button{text-align:center;font-size:12px;min-width:56px;color:#e6effe}.bottom button{border:0;background:transparent;font:inherit;cursor:pointer;padding:0 3px}
-.handoff-dialog{width:min(520px,calc(100% - 24px));max-height:min(82vh,700px);overflow:auto;margin:auto;padding:20px;background:#172337;color:var(--txt);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 80px #0009}.handoff-dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}.handoff-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.handoff-dialog-head h2{margin:0}.handoff-close{width:40px;height:40px;border:0;border-radius:10px;background:#202f40;color:var(--txt);font-size:22px;cursor:pointer}.handoff-doc-link{display:inline-flex;margin:14px 0 2px;color:var(--aqua);font-size:12px;text-decoration:underline}.handoff-copy-card{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#111c2e}.handoff-copy-card h3{font-size:14px;margin:0 0 5px}.handoff-copy-card p{color:var(--muted);font-size:12px;margin:0 0 11px}.handoff-copy-button{width:100%;min-height:44px;border:0;border-radius:11px;background:#24504d;color:var(--aqua);font:inherit;font-weight:750;cursor:pointer}.handoff-copy-status{min-height:20px;margin-top:10px;color:var(--aqua);font-size:12px}.handoff-fallback{width:100%;min-height:120px;margin-top:8px;padding:10px;border-radius:8px;background:#0b1220;color:var(--txt);border:1px solid var(--line)}[hidden]{display:none!important}
+.handoff-dialog{width:min(520px,calc(100% - 24px));max-height:min(82vh,700px);overflow:auto;margin:auto;padding:20px;background:#172337;color:var(--txt);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 80px #0009}.handoff-dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}.handoff-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.handoff-dialog-head h2{margin:0}.handoff-close{width:40px;height:40px;border:0;border-radius:10px;background:#202f40;color:var(--txt);font-size:22px;cursor:pointer}.handoff-doc-link{display:inline-flex;margin:14px 0 2px;color:var(--aqua);font-size:12px;text-decoration:underline}.handoff-copy-card{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#111c2e}.handoff-copy-card h3{font-size:14px;margin:0 0 5px}.handoff-copy-card p{color:var(--muted);font-size:12px;margin:0 0 11px}.handoff-copy-button{width:100%;min-height:44px;border:0;border-radius:11px;background:#24504d;color:var(--aqua);font:inherit;font-weight:750;cursor:pointer}.handoff-copy-status{min-height:20px;margin-top:10px;color:var(--aqua);font-size:12px}.handoff-live-status{margin:12px 0 5px;color:var(--muted);font-size:11px}.handoff-live-content{max-height:min(32vh,280px);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:#0b1220;color:var(--txt);font:11px/1.55 ui-monospace,monospace}.handoff-fallback{width:100%;min-height:120px;margin-top:8px;padding:10px;border-radius:8px;background:#0b1220;color:var(--txt);border:1px solid var(--line)}[hidden]{display:none!important}
 footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:10px 12px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}.btn:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}.handover-actions{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
 @media(min-width:750px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}main{padding-bottom:60px}.bottom{position:static;max-width:1040px;margin:auto;border:1px solid var(--line);border-radius:15px 15px 0 0}.day{min-height:80px}}
 @media(max-width:380px){.stock-money{min-width:88px}.day{padding:4px}.metric{padding:12px}.metric strong{font-size:18px}}
