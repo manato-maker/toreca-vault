@@ -50,7 +50,7 @@ gcloud run deploy "$SERVICE" --source="$CONTEXT" \
   --service-account="$SA" --no-allow-unauthenticated \
   --min-instances=0 --max-instances=1 --cpu=1 --memory=512Mi \
   --cpu-throttling --concurrency=40 --timeout=30s \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT,TV2_FIRESTORE_DOCUMENT=$DOCUMENT,TV2_DASHBOARD_IAP_AUDIENCE=/projects/$NUMBER/locations/$REGION/services/$SERVICE,TV2_DASHBOARD_ALLOWED_EMAILS=$OWNER_EMAIL,TV2_HANDOVER_DOC_ID=$HANDOVER_DOC_ID" \
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT,TV2_FIRESTORE_DOCUMENT=$DOCUMENT,TV2_DASHBOARD_IAP_AUDIENCE=/projects/$NUMBER/locations/$REGION/services/$SERVICE,TV2_DASHBOARD_ALLOWED_EMAILS=$OWNER_EMAIL,TV2_HANDOVER_DOC_ID=$HANDOVER_DOC_ID,TV2_COMMON_HANDOVER_FILE_ID=$HANDOVER_FILE_ID" \
   --quiet
 
 echo
