@@ -149,6 +149,23 @@ test('confirmed Chat lottery without external application ID has a conservative 
   assert.deepEqual(provider.sourceIds, [first.requestId, second.requestId]);
 });
 
+test('normalchat request namespace supplies chat-report evidence when field is omitted', async () => {
+  const requestId = 'normalchat:2026-11-15:lottery-confirmed';
+  const command = {
+    requestId, type: 'lottery', title: '公式商品A 抽選', store: '店舗A',
+    owner: '本人分', applicationDate: '2026-11-15', status: '応募済'
+  };
+  const provider = fakeProvider([row(requestId, command, '', 'new', 2)]);
+  const inputs = [];
+  const run = createGoogleSheetsIntakeProcessor({
+    provider, spreadsheetId, cursorStore: fakeCursorStore(), now: () => 123,
+    queue: { async enqueue(input) { inputs.push(input); return { accepted: true }; } }
+  });
+  assert.equal((await run()).enqueued, 1);
+  assert.match(inputs[0].businessEventKey, /^lottery:confirmed-report:v1:[a-f0-9]{64}$/);
+  assert.equal(provider.receipts[0].status, 'queued');
+});
+
 test('unconfirmed or insufficiently identified Chat lottery never gets a fingerprint', async () => {
   const base = { requestId: 'chat:lottery:no-evidence', type: 'lottery',
     title: '商品A', store: '店舗A', owner: '本人分',
