@@ -9,33 +9,20 @@ export const dashboardClientScript = `
   const liveStatus = document.getElementById('handoff-live-status');
   const liveContent = document.getElementById('handoff-live-content');
   let latestHandoff = '';
-  let latestModifiedTime = '';
-  let refreshTimer = null;
 
-  async function loadHandoff({ silent = false, force = false } = {}) {
-    if (!silent) {
-      if (liveStatus) liveStatus.textContent = '共通引き継ぎ資料の最新版を確認中…';
-      if (liveContent && !latestHandoff) liveContent.textContent = '読み込み中…';
-    }
+  async function loadHandoff() {
+    if (liveStatus) liveStatus.textContent = '共通引き継ぎ資料の最新版を取得中…';
+    if (liveContent && !latestHandoff) liveContent.textContent = '読み込み中…';
     try {
-      const query = latestModifiedTime && !force ? '?modifiedTime=' + encodeURIComponent(latestModifiedTime) : '';
-      const response = await fetch('/api/handoff' + query, {
+      const response = await fetch('/api/handoff', {
         method: 'GET',
         cache: 'no-store',
         credentials: 'same-origin',
         headers: { accept: 'application/json' }
       });
-      if (response.status === 304 && latestHandoff) {
-        if (liveStatus) {
-          const modified = latestModifiedTime ? new Date(latestModifiedTime).toLocaleString('ja-JP') : '';
-          liveStatus.textContent = modified ? 'Drive最終更新: ' + modified + '（最新）' : '共通引き継ぎ資料は最新です。';
-        }
-        return latestHandoff;
-      }
       const data = await response.json().catch(() => null);
       if (!response.ok || !data || typeof data.content !== 'string') throw new Error('handoff unavailable');
       latestHandoff = data.content;
-      latestModifiedTime = typeof data.modifiedTime === 'string' ? data.modifiedTime : '';
       if (liveContent) liveContent.textContent = latestHandoff;
       if (liveStatus) {
         const modified = data.modifiedTime ? new Date(data.modifiedTime).toLocaleString('ja-JP') : '';
@@ -43,14 +30,9 @@ export const dashboardClientScript = `
       }
       return latestHandoff;
     } catch {
-      if (!silent) {
-        if (liveContent) liveContent.textContent = '最新の共通引き継ぎ資料を取得できませんでした。';
-        if (liveStatus) liveStatus.textContent = '更新確認に失敗しました。コピーは行いません。時間をおいて再試行してください。';
-        latestHandoff = '';
-        latestModifiedTime = '';
-      } else if (liveStatus) {
-        liveStatus.textContent = '更新確認に失敗しました。次回も自動確認します。';
-      }
+      if (liveContent) liveContent.textContent = '最新の共通引き継ぎ資料を取得できませんでした。';
+      if (liveStatus) liveStatus.textContent = '更新確認に失敗しました。コピーは行いません。時間をおいて再試行してください。';
+      latestHandoff = '';
       throw new Error('handoff unavailable');
     }
   }
@@ -60,17 +42,9 @@ export const dashboardClientScript = `
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
       openButton.setAttribute('aria-expanded', 'true');
-      void loadHandoff({ force: true }).catch(() => {});
-      if (refreshTimer) window.clearInterval(refreshTimer);
-      refreshTimer = window.setInterval(() => {
-        if (!document.hidden && dialog.open && latestModifiedTime) void loadHandoff({ silent: true }).catch(() => {});
-      }, 60000);
+      void loadHandoff().catch(() => {});
     });
-    dialog.addEventListener('close', () => {
-      openButton.setAttribute('aria-expanded', 'false');
-      if (refreshTimer) window.clearInterval(refreshTimer);
-      refreshTimer = null;
-    });
+    dialog.addEventListener('close', () => openButton.setAttribute('aria-expanded', 'false'));
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) dialog.close();
     });
@@ -79,7 +53,7 @@ export const dashboardClientScript = `
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
       refreshButton.disabled = true;
-      try { await loadHandoff({ force: true }); }
+      try { await loadHandoff(); }
       catch {}
       finally { refreshButton.disabled = false; }
     });
@@ -92,7 +66,7 @@ export const dashboardClientScript = `
       const prefix = prefixElement ? prefixElement.value.trim() : '';
       button.disabled = true;
       try {
-        const current = await loadHandoff({ force: true });
+        const current = await loadHandoff();
         const sourceUrl = dialog ? dialog.getAttribute('data-handoff-url') || '' : '';
         const value = prefix + '\n\n' + current.trim() + (sourceUrl ? '\n\n共通資料: ' + sourceUrl : '');
         try {
