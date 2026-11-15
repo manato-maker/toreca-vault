@@ -1401,5 +1401,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 
 - Cloud Shell command output confirms the dashboard branch deployment: service `toreca-vault-ui-staging`, revision `toreca-vault-ui-staging-00003-xrj`, 100% traffic. This is the separate read-only dashboard, not the API/Intake service.
 - `gcloud run services update ... --iap` completed. Cloud Shell output then confirmed `roles/run.invoker` for the IAP service agent and `roles/iap.httpsResourceAccessor` for the active Google account. The Code OSS Agent crash toast did not stop the terminal commands.
-- Android readback is still required at https://toreca-vault-ui-staging-235108293761.asia-northeast1.run.app/app?month=2026-11#calendar . Verify date navigation, all canonical sales, inventory filters/marks, and latest handoff copy/download after signing in with the granted account.
+- First Android screenshot confirms the staging URL opens and shows transaction history plus the legacy Google Docs quick-link card. This verifies basic reachability only. The fixed bottom 「引継ぎ」 navigation opens the separate PR #107 live-Markdown dialog; refresh, Chat/Work copy, .md download, calendar date jump, complete sales, and inventory-filter behavior still need mobile confirmation.
 - Intake HTTP 500/503 and normal Chat -> Intake -> worker -> Firestore canonical -> UI exactly-once verification remain unresolved. No pending sales were replayed and no old V2 writes were made. Do not declare daily-report operations complete until those checks pass; production cutover remains unauthorized.
+
+
+### 2026-11-15 JST — Android loaded the dashboard; UI interaction checks pending
+
+- Screenshot from the user's Android browser confirms the staging dashboard opens after IAP setup, with transaction history and a visible legacy handoff card.
+- The visible card links to Google Docs and exports a .txt file. The newly implemented shared Drive-Markdown live-sync and role-specific copy controls are in the modal opened by the fixed bottom 「引継ぎ」 button. The screenshot did not capture that modal; the legacy card and modal coexist and may confuse users. Do not claim the live handoff actions are mobile-verified yet.
+- Continue by verifying the modal's latest Drive content, manual refresh, Chat/Work copy, and .md download; then verify calendar-date navigation, complete canonical sales list, and inventory filters. Intake HTTP 500/503 and normal Chat exactly-once staging verification remain unresolved. Do not replay pending sales or write old V2.
