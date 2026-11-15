@@ -144,7 +144,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const today = jstDate.format(now);
   const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(monthOverride) ? monthOverride : today.slice(0, 7);
   const events = eventsFor(lotteries);
-  const relevantEvents = events.filter(e => e.date.slice(0, 7) === month).slice(0, 30);
+  const relevantEvents = events.filter(e => e.date.slice(0, 7) === month);
   // Keep the overview short; category-specific views must not hide older sales.
   const types = ['all', 'purchase', 'sale', 'opening'];
   const selectedType = types.includes(historyType) ? historyType : 'all';
