@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guarded staging Cloud Run API release. No production/V2/queue mutations.
+# Guarded staging Cloud Run API release. No production or legacy V2 writes.
 # Run only on the authorized Google Cloud Shell from the repository root.
 set -euo pipefail
 MODE=check
