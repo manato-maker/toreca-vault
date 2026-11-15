@@ -10,6 +10,7 @@ SERVICE="toreca-vault-ui-staging"
 DOCUMENT="torecaVaultStaging/canonical"
 # The private handover stays in Google Docs, never bundled into the image.
 HANDOVER_DOC_ID="${TV2_HANDOVER_DOC_ID:-1oXxw0pm8YoTCRMwQI16TiITDrtBBE9Gy-54kj90qlz0}"
+HANDOVER_FILE_ID="${TV2_COMMON_HANDOVER_FILE_ID:-1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7}"
 
 if [[ ! -f cloud/Dockerfile.dashboard || ! -f v2/core.js || ! -f cloud/src/dashboard-server.js ]]; then
   echo "Run this script from the Toreca Vault repository root on the staging branch." >&2
