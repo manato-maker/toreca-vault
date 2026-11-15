@@ -46,7 +46,7 @@ function eventsFor(lotteries) {
     return true;
   }).sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 }
-function calendar(month, events, today) {
+function calendar(month, events, today, selectedDate = '') {
   const parts = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
   const current = parts ? month : today.slice(0, 7);
   const [year, m] = current.split('-').map(Number);
@@ -61,14 +61,23 @@ function calendar(month, events, today) {
     if (day < 1 || day > days) { grid.push('<span class="day muted"></span>'); continue; }
     const d = current + '-' + String(day).padStart(2, '0');
     const count = byDate.get(d) || 0;
-    grid.push('<span class="day' + (today === d ? ' is-today' : '') + '"><span>' + day + '</span>' +
-      (count ? '<small>' + (count > 9 ? '9+' : count) + '件</small>' : '') + '</span>');
+    const active = selectedDate === d;
+    const classes = 'day' + (today === d ? ' is-today' : '') + (active ? ' is-selected' : '');
+    grid.push('<a class="' + classes + '" href="/app?month=' + current + '&date=' + d + '#event-list" aria-label="' + d + ' の予定を表示"' +
+      (active ? ' aria-current="date"' : '') + '><span>' + day + '</span>' +
+      (count ? '<small>' + (count > 9 ? '9+' : count) + '件</small>' : '') + '</a>');
   }
   const prev = new Date(Date.UTC(year, m - 2, 1)).toISOString().slice(0, 7);
   const next = new Date(Date.UTC(year, m, 1)).toISOString().slice(0, 7);
   return '<div class="calendar-head"><a aria-label="前月" href="/app?month=' + prev + '#calendar">‹</a><strong>' + esc(year) + '年' + esc(m) + '月</strong><a aria-label="翌月" href="/app?month=' + next + '#calendar">›</a></div>' +
     '<div class="calendar-grid">' + ['日','月','火','水','木','金','土'].map((s,i) => '<span class="weekday w'+i+'">' + s + '</span>').join('') +
     grid.join('') + '</div>';
+}
+function categoryIcon(kind) {
+  if (kind === 'BOX') return '<svg viewBox="0 0 48 56" aria-hidden="true" focusable="false"><path d="M8 4h23l8 8v40H8z"/><path d="M31 4v9h8M8 17h31M14 25h17M14 31h20M14 37h14"/></svg>';
+  if (kind === 'パック') return '<svg viewBox="0 0 48 56" aria-hidden="true" focusable="false"><path d="m9 5 4 3h22l4-3 2 6v34l-2 6-4-3H13l-4 3-2-6V11z"/><path d="M14 17h20M14 39h20"/></svg>';
+  if (kind === 'カード') return '<svg viewBox="0 0 48 56" aria-hidden="true" focusable="false"><rect x="9" y="4" width="30" height="48" rx="2"/><path d="M14 11h20v28H14zM18 45h12"/></svg>';
+  return '<svg viewBox="0 0 48 56" aria-hidden="true" focusable="false"><circle cx="24" cy="28" r="17"/><path d="M7 28h34M24 11v34"/></svg>';
 }
 function inventoryCard(lot, picked, offers = []) {
   const n = num(lot.quantity);
@@ -91,14 +100,14 @@ function inventoryCard(lot, picked, offers = []) {
         const reference = url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">出典</a>' : '';
         return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
       }).join('') + '</div>' : '';
-  return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(lot.product || lot.productKey || '商品名未設定') +
-    '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
+  return '<div class="stock-row"><div class="stock-main"><div class="stock-title"><span class="stock-icon" aria-label="' + esc(c) + 'のマーク">' + categoryIcon(c) + '</span><div class="stock-name">' + esc(lot.product || lot.productKey || '商品名未設定') +
+    '</div></div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
     (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
 
-export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all', handoverDocId = '') {
+export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all', handoverDocId = '', dateOverride = '') {
   if (!snapshot || Number(snapshot.schemaVersion) !== 2) throw new Error('invalid snapshot');
   const lots = Array.isArray(snapshot.inventoryLots) ? snapshot.inventoryLots.filter(l => num(l?.quantity) > 0) : [];
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
@@ -139,6 +148,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   // Keep the overview short; category-specific views must not hide older sales.
   const types = ['all', 'purchase', 'sale', 'opening'];
   const selectedType = types.includes(historyType) ? historyType : 'all';
+  const selectedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(dateOverride || '')) && String(dateOverride).slice(0, 7) === month
+    ? String(dateOverride) : '';
   const sorted = [...transactions].sort((a,b) =>
     String(b.date || '').localeCompare(String(a.date || '')) ||
     String(b.id || '').localeCompare(String(a.id || '')));
@@ -157,13 +168,16 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const historyCountLabel = selectedType === 'all'
     ? counts.all + '件中 直近' + visibleTransactions.length + '件'
     : counts[selectedType] + '件すべて';
-  const metric = (name, value, sub) => '<div class="metric"><div>' + esc(name) + '</div><strong>' + esc(value) + '</strong><small>' + esc(sub) + '</small></div>';
+  const metric = (name, value, sub, href = '') => href
+    ? '<a class="metric-link" href="' + esc(href) + '"><div class="metric"><div>' + esc(name) + '</div><strong>' + esc(value) + '</strong><small>' + esc(sub) + '</small></div></a>'
+    : '<div class="metric"><div>' + esc(name) + '</div><strong>' + esc(value) + '</strong><small>' + esc(sub) + '</small></div>';
   const rows = [...lots].sort((a,b) => String(b.acquiredAt || '').localeCompare(String(a.acquiredAt || ''))).slice(0, 80);
-  const eventRows = relevantEvents.length ? relevantEvents.map(e =>
+  const displayedEvents = selectedDate ? relevantEvents.filter(e => e.date === selectedDate) : relevantEvents;
+  const eventRows = displayedEvents.length ? displayedEvents.map(e =>
     '<div class="event"><span class="event-date">' + esc(e.date.slice(5).replace('-', '/')) +
     '</span><span class="event-kind">' + esc(e.kind) + '</span><span class="event-description">' +
     esc(e.label) + (e.store ? '<small>' + esc(e.store) + '</small>' : '') + '</span></div>').join('')
-    : '<p class="empty">この月の登録済み予定はありません。</p>';
+    : '<p class="empty">' + (selectedDate ? 'この日に登録済み予定はありません。' : 'この月の登録済み予定はありません。') + '</p>';
   const transactionRows = visibleTransactions.length ? visibleTransactions.map(t => {
     const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
     const amount = t.type === 'sale'
@@ -196,11 +210,11 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
 a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:18px 16px 108px}header{max-width:1040px;margin:auto;padding:24px 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .brand{display:flex;align-items:center;gap:12px;font-weight:750;font-size:20px}.brand-mark{background:linear-gradient(135deg,var(--aqua),#737cff);color:#10182a;padding:10px;border-radius:14px;font-weight:900}.tag{font-size:10px;letter-spacing:.12em;border:1px solid var(--line);border-radius:12px;padding:5px 8px;color:var(--muted)}
 .meta{color:var(--muted);font-size:12px}.intro{padding:17px 2px 21px}h1{font-size:26px;letter-spacing:-.04em;margin:4px 0 7px}h2{font-size:19px;margin:0 0 16px}p{margin:0}.kicker{color:var(--aqua);font-size:11px;letter-spacing:.14em;font-weight:700}
-.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.metric,.panel{background:var(--card);border:1px solid var(--line);border-radius:17px}.metric{padding:18px 15px;min-width:0}.metric>div,.metric small{color:var(--muted);font-size:11px}.metric strong{display:block;font-size:clamp(17px,5vw,30px);letter-spacing:-.04em;margin:7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric small{display:block}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.metric,.panel{background:var(--card);border:1px solid var(--line);border-radius:17px}.metric{padding:18px 15px;min-width:0}.metric>div,.metric small{color:var(--muted);font-size:11px}.metric-link{display:block;border-radius:17px}.metric-link:focus-visible{outline:2px solid var(--aqua);outline-offset:3px}.metric-link:hover .metric{border-color:var(--aqua)}.metric strong{display:block;font-size:clamp(17px,5vw,30px);letter-spacing:-.04em;margin:7px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric small{display:block}
 .panel{padding:18px;margin-top:18px;scroll-margin-top:16px}.panel-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.panel-top h2{margin:0}.minor{font-size:12px;color:var(--muted)}
 .warning{border:1px solid #5c4d39;background:#29261f;color:#f7d79f;border-radius:10px;padding:12px;margin-top:14px;font-size:12px}.stock-row,.event,.history-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.stock-row:last-child,.event:last-child,.history-row:last-child{border:0}
-.stock-main{min-width:0;flex:1}.stock-name{font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px}.quote-link{color:var(--aqua);text-decoration:underline}.shop-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.shop-offer{font-size:10px;color:var(--muted);background:#202f40;border:1px solid var(--line);border-radius:7px;padding:4px 6px}.shop-offer a{color:var(--aqua);text-decoration:underline}
-.calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day small{color:var(--aqua);font-size:10px}
+.stock-main{min-width:0;flex:1}.stock-title{display:flex;align-items:center;gap:10px}.stock-icon{width:30px;height:38px;flex:none;color:var(--aqua)}.stock-icon svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.stock-name{font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px}.quote-link{color:var(--aqua);text-decoration:underline}.shop-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.shop-offer{font-size:10px;color:var(--muted);background:#202f40;border:1px solid var(--line);border-radius:7px;padding:4px 6px}.shop-offer a{color:var(--aqua);text-decoration:underline}
+.calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;color:var(--txt);border:1px solid transparent}.day:hover,.day:focus-visible{border-color:var(--aqua);outline:none}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day.is-selected{background:#24504d;border-color:var(--aqua)}.day small{color:var(--aqua);font-size:10px}.event-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:23px}.event-list-head h2{margin:0}.event-list-head a{color:var(--aqua);font-size:12px;text-decoration:underline}
 .history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
 footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:10px 12px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}.btn:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}.handover-actions{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
@@ -216,7 +230,7 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 ${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
 ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
-${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
+${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却 · 売却履歴を見る','/app?month=' + month + '&type=sale#history')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
 </div>
@@ -225,7 +239,7 @@ ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に
 ${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
-${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
+${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-list-head"><h2>${esc(selectedDate || month)}${selectedDate ? ' の予定' : ' の予定'}</h2>${selectedDate ? '<a href="/app?month=' + month + '#calendar">月全体を見る</a>' : ''}</div>${eventRows}
 </section>
 <section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>
 ${handoverSection}
