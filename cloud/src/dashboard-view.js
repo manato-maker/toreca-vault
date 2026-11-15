@@ -100,7 +100,7 @@ function inventoryCard(lot, picked, offers = []) {
         const reference = url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">出典</a>' : '';
         return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
       }).join('') + '</div>' : '';
-  return '<div class="stock-row"><div class="stock-main"><div class="stock-title"><span class="stock-icon" aria-label="' + esc(c) + 'のマーク">' + categoryIcon(c) + '</span><div class="stock-name">' + esc(lot.product || lot.productKey || '商品名未設定') +
+  return '<div class="stock-row" data-inventory-category="' + esc(c) + '"><div class="stock-main"><div class="stock-title"><span class="stock-icon" aria-label="' + esc(c) + 'のマーク">' + categoryIcon(c) + '</span><div class="stock-name">' + esc(lot.product || lot.productKey || '商品名未設定') +
     '</div></div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
     (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
@@ -204,6 +204,37 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       '<a class="btn" href="' + handoverBase + '/export?format=txt" target="_blank" rel="noopener noreferrer">引き継ぎをダウンロード (.txt)</a></div>' +
       '<p class="meta">Googleアカウントで文書の閲覧権限が必要です。ダウンロードしたファイルは機密情報として扱ってください。ここからは編集・自動登録しません。</p></section>'
     : '';
+  const inventoryFilters = '<nav class="inventory-filters" aria-label="在庫の種類">' +
+    '<button class="inventory-filter selected" type="button" data-inventory-filter="all" aria-pressed="true">すべて</button>' +
+    '<button class="inventory-filter" type="button" data-inventory-filter="BOX" aria-pressed="false">BOX</button>' +
+    '<button class="inventory-filter" type="button" data-inventory-filter="パック" aria-pressed="false">パック</button>' +
+    '<button class="inventory-filter" type="button" data-inventory-filter="カード" aria-pressed="false">シングルカード</button>' +
+    '<button class="inventory-filter" type="button" data-inventory-filter="その他" aria-pressed="false">その他</button></nav>';
+  const commonHandoffUrl = 'https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view';
+  const chatHandoffText = [
+    'Toreca Vault 通常Chat用引き継ぎ',
+    'このChatは購入・受取・開封・売却・抽選など日々の報告窓口です。Workはアプリ開発専用です。',
+    'Intake受付と新アプリ正本・画面への反映を区別し、反映済みと確認できるまでは重複報告を再登録しません。',
+    '共通引き継ぎ資料: ' + commonHandoffUrl
+  ].join('\\n');
+  const workHandoffText = [
+    'Toreca Vault Work用引き継ぎ',
+    '共通引き継ぎ資料の最新版を読み、GitHubとGoogle Docsの最新状態から続けてください。通常Chatは日々の報告、Workは開発用です。',
+    'Intake HTTP 500/503の根本原因と、通常Chatの報告が新アプリ正本・画面まで届く経路を調査してください。',
+    '重複登録・旧V2への書き込み・未処理売却の再投入は禁止。既存在庫・履歴を維持し、受付／正本反映／画面確認を区別してください。',
+    '共通引き継ぎ資料: ' + commonHandoffUrl
+  ].join('\\n');
+  const handoffDialog = '<dialog class="handoff-dialog" id="handoff-dialog" aria-labelledby="handoff-title">' +
+    '<div class="handoff-dialog-head"><h2 id="handoff-title">Chat / Work 共通引き継ぎ</h2><button class="handoff-close" type="button" data-close-handoff aria-label="閉じる">×</button></div>' +
+    '<p class="meta">用途を選んで、最新の案内文をコピーできます。</p>' +
+    '<a class="handoff-doc-link" href="' + commonHandoffUrl + '" target="_blank" rel="noopener noreferrer">共通引き継ぎ資料を開く ↗</a>' +
+    '<section class="handoff-copy-card"><h3>通常Chat · 日々の報告</h3><p>購入・受取・開封・売却・抽選の報告を続けるための案内。</p><button class="handoff-copy-button" type="button" data-copy-handoff="chat">通常Chat用をコピー</button></section>' +
+    '<section class="handoff-copy-card"><h3>Work · アプリ開発</h3><p>障害調査・開発の引き継ぎと、重複防止などの運用ルール。</p><button class="handoff-copy-button" type="button" data-copy-handoff="work">Work用をコピー</button></section>' +
+    '<textarea class="handoff-fallback" id="handoff-fallback" readonly hidden aria-label="コピーする引き継ぎ文"></textarea>' +
+    '<p class="handoff-copy-status" id="handoff-copy-status" role="status" aria-live="polite"></p>' +
+    '<textarea id="chat-handoff-text" hidden readonly>' + esc(chatHandoffText) + '</textarea>' +
+    '<textarea id="work-handoff-text" hidden readonly>' + esc(workHandoffText) + '</textarea>' +
+    '</dialog>';
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#93a5bc;--aqua:#70e4d2;--purple:#9888ff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.5}
@@ -217,6 +248,9 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;color:var(--txt);border:1px solid transparent}.day:hover,.day:focus-visible{border-color:var(--aqua);outline:none}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day.is-selected{background:#24504d;border-color:var(--aqua)}.day small{color:var(--aqua);font-size:10px}.event-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:23px}.event-list-head h2{margin:0}.event-list-head a{color:var(--aqua);font-size:12px;text-decoration:underline}
 .history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
+.inventory-filters{display:flex;gap:7px;overflow-x:auto;padding:7px 0 12px;scrollbar-width:thin}.inventory-filter{flex:none;min-height:38px;border:1px solid var(--line);border-radius:20px;background:#202f40;color:var(--muted);padding:7px 11px;font:inherit;font-size:11px;cursor:pointer}.inventory-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.inventory-filter:focus-visible,.handoff-copy-button:focus-visible,.bottom button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
+.bottom a,.bottom button{text-align:center;font-size:12px;min-width:56px;color:#e6effe}.bottom button{border:0;background:transparent;font:inherit;cursor:pointer;padding:0 3px}
+.handoff-dialog{width:min(520px,calc(100% - 24px));max-height:min(82vh,700px);overflow:auto;margin:auto;padding:20px;background:#172337;color:var(--txt);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 80px #0009}.handoff-dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}.handoff-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.handoff-dialog-head h2{margin:0}.handoff-close{width:40px;height:40px;border:0;border-radius:10px;background:#202f40;color:var(--txt);font-size:22px;cursor:pointer}.handoff-doc-link{display:inline-flex;margin:14px 0 2px;color:var(--aqua);font-size:12px;text-decoration:underline}.handoff-copy-card{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#111c2e}.handoff-copy-card h3{font-size:14px;margin:0 0 5px}.handoff-copy-card p{color:var(--muted);font-size:12px;margin:0 0 11px}.handoff-copy-button{width:100%;min-height:44px;border:0;border-radius:11px;background:#24504d;color:var(--aqua);font:inherit;font-weight:750;cursor:pointer}.handoff-copy-status{min-height:20px;margin-top:10px;color:var(--aqua);font-size:12px}.handoff-fallback{width:100%;min-height:120px;margin-top:8px;padding:10px;border-radius:8px;background:#0b1220;color:var(--txt);border:1px solid var(--line)}[hidden]{display:none!important}
 footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:10px 12px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}.btn:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}.handover-actions{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
 @media(min-width:750px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}main{padding-bottom:60px}.bottom{position:static;max-width:1040px;margin:auto;border:1px solid var(--line);border-radius:15px 15px 0 0}.day{min-height:80px}}
 @media(max-width:380px){.stock-money{min-width:88px}.day{padding:4px}.metric{padding:12px}.metric strong{font-size:18px}}
@@ -236,7 +270,7 @@ ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に
 </div>
 <div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
+${inventoryFilters}\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
 ${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-list-head"><h2>${esc(selectedDate || month)}${selectedDate ? ' の予定' : ' の予定'}</h2>${selectedDate ? '<a href="/app?month=' + month + '#calendar">月全体を見る</a>' : ''}</div>${eventRows}
@@ -245,5 +279,5 @@ ${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-li
 ${handoverSection}
 <footer>読み取り専用 · Toreca Vault staging · データの登録・修正はできません</footer>
 </main>
-<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a>${handoverSection ? '<a href="#handover"><span>☷</span>引継ぎ</a>' : ''}</nav></body></html>`;
+<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a><button type="button" data-open-handoff aria-haspopup="dialog" aria-controls="handoff-dialog" aria-expanded="false"><span>☷</span>引継ぎ</button></nav>${handoffDialog}<script src="/dashboard.js" defer></script></body></html>`;
 }
