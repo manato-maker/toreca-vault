@@ -1379,3 +1379,57 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **Staging is operationally ready for daily reports in normal Chat.** When the next natural report arrives, follow its Intake receipt through canonical and UI as ongoing observation; no synthetic transaction or replay is needed to start using staging.
 - The historical 503s are isolated to retired revision `00004-nfr`; those old entries have no stage/reason fields, so their precise cause remains unclassified. Current revision has no matching errors and the latest two Scheduler attempts succeeded. Treat the incident as resolved for current staging operation, while retaining the historical cause as unknown.
 - This does not authorize or perform production/V2 cutover. No old V2 write, pending-sale replay, Intake edit, or manual job run occurred.
+
+
+### 2026-11-15 JST — shared live handoff source in dashboard
+
+- The user asked that updates to the shared handoff made from either normal Chat or Work become visible in the app. The dashboard source in PR #107 reads the shared Drive Markdown on panel open, when the app regains focus/visibility while the panel remains open, on manual refresh, before copy, and on download. There is no periodic polling. A manual refresh control and Drive modified time are shown.
+- The IAP-protected dashboard uses a read-only `GET /api/handoff` endpoint with `cache: no-store`. It fetches the Drive file at request time instead of bundling or persisting a snapshot. If access/read fails, the UI reports the failure and refuses to copy stale content.
+- The dedicated dashboard service account is a Drive reader for this handoff file only. `cloud/scripts/deploy-dashboard-staging.sh` passes `TV2_COMMON_HANDOVER_FILE_ID` explicitly.
+- Deployment status later supersedes this earlier pending note: Cloud Shell confirmed PR #107 dashboard source deployed to `toreca-vault-ui-staging-00003-xrj` at 100% traffic, then enabled IAP and granted the IAP service agent `roles/run.invoker` plus the active account `roles/iap.httpsResourceAccessor`. Android browser readback remains pending.
+- No tests were added or run. No Intake rows, canonical Firestore, inventory, Scheduler, old V2, old queue, or pending sales were modified or replayed. Production cutover remains unauthorized.
+
+### 2026-11-15 JST — shared handoff sync and free-tier assessment
+
+- The dashboard source in PR #107 reads the shared Drive Markdown when the handoff panel opens, when the app regains focus/visibility while that panel is open, when the user presses manual refresh or copy, or when the user downloads the current file. There is no periodic polling. The IAP-protected `/api/handoff/download` endpoint fetches the current Drive file and sends it as an `.md` attachment; a failed read returns an error rather than a stale download/copy.
+- The endpoint is IAP-protected, read-only, and uses no-store responses. The Cloud Run dashboard service account can read only this Markdown file. No new always-on service, worker, or Scheduler job is introduced.
+- Free-tier assessment: the existing dashboard deploy config uses request-based CPU throttling, `min-instances=0`, `max-instances=1`. Handoff reads happen only on user actions or when returning to an open panel, so leaving it open in the foreground generates no background requests. Standard Drive API use has no additional charge. Cloud Run's monthly request/CPU/memory free allowance, Cloud Build's 2,500 build-minutes, and Artifact Registry's 0.5 GiB storage allowance are shared/subject to account usage. Existing usage and storage are not visible here, and regional external network egress can add cost. Expected incremental usage is very small; exact zero billing cannot be guaranteed without a billing readback.
+- Official pricing references: [Cloud Run](https://cloud.google.com/run/pricing), [Cloud Build](https://cloud.google.com/build/pricing), [Artifact Registry](https://cloud.google.com/artifact-registry/pricing), [Drive API limits and pricing](https://developers.google.com/workspace/drive/api/guides/limits), [IAP](https://cloud.google.com/iap/pricing).
+- No tests were run. No deployment or live Android readback occurred. Cloud Shell and Cloud Run Console returned “Site Unavailable”; the source remains in Draft PR #107. No Intake, Firestore, inventory, Scheduler, old V2, old queue, or pending-sale data was altered or replayed; production cutover remains unauthorized.
+
+### 2026-11-15 JST — dashboard deployment and IAP confirmed from Cloud Shell
+
+- Cloud Shell command output confirms the dashboard branch deployment: service `toreca-vault-ui-staging`, revision `toreca-vault-ui-staging-00003-xrj`, 100% traffic. This is the separate read-only dashboard, not the API/Intake service.
+- `gcloud run services update ... --iap` completed. Cloud Shell output then confirmed `roles/run.invoker` for the IAP service agent and `roles/iap.httpsResourceAccessor` for the active Google account. The Code OSS Agent crash toast did not stop the terminal commands.
+- First Android screenshot confirms the staging URL opens and shows transaction history plus the legacy Google Docs quick-link card. This verifies basic reachability only. The fixed bottom 「引継ぎ」 navigation opens the separate PR #107 live-Markdown dialog; refresh, Chat/Work copy, .md download, calendar date jump, complete sales, and inventory-filter behavior still need mobile confirmation.
+- Intake HTTP 500/503 and normal Chat -> Intake -> worker -> Firestore canonical -> UI exactly-once verification remain unresolved. No pending sales were replayed and no old V2 writes were made. Do not declare daily-report operations complete until those checks pass; production cutover remains unauthorized.
+
+
+### 2026-11-15 JST — Android loaded the dashboard; UI interaction checks pending
+
+- Screenshot from the user's Android browser confirms the staging dashboard opens after IAP setup, with transaction history and a visible legacy handoff card.
+- The visible card links to Google Docs and exports a .txt file. The newly implemented shared Drive-Markdown live-sync and role-specific copy controls are in the modal opened by the fixed bottom 「引継ぎ」 button. The screenshot did not capture that modal; the legacy card and modal coexist and may confuse users. Do not claim the live handoff actions are mobile-verified yet.
+- Continue by verifying the modal's latest Drive content, manual refresh, Chat/Work copy, and .md download; then verify calendar-date navigation, complete canonical sales list, and inventory filters. Intake HTTP 500/503 and normal Chat exactly-once staging verification remain unresolved. Do not replay pending sales or write old V2.
+
+
+### 2026-11-15 JST — app handoff download failed; Drive API enabled
+
+- The Android request to the IAP-protected `/api/handoff/download` returned `{"error":"handoff_unavailable"}`; no file downloaded. The dashboard route hides the underlying Drive-read cause behind a generic 503.
+- The user enabled `drive.googleapis.com` in the staging project; Cloud Shell confirmed success. The app endpoint must be retried before treating this as fixed.
+- If it still fails, inspect Cloud Run logs and confirm the dashboard service account can read the specific Markdown file; add safe error-class logging if needed. The private Drive file remains a direct fallback.
+- No Intake, canonical Firestore, inventory, Scheduler, old V2, or pending sale data was changed by enabling the API. Intake HTTP 500/503 remains a separate unresolved issue.
+
+
+### 2026-11-15 JST — visible handoff card aligned with working dynamic download
+
+- The user confirmed that the direct IAP-protected `/api/handoff/download` downloaded a file after `drive.googleapis.com` was enabled, while the in-app handoff card still appeared unchanged.
+- Root cause found in source: the visible card pointed to the legacy Google Docs CURRENT document and its `.txt` export, while the live dialog and direct endpoint read the common Drive Markdown file.
+- Patched `cloud/src/dashboard-view.js` on PR #107 at code commit `f3323e3e45f6b251119b8f9725446d32de165284`: the visible card now uses the same live Markdown download endpoint and Drive source. The patch is not deployed yet. Next is dashboard-only staging deployment and Android verification.
+- No tests were run; no Intake/API, Firestore canonical, inventory, Scheduler, old V2, or pending-sale data changed. Intake HTTP 500/503 and normal Chat exactly-once processing remain unresolved.
+
+
+### 2026-11-15 JST — aligned handoff card deployed
+
+- Cloud Shell confirms the latest dashboard-only staging deploy created revision `toreca-vault-ui-staging-00004-99m` with 100% traffic. It includes the visible-card fix from code commit `f3323e3e45f6b251119b8f9725446d32de165284`, which points the app's in-page download to the same shared Markdown endpoint as the direct link.
+- Android reload and behavior verification remain pending: in-page .md download, live handoff dialog, Chat/Work copy, date tap, complete sale history, and inventory filters. Deployment output does not prove UI behavior.
+- No Intake/API or canonical data was changed by this deploy. Intake HTTP 500/503 and normal Chat exactly-once path remain unresolved; no old V2 writes or pending-sale replays.
