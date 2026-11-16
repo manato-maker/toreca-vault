@@ -78,7 +78,7 @@ export const dashboardClientScript = `
       try {
         const current = await loadHandoff();
         const sourceUrl = dialog ? dialog.getAttribute('data-handoff-url') || '' : '';
-        const value = prefix + '\n\n' + current.trim() + (sourceUrl ? '\n\n共通資料: ' + sourceUrl : '');
+        const value = prefix + '\\n\\n' + current.trim() + (sourceUrl ? '\\n\\n共通資料: ' + sourceUrl : '');
         try {
           if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('clipboard unavailable');
           await navigator.clipboard.writeText(value);
