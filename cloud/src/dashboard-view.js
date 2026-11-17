@@ -197,7 +197,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '<p class="meta">共通のMarkdown資料を使います。ダウンロード時にDriveから最新版を取得します。</p>' +
     '<div class="handover-actions"><a class="btn" href="/api/handoff/download" download="Toreca_Vault_Common_Handoff_2026-11-14.md">最新版をダウンロード (.md)</a>' +
     '<a class="btn" href="https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view" target="_blank" rel="noopener noreferrer">共通資料をDriveで開く</a></div>' +
-    '<p class="meta">画面下部の「引継ぎ」から内容確認、更新、Chat / Work用のコピーができます。ここから在庫等のデータは編集しません。</p></section>';
+    '<p class="meta">画面下部の「引継ぎ」からこの案内へ移動できます。最新版はダウンロードまたはDriveで確認できます。ここから在庫等のデータは編集しません。</p></section>';
   const inventoryFilters = '<nav class="inventory-filters" aria-label="在庫の種類">' +
     '<button class="inventory-filter selected" type="button" data-inventory-filter="all" aria-pressed="true">すべて</button>' +
     '<button class="inventory-filter" type="button" data-inventory-filter="BOX" aria-pressed="false">BOX</button>' +
@@ -273,5 +273,5 @@ ${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-li
 ${handoverSection}
 <footer>読み取り専用 · Toreca Vault staging · データの登録・修正はできません</footer>
 </main>
-<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a><button type="button" data-open-handoff aria-haspopup="dialog" aria-controls="handoff-dialog" aria-expanded="false"><span>☷</span>引継ぎ</button></nav>${handoffDialog}<script src="/dashboard.js" defer></script></body></html>`;
+<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a><a href="#handover" aria-label="引継ぎ"><span>☷</span>引継ぎ</a></nav>${handoffDialog}<script src="/dashboard.js" defer></script></body></html>`;
 }
