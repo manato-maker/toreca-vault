@@ -1696,3 +1696,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **Staging is operationally ready for daily reports in normal Chat.** When the next natural report arrives, follow its Intake receipt through canonical and UI as ongoing observation; no synthetic transaction or replay is needed to start using staging.
 - The historical 503s are isolated to retired revision `00004-nfr`; those old entries have no stage/reason fields, so their precise cause remains unclassified. Current revision has no matching errors and the latest two Scheduler attempts succeeded. Treat the incident as resolved for current staging operation, while retaining the historical cause as unknown.
 - This does not authorize or perform production/V2 cutover. No old V2 write, pending-sale replay, Intake edit, or manual job run occurred.
+
+
+## 2026-11-18 JST — Handoff navigation fallback
+
+- Replaced the bottom-bar handoff dialog trigger with a native `#handover` link and adjusted the card instructions. The live staging page produced a JavaScript syntax error for `/dashboard.js`, so the dialog trigger had no handler; the native link reaches the existing handover card and its download/Drive links without JavaScript.
+- No tests were run (not requested). Verified the live browser error and confirmed the current source-generated client script parses locally; the exact mismatch in the deployed script remains unclassified.
+- This source change is on the staging dashboard branch only and has not been deployed yet. Production, API/Firestore data, Intake, old V2, and pending sales were not changed.
+- Next: deploy the dashboard-only change to `toreca-vault-ui-staging` and verify the bottom handoff link reaches the card on Android.
