@@ -92,6 +92,7 @@ export async function refreshMarketQuotes({
   if (targets.length > maxTargets) throw new RangeError('Market target count exceeds the configured limit');
 
   let responseByKey = new Map();
+  const skippedTargetKeys = new Set();
   const ambiguousShopKeys = new Set();
   try {
     const response = await provider.lookupMany(targets.map((target) => ({
@@ -100,6 +101,10 @@ export async function refreshMarketQuotes({
     if (Array.isArray(response)) {
       for (const item of response) {
         if (!item || typeof item.targetKey !== 'string') continue;
+        if (item.skip === true) {
+          skippedTargetKeys.add(item.targetKey);
+          continue;
+        }
         const shopKey = valueKey(item.sourceStore || item.source);
         const pairKey = JSON.stringify([item.targetKey, shopKey]);
         if (!responseByKey.has(item.targetKey)) responseByKey.set(item.targetKey, new Map());
@@ -125,6 +130,10 @@ export async function refreshMarketQuotes({
   let staleCount = 0;
   for (const target of targets) {
     const targetKey = marketTargetKey(target);
+    // Providers can explicitly exclude unsupported inventory (for example,
+    // singles when the public source only contains sealed products). Do not
+    // mark those existing quotes stale just because this provider cannot price them.
+    if (skippedTargetKeys.has(targetKey)) continue;
     const candidates = [...(responseByKey.get(targetKey)?.values() || [])];
     const accepted = candidates.filter(result => validQuote(result, target, checkedAt));
     let acceptedForTarget = 0;

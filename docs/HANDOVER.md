@@ -1696,3 +1696,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - **Staging is operationally ready for daily reports in normal Chat.** When the next natural report arrives, follow its Intake receipt through canonical and UI as ongoing observation; no synthetic transaction or replay is needed to start using staging.
 - The historical 503s are isolated to retired revision `00004-nfr`; those old entries have no stage/reason fields, so their precise cause remains unclassified. Current revision has no matching errors and the latest two Scheduler attempts succeeded. Treat the incident as resolved for current staging operation, while retaining the historical cause as unknown.
 - This does not authorize or perform production/V2 cutover. No old V2 write, pending-sale replay, Intake edit, or manual job run occurred.
+
+
+### 2026-11-17 JST — public buyback feed adapter prepared for staging
+
+- Restored the free public-feed path for buyback quotes; no X Developer Console, X API token, or OCR service is required. Approved shops are 買取ミミ, カードショップアリウム, and トレカショップKURO. Quote candidates retain each shop's direct X post URL; post time is derived from the X status ID.
+- Added `cloud/src/public-buyback-feed-provider.js` and connected it to the existing Sheets Intake worker. The existing 15-minute scheduled route is reused; after 22:00 JST the first daily tick runs the market refresh with a stable JST-date mutation ID. No Scheduler job was added.
+- Feed snapshots older than 24 hours are rejected. Unsupported inventory such as singles is explicitly skipped without changing its previous quote status. Ambiguous product matches and missing condition prices are not adopted.
+- The provider reads transcribed values from a third-party public price table; it does not fetch X posts or OCR their images. The table can be stale or mis-transcribed, so source/product/condition verification remains required before relying on amounts.
+- **Verification:** static diff inspection only; no tests were run. No GCP credentials are available in this workspace, so Cloud Run staging deployment, feed execution, Firestore write/readback, and live cost verification were not performed. No price, transaction, inventory, Intake row, old V2, or production data was changed.
+- **Next:** deploy through the existing guarded zero-traffic staging release, inspect current feed freshness and quote output, then verify Firestore readback and phone UI. Production cutover remains separately authorized.
