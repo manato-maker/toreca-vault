@@ -1727,3 +1727,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - No tests were run (not requested). Reviewed the source changes and the status fields against the existing lottery write rules.
 - Source change is on the staging dashboard branch and is not yet deployed. Production, the API/worker service, Firestore data, Intake, old V2, and pending sales were not changed.
 - Next: deploy only `toreca-vault-ui-staging` from this branch using `cloud/scripts/deploy-dashboard-staging.sh`; verify the count and expansion against current staging records on mobile.
+
+## 2026-11-18 JST — Schedule unreceived-winner card deployed
+
+- The user-provided Cloud Shell screenshot confirms the rainbow-framed, expandable 「当選・未受取」 schedule card was deployed to `toreca-vault-ui-staging` as revision `toreca-vault-ui-staging-00007-599`, serving 100% of traffic.
+- The deploy output reports the private staging dashboard service URL and successful build/deploy. The feature count is based only on records with `status=当選` and `receiptStatus=未受取`; the dashboard remains read-only.
+- No tests were run (not requested). This screenshot verifies Cloud Run deployment, but does not by itself verify the new card visually in the mobile browser or confirm the count against the current dataset.
+- Production, the API/worker service, Firestore data, Intake, old V2, and pending sales were not changed.
+- Next: open the staging dashboard and verify the rainbow frame, expand/collapse behavior, and displayed count against current staging records.
