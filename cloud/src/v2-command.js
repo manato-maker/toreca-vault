@@ -274,11 +274,27 @@ function applyLottery(state, command, requestId, mutationId, now) {
   return { state: next, duplicate: false, mutationId, lotteryIds: [id] };
 }
 
+function lotteryProductIdentity(value) {
+  const title = norm(value);
+  if (title.includes('ハドウシーカー')) return 'pokemon:hadou-shiiker';
+  if (title.includes('ストームエメラルダ')) return 'pokemon:storm-emerald';
+  return title;
+}
+
+function lotteryOwnerIdentity(value) {
+  const owner = norm(value);
+  if (['本人', '本人分'].includes(owner)) return 'self';
+  if (['嫁分', '妻分', '家族分', '配偶者分'].includes(owner)) return 'family';
+  return owner;
+}
+
 function lotteryIdentity(item, command) {
-  const title = norm(command.title || command.product);
+  const title = lotteryProductIdentity(command.title || command.product);
   const store = norm(command.store);
-  const owner = norm(command.owner);
-  return norm(item.title) === title && norm(item.store) === store && (!owner || !norm(item.owner) || norm(item.owner) === owner);
+  const owner = lotteryOwnerIdentity(command.owner);
+  return lotteryProductIdentity(item.title || item.product) === title
+    && norm(item.store) === store
+    && (!owner || !lotteryOwnerIdentity(item.owner) || lotteryOwnerIdentity(item.owner) === owner);
 }
 
 function lotteryIdentityForResultDate(state, command, resultDate) {
@@ -302,8 +318,51 @@ function applyLotteryResult(state, command, requestId, mutationId, now) {
   const status = String(command.status || '');
   const resultDate = commandDate(command, 'resultDate');
   if (!['当選', '落選'].includes(status)) throw new TypeError('lottery result status must be 当選 or 落選');
+  const identityCandidates = state.lotteries.filter((item) => lotteryIdentity(item, command));
   const matches = lotteryIdentityForResultDate(state, command, resultDate);
-  if (matches.length !== 1) throw new Error(matches.length ? 'lottery result match is ambiguous' : 'lottery result target was not found');
+  if (matches.length > 1) throw Object.assign(new Error('lottery result match is ambiguous'), { reasonCode: 'ambiguous-target' });
+  if (matches.length === 0) {
+    if (identityCandidates.length) {
+      throw Object.assign(new Error('lottery result date does not match an existing application'), { reasonCode: 'date-mismatch' });
+    }
+    const title = String(command.title || command.product || '').trim();
+    const product = String(command.product || title).trim();
+    const store = String(command.store || '').trim();
+    const owner = String(command.owner || '').trim();
+    const category = String(command.category || '').trim();
+    const quantity = Number(command.quantity);
+    const evidenceType = String(command.evidenceType || '');
+    if (command.createConfirmedWinIfMissing !== true
+      || !['screenshot', 'chat-report'].includes(evidenceType)
+      || !title || !product || !store || !owner
+      || !CATEGORIES.has(category)
+      || !Number.isSafeInteger(quantity) || quantity <= 0) {
+      throw Object.assign(new Error('lottery result target was not found'), { reasonCode: 'target-not-found' });
+    }
+    const id = `chat-lottery-${requestId}`;
+    if (state.lotteries.some((item) => String(item.id || '') === id)) {
+      throw Object.assign(new Error('lottery result ID exists without its mutation record'), { reasonCode: 'invalid-transition' });
+    }
+    const next = clone(state);
+    next.lotteries.push({
+      id, title, store, status: '当選', deadline: String(command.deadline || ''),
+      resultDate, receiveDeadline: String(command.receiveDeadline || ''),
+      receiptStatus: '未受取', receivedDate: '', memo: String(command.memo || ''),
+      owner, applicationDate: String(command.applicationDate || ''), source: 'chat',
+      requestId, evidenceType, product, productId: String(command.productId || ''),
+      category, quantity, shrinkStatus: String(command.shrinkStatus || '未選択'),
+      unitPrice: command.unitPrice == null || command.unitPrice === '' ? null : Number(command.unitPrice),
+      officialMsrpYen: command.officialMsrpYen == null || command.officialMsrpYen === '' ? null : Number(command.officialMsrpYen),
+      officialProductUrl: String(command.officialProductUrl || ''),
+      officialMsrpCheckedAt: String(command.officialMsrpCheckedAt || ''),
+      expectedPurchaseTotal: command.expectedPurchaseTotal == null || command.expectedPurchaseTotal === '' ? null : Number(command.expectedPurchaseTotal),
+      paymentStatus: String(command.paymentStatus || '未購入・未支出'),
+      createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString()
+    });
+    appendAutomationRequest(next, 'chatLotteryResultIds', requestId, 500);
+    finishMutation(next, mutationId, []);
+    return { state: next, duplicate: false, mutationId, lotteryIds: [id], createdFromConfirmedResult: true };
+  }
   const next = clone(state);
   const item = next.lotteries.find((row) => row.id === matches[0].id);
   if (status === '落選' && (item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('cannot mark a purchased or received lottery as lost');
