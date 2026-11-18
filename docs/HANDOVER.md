@@ -1704,3 +1704,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - No tests were run (not requested). Verified the live browser error and confirmed the current source-generated client script parses locally; the exact mismatch in the deployed script remains unclassified.
 - This source change is on the staging dashboard branch only and has not been deployed yet. Production, API/Firestore data, Intake, old V2, and pending sales were not changed.
 - Next: deploy the dashboard-only change to `toreca-vault-ui-staging` and verify the bottom handoff link reaches the card on Android.
+
+
+## 2026-11-18 JST — Calendar date jump
+
+- Changed page fragment scrolling from smooth animation to an immediate jump. Live staging checks confirmed selected dates and event lists matched (for example, Nov 20 showed its six registered events), but the long page was still partway through its smooth scroll immediately after navigation, making it appear to land elsewhere on mobile.
+- No tests were run (not requested). Browser inspection verified the current behavior before the change; the updated scroll behavior is not deployed yet.
+- This is a dashboard-only staging source change. Production, API/Firestore data, Intake, old V2, and pending sales remain untouched.
+- Next: deploy the updated dashboard branch and confirm a date tap immediately shows its matching event heading/list on Android.
