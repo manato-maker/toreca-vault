@@ -1706,3 +1706,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - The provider reads transcribed values from a third-party public price table; it does not fetch X posts or OCR their images. The table can be stale or mis-transcribed, so source/product/condition verification remains required before relying on amounts.
 - **Verification:** static diff inspection only; no tests were run. No GCP credentials are available in this workspace, so Cloud Run staging deployment, feed execution, Firestore write/readback, and live cost verification were not performed. No price, transaction, inventory, Intake row, old V2, or production data was changed.
 - **Next:** deploy through the existing guarded zero-traffic staging release, inspect current feed freshness and quote output, then verify Firestore readback and phone UI. Production cutover remains separately authorized.
+
+
+## 2026-11-18 JST — Lottery report completion path
+
+- Enabled safe internal business-event fingerprints for explicit Chat/screenshot lottery result and receipt reports that lack a retailer application ID. Fingerprints require exact product, store, owner, and result date; they are never represented as retailer IDs.
+- Lottery result and receipt matching now prefers the exact recorded result date to distinguish repeated applications. Ambiguous matches remain rejected. A repeat receipt with the same date is idempotent; a conflicting date is rejected for review.
+- Receipt only updates the lottery's receipt state; it does not add a purchase or inventory lot. No Intake rows, staging canonical data, old V2, pending sales, or production data were changed. No tests were run (not requested).
+- Source is committed to the staging API branch. The Cloud Run API has not yet been staged or promoted with this change; the guarded release script's automatic checks/tests and candidate review remain outstanding.

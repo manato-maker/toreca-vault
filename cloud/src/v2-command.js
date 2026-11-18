@@ -281,6 +281,16 @@ function lotteryIdentity(item, command) {
   return norm(item.title) === title && norm(item.store) === store && (!owner || !norm(item.owner) || norm(item.owner) === owner);
 }
 
+function lotteryIdentityForResultDate(state, command, resultDate) {
+  const candidates = state.lotteries.filter((item) => lotteryIdentity(item, command));
+  if (!resultDate) return candidates;
+  const exact = candidates.filter((item) => String(item.resultDate || '').slice(0, 10) === resultDate);
+  if (exact.length) return exact;
+  // A legacy record without a result date can be used only when it is the sole
+  // remaining candidate; matching below still fails closed on ambiguity.
+  return candidates.filter((item) => !String(item.resultDate || '').trim());
+}
+
 function appendAutomationRequest(state, key, requestId, limit) {
   state.automation = state.automation && typeof state.automation === 'object' ? state.automation : {};
   state.automation[key] = Array.isArray(state.automation[key]) ? state.automation[key] : [];
@@ -292,8 +302,7 @@ function applyLotteryResult(state, command, requestId, mutationId, now) {
   const status = String(command.status || '');
   const resultDate = commandDate(command, 'resultDate');
   if (!['当選', '落選'].includes(status)) throw new TypeError('lottery result status must be 当選 or 落選');
-  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command)
-    && (!item.resultDate || String(item.resultDate).slice(0, 10) === resultDate));
+  const matches = lotteryIdentityForResultDate(state, command, resultDate);
   if (matches.length !== 1) throw new Error(matches.length ? 'lottery result match is ambiguous' : 'lottery result target was not found');
   const next = clone(state);
   const item = next.lotteries.find((row) => row.id === matches[0].id);
@@ -317,11 +326,17 @@ function applyLotteryResult(state, command, requestId, mutationId, now) {
 function applyLotteryReceipt(state, command, requestId, mutationId, now) {
   const receivedDate = String(command.receivedDate || command.date || '');
   if (!isoDate(receivedDate)) throw new TypeError('receivedDate must be a valid YYYY-MM-DD date');
-  const matches = state.lotteries.filter((item) => lotteryIdentity(item, command));
+  const resultDate = command.resultDate ? commandDate(command, 'resultDate') : '';
+  const matches = lotteryIdentityForResultDate(state, command, resultDate);
   if (matches.length !== 1) throw new Error(matches.length ? 'lottery receipt match is ambiguous' : 'lottery receipt target was not found');
+  const current = matches[0];
+  if (!['当選', '購入済'].includes(String(current.status || '')) && current.receiptStatus !== '受取済み') throw new Error('only a winning lottery can be received');
+  if (current.receiptStatus === '受取済み') {
+    if (String(current.receivedDate || '') !== receivedDate) throw new Error('lottery receipt date conflicts with the recorded receipt');
+    return { state: clone(state), duplicate: true, mutationId, lotteryIds: [current.id] };
+  }
   const next = clone(state);
-  const item = next.lotteries.find((row) => row.id === matches[0].id);
-  if (!['当選', '購入済'].includes(String(item.status || '')) && item.receiptStatus !== '受取済み') throw new Error('only a winning lottery can be received');
+  const item = next.lotteries.find((row) => row.id === current.id);
   item.status = '購入済';
   item.receiptStatus = '受取済み';
   item.receivedDate = receivedDate;
