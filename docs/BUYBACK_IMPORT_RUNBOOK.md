@@ -19,7 +19,7 @@
 - `cloud/src/buyback-quotes.js`: 公式元投稿のURL/日時/有効期限、shop、商品・状態・単位、verified状態の判定。店舗内では**最新の投稿のみ**を比較し、別店舗の現行提示額のうち最高額を取得。タイムスタンプ矛盾のある店舗は除外。
 - `cloud/src/dashboard-view.js`: 参考買取評価額に原価代用なし。有効買取相場のある在庫の部分合計のみ。店舗別の金額と元投稿リンクを表示し、旧価格/未取得を明確に分離。
 - `cloud/src/public-buyback-feed-provider.js`: X API認証なしで公開買取表を取得。24時間以内のスナップショット、許可店舗3店、個別X投稿URL、投稿IDからの日時、商品名、BOX/パック状態が確認できる場合だけ候補を返す。シングルカード等の非対応商品は既存の価格状態を変えない。
-- `cloud/src/market-refresh-worker.js`: 定価/出典不明の値を拒否し、店舗ごとの保存枠を分離。公開表の取得は既存の15分Intakeスケジュールを再利用し、毎日22時JST以降に同一日1回だけcanonicalへ反映する。
+- `cloud/src/market-refresh-worker.js`: 定価/出典不明の値を拒否し、店舗ごとの保存枠を分離。公開表の取得は既存の15分Intakeスケジュールを再利用し、毎日13:30 JST以降の最初の15分Intake tickで同一日1回canonicalへ反映する。
 - `cloud/src/verified-buyback-import.js`: 操作者が一次投稿の実内容を確認済みの非公開ローカルJSONを事前評価し、店舗別履歴を残しながらCAS更新・Firestore readback検証。事実が不一致なら適用停止。
 - `cloud/scripts/import-verified-buyback.js`: ステージング限定の**preview**と明示承認後の**apply**。Google Cloudの認証済み環境が必要。実請求/バックアップを別に確認。GitHubへ個人保有商品の一覧やX画像・非公開JSONファイルをコミットしない。
 
@@ -114,3 +114,10 @@ TV2_VERIFIED_BUYBACK_IMPORT=YES TV2_BACKUP_VERIFIED=YES \
 - **テスト**：`cloud/test/buyback-quotes.test.js` にIDだけ一致で商品不明・単位不明、店舗があってもsourceがMSRP、終了投稿後の旧高値再登場、タイムゾーンの比較、日付だけの価格を拒否する回帰ケースを追加。`test` / `firestore-emulator` 両ジョブが成功したActions [#43572888397](https://github.com/manato-maker/toreca-vault/actions/runs/43572888397) を確認した。
 - **外部価格調査**：買取ミミ、アリウム、KUROの公式Xアカウントは公開検索で確認できたが、**2026-11-14の全商品について本人の最新個別ポスト・画像・税込価格・BOX条件・数量制限を確証できる一覧**は得られていない。過去・不確かな転記金額はFirestoreへ投入しない。
 - **反映範囲**：コードと自動テスト、手順書のみ。Cloud Runステージングの認証付き画面はこの接続から閲覧できず、FirestoreのmarketQuotes更新・アプリデプロイは未実行。実際の参考買取金額は変更されていない。今後、元投稿の確証、Google Cloud認証、バックアップ、dry-run、CAS反映後のreadbackが必要。
+
+
+## 2026-11-19 JST — 相場更新時刻の変更
+
+- 相場更新の起動条件を22:00 JST以降から、13:30 JST以降へ変更。既存の15分Intake tickを使い、専用Scheduler jobは追加しない。
+- 13:30のtickで実行し、Schedulerの遅延時は13:30以降の次のtickで実行する。同じ日付のmutation keyにより、日次1回の更新となる。
+- この変更は起動時刻のみ。取得元の公開価格表が24時間を超えて古い場合は、従来どおり新価格を採用しない。

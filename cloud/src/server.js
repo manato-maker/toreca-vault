@@ -673,7 +673,8 @@ export async function start() {
         hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
       }).formatToParts(scheduledAt);
       const jstValues = Object.fromEntries(jst.map(({ type, value }) => [type, value]));
-      if (Number(jstValues.hour) >= 22) {
+      if (Number(jstValues.hour) > 13
+        || (Number(jstValues.hour) === 13 && Number(jstValues.minute) >= 30)) {
         const date = `${jstValues.year}-${jstValues.month}-${jstValues.day}`;
         try {
           marketRefreshResult = await marketRefresh({ kind: 'market-refresh',
