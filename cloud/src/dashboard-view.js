@@ -144,6 +144,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const today = jstDate.format(now);
   const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(monthOverride) ? monthOverride : today.slice(0, 7);
   const events = eventsFor(lotteries);
+  const unreceivedWinners = lotteries.filter(lottery =>
+    lottery?.status === '当選' && lottery?.receiptStatus === '未受取');
   const relevantEvents = events.filter(e => e.date.slice(0, 7) === month);
   // Keep the overview short; category-specific views must not hide older sales.
   const types = ['all', 'purchase', 'sale', 'opening'];
@@ -178,6 +180,16 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '</span><span class="event-kind">' + esc(e.kind) + '</span><span class="event-description">' +
     esc(e.label) + (e.store ? '<small>' + esc(e.store) + '</small>' : '') + '</span></div>').join('')
     : '<p class="empty">' + (selectedDate ? 'この日に登録済み予定はありません。' : 'この月の登録済み予定はありません。') + '</p>';
+  const winningRows = unreceivedWinners.length
+    ? unreceivedWinners.map(lottery => {
+      const details = [];
+      if (date(lottery.resultDate)) details.push('結果発表 ' + date(lottery.resultDate));
+      if (date(lottery.receiveDeadline)) details.push('受取期限 ' + date(lottery.receiveDeadline));
+      return '<div class="winning-item"><div><b>' + esc(lottery.title || lottery.product || '商品名未設定') +
+        '</b><small>' + esc(lottery.store || '店舗未登録') + '</small></div><span class="winning-detail">' +
+        esc(details.join(' · ') || '受取期限未登録') + '</span></div>';
+    }).join('')
+    : '<p class="winning-empty">当選・未受取の商品はありません。</p>';
   const transactionRows = visibleTransactions.length ? visibleTransactions.map(t => {
     const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
     const amount = t.type === 'sale'
@@ -240,7 +252,25 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .warning{border:1px solid #5c4d39;background:#29261f;color:#f7d79f;border-radius:10px;padding:12px;margin-top:14px;font-size:13px}.stock-row,.event,.history-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.stock-row:last-child,.event:last-child,.history-row:last-child{border:0}
 .stock-main{min-width:0;flex:1}.stock-title{display:flex;align-items:center;gap:10px}.stock-icon{width:30px;height:38px;flex:none;color:var(--aqua)}.stock-icon svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.stock-name{font-size:15px;line-height:1.55;font-weight:700;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:12px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:106px}.stock-money span{color:var(--txt);font-size:13px}.stock-money small{color:var(--muted);font-size:11px}.quote-link{color:var(--aqua);text-decoration:underline}.shop-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.shop-offer{font-size:11px;color:var(--muted);background:#202f40;border:1px solid var(--line);border-radius:7px;padding:4px 6px}.shop-offer a{color:var(--aqua);text-decoration:underline}
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:12px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;color:var(--txt);border:1px solid transparent}.day:hover,.day:focus-visible{border-color:var(--aqua);outline:none}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day.is-selected{background:#24504d;border-color:var(--aqua)}.day small{color:var(--aqua);font-size:11px}.event-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:23px}.event-list-head h2{margin:0}.event-list-head a{color:var(--aqua);font-size:13px;text-decoration:underline}
-.history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:13px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:13px;white-space:nowrap}.history-money small{color:var(--muted);font-size:12px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:12px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:12px}.history-row>span{white-space:nowrap;font-size:13px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
+.history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:13px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:13px;white-space:nowrap}.history-money small{color:var(--muted);font-size:12px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:12px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}
+.winning-shortcut{margin:10px 0 17px;padding:2px;border-radius:16px;background:linear-gradient(105deg,#ff4f66 0%,#ffb347 17%,#f6eb4c 33%,#53db87 49%,#43d5e6 65%,#4f80ff 82%,#bf62f3 100%);scroll-margin-top:16px}
+.winning-shortcut summary{list-style:none;display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 14px;border-radius:14px;background:var(--card);cursor:pointer}
+.winning-shortcut summary::-webkit-details-marker{display:none}
+.winning-shortcut summary:focus-visible{outline:2px solid var(--txt);outline-offset:3px}
+.winning-shortcut summary:after{content:'›';margin-left:2px;color:var(--txt);font-size:25px;line-height:1;transition:transform .15s ease}
+.winning-shortcut[open] summary:after{transform:rotate(90deg)}
+.winning-shortcut-icon{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:12px;background:#202f40;color:var(--aqua);font-size:22px}
+.winning-shortcut-copy{display:flex;flex:1;min-width:0;flex-direction:column}
+.winning-shortcut-copy b{font-size:16px;line-height:1.35}
+.winning-shortcut-copy small{color:var(--muted);font-size:12px}
+.winning-count{white-space:nowrap;border-radius:99px;background:#24504d;color:var(--aqua);padding:5px 10px;font-size:13px;font-weight:750}
+.winning-content{padding:0 13px 12px;background:var(--card);border-radius:0 0 14px 14px}
+.winning-item{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 2px;border-top:1px solid var(--line)}
+.winning-item b{display:block;font-size:14px;overflow-wrap:anywhere}
+.winning-item small,.winning-detail{color:var(--muted);font-size:12px}
+.winning-detail{white-space:nowrap}
+.winning-empty{padding:12px 2px;color:var(--muted);font-size:13px}
+.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:12px}.history-row>span{white-space:nowrap;font-size:13px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:13px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:22px;color:var(--aqua)}
 .inventory-filters{display:flex;gap:7px;overflow-x:auto;padding:7px 0 12px;scrollbar-width:thin}.inventory-filter{flex:none;min-height:38px;border:1px solid var(--line);border-radius:20px;background:#202f40;color:var(--muted);padding:7px 11px;font:inherit;font-size:12px;cursor:pointer}.inventory-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.inventory-filter:focus-visible,.handoff-copy-button:focus-visible,.bottom button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 .bottom a,.bottom button{text-align:center;font-size:13px;min-width:56px;color:#e6effe}.bottom button{border:0;background:transparent;font:inherit;cursor:pointer;padding:0 3px}
@@ -267,6 +297,7 @@ ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に
 ${inventoryFilters}\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
+<details class="winning-shortcut"><summary><span class="winning-shortcut-icon" aria-hidden="true">★</span><span class="winning-shortcut-copy"><b>当選・未受取</b><small>当選した商品の受取状況を確認</small></span><span class="winning-count">${unreceivedWinners.length}件</span></summary><div class="winning-content" id="winning-unreceived">${winningRows}</div></details>
 ${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-list-head"><h2>${esc(selectedDate || month)}${selectedDate ? ' の予定' : ' の予定'}</h2>${selectedDate ? '<a href="/app?month=' + month + '#calendar">月全体を見る</a>' : ''}</div>${eventRows}
 </section>
 <section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>

@@ -1719,3 +1719,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Increased body, metadata, inventory, transaction, calendar, and bottom navigation text sizes slightly; brightened muted text for better contrast while retaining the dark navy and mint palette. Product titles and small price/date details receive the most direct benefit.
 - Combined with the pending immediate calendar date jump and native handoff link. No tests were run (not requested). Source was reviewed for exact substitutions; mobile visual QA remains pending deployment.
 - Dashboard staging branch only; not deployed in this step. Production, API/Firestore data, Intake, old V2, and pending sales remain untouched.
+
+## 2026-11-18 JST — Schedule page unreceived-winner shortcut
+
+- Added an expandable 「当選・未受取」 card inside the schedule/calendar section, framed with a rainbow gradient. It reports a count and shows the matching lottery records in place.
+- Count and rows include only records whose status is 「当選」 and receiptStatus is 「未受取」. Each row shows the product/store and registered result/receipt-deadline dates; missing dates are labeled as unregistered. No inventory, lottery, receipt, or other data is modified.
+- No tests were run (not requested). Reviewed the source changes and the status fields against the existing lottery write rules.
+- Source change is on the staging dashboard branch and is not yet deployed. Production, the API/worker service, Firestore data, Intake, old V2, and pending sales were not changed.
+- Next: deploy only `toreca-vault-ui-staging` from this branch using `cloud/scripts/deploy-dashboard-staging.sh`; verify the count and expansion against current staging records on mobile.
