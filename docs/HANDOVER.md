@@ -1735,3 +1735,12 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - No tests were run (not requested). This screenshot verifies Cloud Run deployment, but does not by itself verify the new card visually in the mobile browser or confirm the count against the current dataset.
 - Production, the API/worker service, Firestore data, Intake, old V2, and pending sales were not changed.
 - Next: open the staging dashboard and verify the rainbow frame, expand/collapse behavior, and displayed count against current staging records.
+
+
+## 2026-11-18 JST — Lottery receipt completion fix
+
+- Fixed the schedule shortcut to include both 「当選」 and 「購入済」 lottery records when `receiptStatus=未受取`, so paid orders awaiting shipment remain visible until physical receipt is reported. The card labels purchased records as 「購入済・到着待ち」.
+- Added a conservative internal Chat/screenshot fingerprint for confirmed lottery result and receipt reports when the retailer did not issue an application ID. It requires exact product, store, owner, and result date; it is an internal deduplication key and is never treated as a retailer ID.
+- Result and receipt commands now use the recorded result date to disambiguate same-product applications. Missing-date legacy records are only considered as fallback candidates; ambiguous matches remain rejected. Repeating the same receipt/date is idempotent; a conflicting receipt date remains review-only.
+- No inventory or purchase transaction is created by receipt status updates. Intake rows, canonical Firestore, old V2, pending sales, and production were not changed. No tests were run (not requested).
+- The source changes are on the existing staging dashboard branch and are not deployed. The Cloud Run dashboard and API require separate staging deployments; deployment and Android readback remain outstanding.

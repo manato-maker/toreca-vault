@@ -49,11 +49,39 @@ function confirmedChatLotteryFingerprint(command, requestId) {
   return 'lottery:confirmed-report:v1:' + createHash('sha256').update(payload).digest('hex');
 }
 
+function confirmedChatLotteryLifecycleFingerprint(command, requestId, kind) {
+  const evidenceType = command.evidenceType
+    || (requestId.startsWith('normalchat:') ? 'chat-report' : null);
+  if (!['result', 'receipt'].includes(kind)
+    || !['screenshot', 'chat-report'].includes(evidenceType)) return null;
+  const status = String(command.status || '');
+  if ((kind === 'result' && !['当選', '落選'].includes(status))
+    || (kind === 'receipt' && status && !['当選', '購入済'].includes(status))) return null;
+  const canonical = (value) => String(value || '').normalize('NFKC').trim()
+    .toLocaleLowerCase('ja').replace(/[\s\u3000]+/g, ' ');
+  const store = canonical(command.store);
+  const title = canonical(command.title || command.product);
+  const owner = canonical(command.owner);
+  const resultDate = String(command.resultDate || '');
+  if (!store || !title || !owner || store.length > 120 || title.length > 180
+    || owner.length > 100 || !/^\d{4}-\d{2}-\d{2}$/.test(resultDate)
+    || Number.isNaN(Date.parse(resultDate + 'T00:00:00Z'))
+    || new Date(resultDate + 'T00:00:00Z').toISOString().slice(0, 10) !== resultDate) return null;
+  // Internal event fingerprint only; this is not a retailer application ID.
+  const payload = JSON.stringify(['toreca-vault-chat-verified-lottery-lifecycle', 1,
+    kind, store, title, owner, resultDate]);
+  return 'lottery:confirmed-report:v1:' + createHash('sha256').update(payload).digest('hex');
+}
+
 function parseIdentity(value, command, requestId) {
   const kind = EVENT_KINDS.get(String(command.type || ''));
   if (value === null) {
     if (kind === 'application') {
       const fingerprint = confirmedChatLotteryFingerprint(command, requestId);
+      if (fingerprint) return { businessEventKey: fingerprint };
+    }
+    if (kind === 'result' || kind === 'receipt') {
+      const fingerprint = confirmedChatLotteryLifecycleFingerprint(command, requestId, kind);
       if (fingerprint) return { businessEventKey: fingerprint };
     }
     if (kind) throw Object.assign(new Error('lottery identity is required'), { reasonCode: 'lottery-identity-missing' });

@@ -145,7 +145,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(monthOverride) ? monthOverride : today.slice(0, 7);
   const events = eventsFor(lotteries);
   const unreceivedWinners = lotteries.filter(lottery =>
-    lottery?.status === '当選' && lottery?.receiptStatus === '未受取');
+    ['当選', '購入済'].includes(String(lottery?.status || '')) && lottery?.receiptStatus === '未受取');
   const relevantEvents = events.filter(e => e.date.slice(0, 7) === month);
   // Keep the overview short; category-specific views must not hide older sales.
   const types = ['all', 'purchase', 'sale', 'opening'];
@@ -183,6 +183,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const winningRows = unreceivedWinners.length
     ? unreceivedWinners.map(lottery => {
       const details = [];
+      details.push(lottery.status === '購入済' ? '購入済・到着待ち' : '当選・未受取');
       if (date(lottery.resultDate)) details.push('結果発表 ' + date(lottery.resultDate));
       if (date(lottery.receiveDeadline)) details.push('受取期限 ' + date(lottery.receiveDeadline));
       return '<div class="winning-item"><div><b>' + esc(lottery.title || lottery.product || '商品名未設定') +
