@@ -276,7 +276,7 @@ function applyLottery(state, command, requestId, mutationId, now) {
 
 function lotteryProductIdentity(value) {
   const title = norm(value);
-  if (title.includes('ハドウシーカー')) return 'pokemon:hadou-shiiker';
+  if (title.includes('ハドウシーカー')) return 'pokemon:hadou-seeker';
   if (title.includes('ストームエメラルダ')) return 'pokemon:storm-emerald';
   return title;
 }
@@ -343,19 +343,34 @@ function applyLotteryResult(state, command, requestId, mutationId, now) {
     if (state.lotteries.some((item) => String(item.id || '') === id)) {
       throw Object.assign(new Error('lottery result ID exists without its mutation record'), { reasonCode: 'invalid-transition' });
     }
+    const optionalYen = (value, label) => {
+      if (value == null || value === '') return null;
+      const amount = Number(value);
+      if (!Number.isSafeInteger(amount) || amount < 0) throw new TypeError(`lottery ${label} must be a non-negative integer`);
+      return amount;
+    };
+    const applicationDate = String(command.applicationDate || '');
+    if (applicationDate && !isoDate(applicationDate)) throw new TypeError('applicationDate must be a valid YYYY-MM-DD date');
+    const deadline = command.deadline ? commandDate(command, 'deadline') : '';
+    const receiveDeadline = command.receiveDeadline ? commandDate(command, 'receiveDeadline') : '';
+    const unitPrice = optionalYen(command.unitPrice, 'unitPrice');
+    const officialMsrpYen = optionalYen(command.officialMsrpYen, 'officialMsrpYen');
+    const expectedPurchaseTotal = optionalYen(command.expectedPurchaseTotal, 'expectedPurchaseTotal');
+    const officialProductUrl = String(command.officialProductUrl || '').trim();
+    if (officialProductUrl && (!/^https:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/.test(officialProductUrl) || officialProductUrl.length > 1024)) {
+      throw new TypeError('official product URL must be HTTPS');
+    }
     const next = clone(state);
     next.lotteries.push({
-      id, title, store, status: '当選', deadline: String(command.deadline || ''),
-      resultDate, receiveDeadline: String(command.receiveDeadline || ''),
+      id, title, store, status: '当選', deadline,
+      resultDate, receiveDeadline,
       receiptStatus: '未受取', receivedDate: '', memo: String(command.memo || ''),
-      owner, applicationDate: String(command.applicationDate || ''), source: 'chat',
+      owner, applicationDate, source: 'chat',
       requestId, evidenceType, product, productId: String(command.productId || ''),
       category, quantity, shrinkStatus: String(command.shrinkStatus || '未選択'),
-      unitPrice: command.unitPrice == null || command.unitPrice === '' ? null : Number(command.unitPrice),
-      officialMsrpYen: command.officialMsrpYen == null || command.officialMsrpYen === '' ? null : Number(command.officialMsrpYen),
-      officialProductUrl: String(command.officialProductUrl || ''),
+      unitPrice, officialMsrpYen, officialProductUrl,
       officialMsrpCheckedAt: String(command.officialMsrpCheckedAt || ''),
-      expectedPurchaseTotal: command.expectedPurchaseTotal == null || command.expectedPurchaseTotal === '' ? null : Number(command.expectedPurchaseTotal),
+      expectedPurchaseTotal,
       paymentStatus: String(command.paymentStatus || '未購入・未支出'),
       createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString()
     });
@@ -366,7 +381,7 @@ function applyLotteryResult(state, command, requestId, mutationId, now) {
   const next = clone(state);
   const item = next.lotteries.find((row) => row.id === matches[0].id);
   if (status === '落選' && (item.status === '購入済' || item.receiptStatus === '受取済み')) throw new Error('cannot mark a purchased or received lottery as lost');
-  item.status = status;
+  if (!(status === '当選' && (item.status === '購入済' || item.receiptStatus === '受取済み'))) item.status = status;
   item.resultDate = resultDate;
   if (status === '落選' && item.receiptStatus !== '受取済み') {
     item.receiptStatus = '対象外';
