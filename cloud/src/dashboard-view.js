@@ -231,7 +231,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '</dialog>';
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#93a5bc;--aqua:#70e4d2;--purple:#9888ff}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.5}
+*{box-sizing:border-box}html{scroll-behavior:auto}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:14px;line-height:1.5}
 a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:18px 16px 108px}header{max-width:1040px;margin:auto;padding:24px 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .brand{display:flex;align-items:center;gap:12px;font-weight:750;font-size:20px}.brand-mark{background:linear-gradient(135deg,var(--aqua),#737cff);color:#10182a;padding:10px;border-radius:14px;font-weight:900}.tag{font-size:10px;letter-spacing:.12em;border:1px solid var(--line);border-radius:12px;padding:5px 8px;color:var(--muted)}
 .meta{color:var(--muted);font-size:12px}.intro{padding:17px 2px 21px}h1{font-size:26px;letter-spacing:-.04em;margin:4px 0 7px}h2{font-size:19px;margin:0 0 16px}p{margin:0}.kicker{color:var(--aqua);font-size:11px;letter-spacing:.14em;font-weight:700}
