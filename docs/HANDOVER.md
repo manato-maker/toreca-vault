@@ -1712,3 +1712,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - No tests were run (not requested). Browser inspection verified the current behavior before the change; the updated scroll behavior is not deployed yet.
 - This is a dashboard-only staging source change. Production, API/Firestore data, Intake, old V2, and pending sales remain untouched.
 - Next: deploy the updated dashboard branch and confirm a date tap immediately shows its matching event heading/list on Android.
+
+
+## 2026-11-18 JST — Mobile typography readability
+
+- Increased body, metadata, inventory, transaction, calendar, and bottom navigation text sizes slightly; brightened muted text for better contrast while retaining the dark navy and mint palette. Product titles and small price/date details receive the most direct benefit.
+- Combined with the pending immediate calendar date jump and native handoff link. No tests were run (not requested). Source was reviewed for exact substitutions; mobile visual QA remains pending deployment.
+- Dashboard staging branch only; not deployed in this step. Production, API/Firestore data, Intake, old V2, and pending sales remain untouched.
