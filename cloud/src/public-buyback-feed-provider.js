@@ -26,6 +26,7 @@ function normalized(value) {
     .replace(/^ポケモンカードゲーム/, '')
     .replace(/^mega/, '')
     .replace(/^(?:強化拡張|拡張|ハイクラス)パック/, '')
+    .replace(/\d+\s*(?:box|ボックス|パック)$/i, '')
     .replace(/(?:未開封)?(?:box|ボックス|パック)$/i, '')
     .replace(/[\s\u3000\-＿_・:：()（）【】\[\]「」『』"']/g, '');
 }
