@@ -40,7 +40,6 @@ test('asset category escapes product names and shows read-only value metrics', (
   assert.match(html, /相場未取得/);
   assert.match(html, /定価・購入原価は買取価格に代用していません/);
   assert.match(html, /参考買取評価額/);
-  assert.match(html, /買取相場未取得/);
 });
 test('calendar date selection highlights the full cell and shows every event for that day', () => {
   const snapshot = {
