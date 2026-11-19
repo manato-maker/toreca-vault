@@ -266,7 +266,7 @@ ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に
 <div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>`
     : selectedView === 'inventory'
       ? `<section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${inventoryFilters}\\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
+${inventoryFilters}\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
 </section>`
       : selectedView === 'calendar'
         ? `<section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
