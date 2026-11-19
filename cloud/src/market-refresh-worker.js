@@ -35,7 +35,7 @@ function validQuote(value, target, checkedAt) {
   const lot = { category: target.category, productKey: target.productKey || target.product,
     condition: target.condition || target.shrinkStatus || '' };
   const matched = buybackForLot([checked], lot, checkedAt);
-  return matched.status === 'current' && matched.price === value.price;
+  return ['current', 'stale'].includes(matched.status) && matched.price === value.price;
 }
 
 function findQuoteIndex(quotes, target, key, sourceStore = '') {
@@ -180,8 +180,8 @@ export async function refreshMarketQuotes({
         quoteType: String(result.quoteType || 'regular'),
         availabilityConfirmed: result.availabilityConfirmed === true,
         lastCheckedAt: refreshedAt,
-        fresh: true,
-        trend: 'current'
+        fresh: result.fresh !== false,
+        trend: result.fresh === false ? 'stale' : 'current'
       };
       if (index >= 0 && previous?.postUrl === quote.postUrl) {
         next.marketQuotes[index] = { ...previous, ...quote };
