@@ -63,13 +63,13 @@ function calendar(month, events, today, selectedDate = '') {
     const count = byDate.get(d) || 0;
     const active = selectedDate === d;
     const classes = 'day' + (today === d ? ' is-today' : '') + (active ? ' is-selected' : '');
-    grid.push('<a class="' + classes + '" href="/app?month=' + current + '&date=' + d + '#event-list" aria-label="' + d + ' の予定を表示" aria-describedby="event-list"' +
+    grid.push('<a class="' + classes + '" href="/app?view=calendar&month=' + current + '&date=' + d + '#event-list" aria-label="' + d + ' の予定を表示" aria-describedby="event-list"' +
       (active ? ' aria-current="date"' : '') + '><span>' + day + '</span>' +
       (count ? '<small>' + (count > 9 ? '9+' : count) + '件</small>' : '') + '</a>');
   }
   const prev = new Date(Date.UTC(year, m - 2, 1)).toISOString().slice(0, 7);
   const next = new Date(Date.UTC(year, m, 1)).toISOString().slice(0, 7);
-  return '<div class="calendar-head"><a aria-label="前月" href="/app?month=' + prev + '#calendar">‹</a><strong>' + esc(year) + '年' + esc(m) + '月</strong><a aria-label="翌月" href="/app?month=' + next + '#calendar">›</a></div>' +
+  return '<div class="calendar-head"><a aria-label="前月" href="/app?view=calendar&month=' + prev + '#calendar">‹</a><strong>' + esc(year) + '年' + esc(m) + '月</strong><a aria-label="翌月" href="/app?view=calendar&month=' + next + '#calendar">›</a></div>' +
     '<div class="calendar-grid">' + ['日','月','火','水','木','金','土'].map((s,i) => '<span class="weekday w'+i+'">' + s + '</span>').join('') +
     grid.join('') + '</div>';
 }
@@ -107,7 +107,7 @@ function inventoryCard(lot, picked, offers = []) {
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
 
-export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all', handoverDocId = '', dateOverride = '') {
+export function renderDashboard(snapshot, revision, monthOverride = '', now = new Date(), historyType = 'all', handoverDocId = '', dateOverride = '', viewOverride = '') {
   if (!snapshot || Number(snapshot.schemaVersion) !== 2) throw new Error('invalid snapshot');
   const lots = Array.isArray(snapshot.inventoryLots) ? snapshot.inventoryLots.filter(l => num(l?.quantity) > 0) : [];
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
@@ -152,6 +152,18 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const selectedType = types.includes(historyType) ? historyType : 'all';
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateOverride || '')) && String(dateOverride).slice(0, 7) === month
     ? String(dateOverride) : '';
+  const views = ['assets', 'inventory', 'calendar', 'history', 'handover'];
+  const selectedView = views.includes(viewOverride) ? viewOverride
+    : selectedDate ? 'calendar'
+      : historyType !== 'all' ? 'history'
+        : monthOverride ? 'calendar' : 'assets';
+  const pageTitles = {
+    assets: '資産ダッシュボード',
+    inventory: '在庫一覧',
+    calendar: '予定カレンダー',
+    history: '取引履歴',
+    handover: '引き継ぎ'
+  };
   const sorted = [...transactions].sort((a,b) =>
     String(b.date || '').localeCompare(String(a.date || '')) ||
     String(b.id || '').localeCompare(String(a.id || '')));
@@ -164,7 +176,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const historyFilters = '<nav class="history-filters" aria-label="取引履歴の絞り込み">' +
     [['all','すべて'], ['purchase','購入'], ['sale','売却'], ['opening','開封']]
       .map(([type,label]) => '<a class="history-filter' + (selectedType === type ? ' selected' : '') +
-        '" href="/app?month=' + month + '&type=' + type + '#history"' +
+        '" href="/app?view=history&month=' + month + '&type=' + type + '#history"' +
         (selectedType === type ? ' aria-current="page"' : '') + '>' +
         label + ' ' + counts[type] + '</a>').join('') + '</nav>';
   const historyCountLabel = selectedType === 'all'
@@ -242,6 +254,37 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '<textarea id="chat-handoff-prefix" hidden readonly>' + esc(chatHandoffPrefix) + '</textarea>' +
     '<textarea id="work-handoff-prefix" hidden readonly>' + esc(workHandoffPrefix) + '</textarea>' +
     '</dialog>';
+  const pageContent = selectedView === 'assets'
+    ? `<div class="metrics">
+${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
+${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
+${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
+${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却 · 売却履歴を見る','/app?view=history&month=' + month + '&type=sale#history')}
+${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
+${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
+</div>
+<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>`
+    : selectedView === 'inventory'
+      ? `<section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
+${inventoryFilters}\\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
+</section>`
+      : selectedView === 'calendar'
+        ? `<section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
+<details class="winning-shortcut"><summary><span class="winning-shortcut-icon" aria-hidden="true">★</span><span class="winning-shortcut-copy"><b>当選・未受取</b><small>当選した商品の受取状況を確認</small></span><span class="winning-count">${unreceivedWinners.length}件</span></summary><div class="winning-content" id="winning-unreceived">${winningRows}</div></details>
+${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-list-head" tabindex="-1"><h2>${esc(selectedDate || month)} の予定</h2>${selectedDate ? '<a href="/app?view=calendar&month=' + month + '#calendar">月全体を見る</a>' : ''}</div>${eventRows}
+</section>`
+        : selectedView === 'history'
+          ? `<section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>`
+          : handoverSection;
+  const navItems = [
+    ['assets', '⌂', '資産', '/app?view=assets'],
+    ['inventory', '▤', '在庫', '/app?view=inventory'],
+    ['calendar', '▦', '予定', '/app?view=calendar&month=' + month + (selectedDate ? '&date=' + selectedDate + '#event-list' : '#calendar')],
+    ['history', '↗', '履歴', '/app?view=history&month=' + month + '&type=' + selectedType + '#history'],
+    ['handover', '☷', '引継ぎ', '/app?view=handover']
+  ].map(([view, icon, label, href]) => '<a class="bottom-link' + (selectedView === view ? ' active' : '') +
+    '" href="' + esc(href) + '" aria-label="' + esc(label) + '"' +
+    (selectedView === view ? ' aria-current="page"' : '') + '><span>' + icon + '</span>' + esc(label) + '</a>').join('');
   const css = `
 :root{color-scheme:dark;--bg:#0b1220;--card:#151f31;--line:#29394e;--txt:#edf5ff;--muted:#afbed1;--aqua:#70e4d2;--purple:#9888ff}
 *{box-sizing:border-box}html{scroll-behavior:auto}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui,sans-serif;font-size:15px;line-height:1.6}
@@ -274,7 +317,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:12px}.history-row>span{white-space:nowrap;font-size:13px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:13px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:22px;color:var(--aqua)}
 .inventory-filters{display:flex;gap:7px;overflow-x:auto;padding:7px 0 12px;scrollbar-width:thin}.inventory-filter{flex:none;min-height:38px;border:1px solid var(--line);border-radius:20px;background:#202f40;color:var(--muted);padding:7px 11px;font:inherit;font-size:12px;cursor:pointer}.inventory-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.inventory-filter:focus-visible,.handoff-copy-button:focus-visible,.bottom button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
-.bottom a,.bottom button{text-align:center;font-size:13px;min-width:56px;color:#e6effe}.bottom button{border:0;background:transparent;font:inherit;cursor:pointer;padding:0 3px}
+.bottom a,.bottom button{text-align:center;font-size:13px;min-width:56px;color:#e6effe}.bottom a.active{color:var(--aqua);font-weight:750}.bottom a.active span{color:var(--aqua)}.bottom button{border:0;background:transparent;font:inherit;cursor:pointer;padding:0 3px}
 .handoff-dialog{width:min(520px,calc(100% - 24px));max-height:min(82vh,700px);overflow:auto;margin:auto;padding:20px;background:#172337;color:var(--txt);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 80px #0009}.handoff-dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}.handoff-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.handoff-dialog-head h2{margin:0}.handoff-close{width:40px;height:40px;border:0;border-radius:10px;background:#202f40;color:var(--txt);font-size:22px;cursor:pointer}.handoff-doc-link,.handoff-download-link{display:inline-flex;margin:14px 10px 2px 0;color:var(--aqua);font-size:12px;text-decoration:underline}.handoff-download-link{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#202f40}.handoff-copy-card{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#111c2e}.handoff-copy-card h3{font-size:14px;margin:0 0 5px}.handoff-copy-card p{color:var(--muted);font-size:12px;margin:0 0 11px}.handoff-copy-button{width:100%;min-height:44px;border:0;border-radius:11px;background:#24504d;color:var(--aqua);font:inherit;font-weight:750;cursor:pointer}.handoff-copy-status{min-height:20px;margin-top:10px;color:var(--aqua);font-size:12px}.handoff-refresh{border:1px solid var(--line);border-radius:9px;background:#202f40;color:var(--txt);padding:8px 12px;margin:6px 0;cursor:pointer}.handoff-refresh:disabled{opacity:.6;cursor:wait}.handoff-live-status{margin:12px 0 5px;color:var(--muted);font-size:11px}.handoff-live-content{max-height:min(32vh,280px);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:#0b1220;color:var(--txt);font:11px/1.55 ui-monospace,monospace}.handoff-fallback{width:100%;min-height:120px;margin-top:8px;padding:10px;border-radius:8px;background:#0b1220;color:var(--txt);border:1px solid var(--line)}[hidden]{display:none!important}
 footer{padding:30px 0;color:var(--muted);font-size:12px;text-align:center}.btn{background:#27433f;color:var(--aqua);font-size:12px;padding:10px 12px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}.btn:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}.handover-actions{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
 @media(min-width:750px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}main{padding-bottom:60px}.bottom{position:static;max-width:1040px;margin:auto;border:1px solid var(--line);border-radius:15px 15px 0 0}.day{min-height:80px}}
@@ -283,27 +326,10 @@ footer{padding:30px 0;color:var(--muted);font-size:12px;text-align:center}.btn{b
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1220"><title>Toreca Vault · ステージング</title><style>${css}</style></head><body>
 <header><div class="brand"><span class="brand-mark">TV</span><span>Toreca Vault</span></div><span class="tag">STAGING · 閲覧専用</span></header>
-<main id="top"><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
+<main id="top"><section class="intro"><div class="kicker">TORECA VAULT</div><h1>${pageTitles[selectedView]}</h1>
 <p class="meta">更新 ${esc(today)} · V2 revision ${esc(revision)}</p></section>
-<div class="metrics">
-${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
-${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
-${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
-${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却 · 売却履歴を見る','/app?month=' + month + '&type=sale#history')}
-${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
-${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
-</div>
-<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
-<section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${inventoryFilters}\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
-</section>
-<section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
-<details class="winning-shortcut"><summary><span class="winning-shortcut-icon" aria-hidden="true">★</span><span class="winning-shortcut-copy"><b>当選・未受取</b><small>当選した商品の受取状況を確認</small></span><span class="winning-count">${unreceivedWinners.length}件</span></summary><div class="winning-content" id="winning-unreceived">${winningRows}</div></details>
-${calendar(month,events,today,selectedDate)}<div id="event-list" class="event-list-head" tabindex="-1"><h2>${esc(selectedDate || month)}${selectedDate ? ' の予定' : ' の予定'}</h2>${selectedDate ? '<a href="/app?month=' + month + '#calendar">月全体を見る</a>' : ''}</div>${eventRows}
-</section>
-<section class="panel" id="history"><div class="panel-top"><h2>取引履歴</h2><span class="minor">${historyCountLabel}</span></div>${historyFilters}${transactionRows}</section>
-${handoverSection}
+${pageContent}
 <footer>読み取り専用 · Toreca Vault staging · データの登録・修正はできません</footer>
 </main>
-<nav class="bottom" aria-label="ページ内メニュー"><a href="#top" aria-label="上部へ"><span>⌂</span>資産</a><a href="#inventory"><span>▤</span>在庫</a><a href="#calendar"><span>▦</span>予定</a><a href="#history"><span>↗</span>履歴</a><a href="#handover" aria-label="引継ぎ"><span>☷</span>引継ぎ</a></nav>${handoffDialog}<script src="/dashboard.js" defer></script></body></html>`;
+<nav class="bottom" aria-label="カテゴリー">${navItems}</nav>${handoffDialog}<script src="/dashboard.js" defer></script></body></html>`;
 }
