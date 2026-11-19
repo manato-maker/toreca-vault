@@ -11,6 +11,14 @@ function valueKey(value) {
   return String(value ?? '').trim().toLocaleLowerCase('ja');
 }
 
+function expectedProductIdentity(target) {
+  const product = String(target.productKey || target.product || '').normalize('NFKC').toLocaleLowerCase('ja');
+  if (!product.includes('スタートデッキ100')) return '';
+  return /白箱|詰め合わせ|カートン|assortment|whitebox/.test(product)
+    ? 'starter-deck-100-white-box'
+    : 'starter-deck-100-retail-single';
+}
+
 export function marketTargetKey(target) {
   return JSON.stringify([
     String(target.category || ''),
@@ -20,7 +28,9 @@ export function marketTargetKey(target) {
 }
 
 function validQuote(value, target, checkedAt) {
+  const productIdentity = expectedProductIdentity(target);
   if (!value || !Number.isSafeInteger(value.price) || value.price <= 0
+    || (productIdentity && value.productIdentity !== productIdentity)
     || typeof value.source !== 'string' || !value.source.trim() || value.source.trim().length > 120
     || value.category !== target.category
     || !String(value.productKey || '').trim()
@@ -180,6 +190,7 @@ export async function refreshMarketQuotes({
         unit: String(result.unit || ''),
         quoteType: String(result.quoteType || 'regular'),
         availabilityConfirmed: result.availabilityConfirmed === true,
+        ...(result.productIdentity ? { productIdentity: String(result.productIdentity) } : {}),
         lastCheckedAt: refreshedAt,
         fresh: result.fresh !== false,
         trend: result.fresh === false ? 'stale' : 'current'
