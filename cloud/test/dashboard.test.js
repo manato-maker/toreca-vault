@@ -37,8 +37,6 @@ test('asset category escapes product names and shows read-only value metrics', (
   assert.doesNotMatch(html, /id="history"/);
   assert.match(html, /確定売却益/);
   assert.match(html, /5,500/);
-  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
   assert.match(html, /相場未取得/);
   assert.match(html, /定価・購入原価は買取価格に代用していません/);
   assert.match(html, /参考買取評価額/);
@@ -111,6 +109,13 @@ test('dashboard category pages render separately and mark the active bottom tab'
       assert.match(html, new RegExp('class="bottom-link active"[^>]*href="/app\\?view=' + view + '"|class="bottom-link active"[^>]*href="/app\\?view=' + view + '&'));
     }
   });
+});
+
+test('inventory category escapes product names', () => {
+  const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
+    'all', '', '', 'inventory');
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
 });
 
 test('invalid month falls back to current JST calendar and does not inject HTML', () => {
