@@ -1,5 +1,20 @@
 export const dashboardClientScript = `
 (() => {
+  // A full-page calendar navigation is intentional so the selected date is rendered
+  // from the read-only server snapshot. Re-align after Android browsers finish layout;
+  // the native fragment jump can happen before the fixed bottom bar/layout settles.
+  function alignSelectedCalendarDate() {
+    const selectedDate = new URLSearchParams(window.location.search).get('date') || '';
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate) || window.location.hash !== '#event-list') return;
+    const target = document.getElementById('event-list');
+    if (!target) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }));
+  }
+  window.addEventListener('pageshow', alignSelectedCalendarDate);
+  window.addEventListener('load', alignSelectedCalendarDate, { once: true });
+
   const dialog = document.getElementById('handoff-dialog');
   const openButton = document.querySelector('[data-open-handoff]');
   const closeButton = document.querySelector('[data-close-handoff]');
