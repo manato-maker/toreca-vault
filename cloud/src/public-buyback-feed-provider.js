@@ -103,16 +103,30 @@ function parseProducts(html) {
           postedAt: sourcePost.postedAt, price });
       }
     }
-    products.push({ name, official: official || name, category, offers });
+    const identity = starterDeckProductIdentity(name, official || name);
+    products.push({ name, official: official || name, category, offers, identity });
   }
   return products;
 }
 
+function starterDeckProductIdentity(name, official = '') {
+  const value = normalized(`${name || ''} ${official || ''}`);
+  if (!value.includes('スタートデッキ100')) return '';
+  if (/白箱|詰め合わせ|カートン|assortment|whitebox/.test(value)) return 'starter-deck-100-white-box';
+  if (/単品|単体|1個(?:入り)?|single(?:deck)?|retailpackage/.test(value)) return 'starter-deck-100-retail-single';
+  return 'starter-deck-100-ambiguous';
+}
+
 function productMatches(target, product) {
-  const targetNames = [target.product, target.productKey].map(normalized).filter(value => value.length >= 4);
+  const rawTargetNames = [target.product, target.productKey].filter(Boolean);
+  const targetNames = rawTargetNames.map(normalized).filter(value => value.length >= 4);
   const productNames = [product.name, product.official].map(normalized).filter(Boolean);
   if (!targetNames.length || !productNames.length) return false;
-  return targetNames.some(name => productNames.includes(name));
+  const targetIsStarterDeck = targetNames.some(name => name.includes('スタートデッキ100'));
+  if (targetIsStarterDeck && product.identity !== 'starter-deck-100-retail-single') return false;
+  const comparisonKey = value => value.replace(/(?:単品|単体|1個入り|1個|single(?:deck)?|retailpackage)/g, '');
+  return targetNames.some(name => productNames.some(productName =>
+    comparisonKey(name) === comparisonKey(productName)));
 }
 
 export function parsePublicBuybackFeed(html, { now = new Date() } = {}) {
@@ -173,6 +187,7 @@ export function createPublicBuybackFeedProvider({
             postUrl: offer.postUrl, postedAt: offer.postedAt.toISOString(), quotedAt: offer.postedAt.toISOString(),
             validUntil, lastCheckedAt: checkedAt.toISOString(), feedSnapshotAt: feed.snapshotAt.toISOString(),
             sourcePlatform: 'public-feed', status: 'verified',
+            ...(candidates[0].identity ? { productIdentity: candidates[0].identity } : {}),
             fresh: checkedAt.getTime() <= feed.snapshotAt.getTime() + MAX_CURRENT_AGE_MS });
         }
       }
