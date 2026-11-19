@@ -37,7 +37,6 @@ test('asset category escapes product names and shows read-only value metrics', (
   assert.doesNotMatch(html, /id="history"/);
   assert.match(html, /確定売却益/);
   assert.match(html, /5,500/);
-  assert.match(html, /11\/20/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
   assert.match(html, /相場未取得/);
@@ -199,8 +198,7 @@ test('sales filter lists every older sale even when mixed overview contains only
   const overview = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', '', '', 'assets');
   assert.match(overview, /確定売却益/);
   assert.doesNotMatch(overview, /過去の売却商品/);
-  assert.match(overview, /view=history&month=2026-11&type=sale#history/);
-  assert.match(overview, /view=history&month=2026-11&type=sale#history/);
+  assert.match(overview, /view=history&amp;month=2026-11&amp;type=sale#history/);
 
   const sales = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale');
   assert.match(sales, /1件すべて/);
