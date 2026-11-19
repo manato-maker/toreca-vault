@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { renderDashboard } from '../src/dashboard-view.js';
 import { createIapVerifier } from '../src/dashboard-auth.js';
 import { createDashboardServer } from '../src/dashboard-server.js';
+import { dashboardClientScript } from '../src/dashboard-client.js';
 
 const SNAPSHOT = {
   schemaVersion: 2,
@@ -43,6 +44,53 @@ test('dashboard escapes product names and shows read-only stock, calendar and pr
   assert.match(html, /参考買取評価額/);
   assert.match(html, /買取相場未取得/);
 });
+test('calendar date selection highlights the full cell and shows every event for that day', () => {
+  const snapshot = {
+    ...SNAPSHOT,
+    lotteries: [
+      { id: 'same-day-a', title: '抽選A', store: '店舗A', deadline: '2026-11-20',
+        resultDate: '2026-11-20', receiveDeadline: '2026-11-20',
+        resultDates: [{ date: '2026-11-20' }] },
+      { id: 'same-day-b', title: '抽選B', store: '店舗B', resultDate: '2026-11-20' }
+    ]
+  };
+  const html = renderDashboard(snapshot, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
+    'all', '', '2026-11-20');
+  assert.match(html, /class="day is-selected" href="\/app\?month=2026-11&date=2026-11-20#event-list"/);
+  assert.match(html, /aria-current="date"/);
+  assert.match(html, /aria-describedby="event-list"/);
+  assert.match(html, /id="event-list" class="event-list-head" tabindex="-1"/);
+  assert.match(html, /2026-11-20 の予定/);
+  assert.match(html, /応募締切/);
+  assert.match(html, /結果発表/);
+  assert.match(html, /購入期限/);
+  assert.match(html, /抽選A/);
+  assert.match(html, /抽選B/);
+  assert.equal((html.match(/class="event"/g) || []).length, 4);
+  assert.match(html, /scroll-margin-top:16px/);
+  assert.match(html, /scroll-margin-bottom:calc\(96px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
+test('calendar empty dates remain selectable and month navigation clears the date filter', () => {
+  const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
+    'all', '', '2026-11-21');
+  assert.match(html, /class="day is-selected" href="\/app\?month=2026-11&date=2026-11-21#event-list"/);
+  assert.match(html, /この日に登録済み予定はありません。/);
+  assert.match(html, /href="\/app\?month=2026-10#calendar"/);
+  assert.match(html, /href="\/app\?month=2026-12#calendar"/);
+  const otherMonth = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
+    'all', '', '2026-10-31');
+  assert.match(otherMonth, /class="day" href="\/app\?month=2026-11&date=2026-11-21#event-list"/);
+  assert.doesNotMatch(otherMonth, /aria-current="date"/);
+});
+
+test('Android calendar navigation realigns the selected date after layout', () => {
+  assert.match(dashboardClientScript, /window\.addEventListener\('pageshow', alignSelectedCalendarDate\)/);
+  assert.match(dashboardClientScript, /window\.addEventListener\('load', alignSelectedCalendarDate, \{ once: true \}\)/);
+  assert.match(dashboardClientScript, /requestAnimationFrame\(\(\) => requestAnimationFrame/);
+  assert.match(dashboardClientScript, /target\.scrollIntoView\(\{ behavior: 'auto', block: 'start' \}\)/);
+});
+
 test('invalid month falls back to current JST calendar and does not inject HTML', () => {
   const html = renderDashboard(SNAPSHOT, 1, '2026-11"><script>', new Date('2026-11-13T04:00:00Z'));
   assert.match(html, /2026年11月/);
