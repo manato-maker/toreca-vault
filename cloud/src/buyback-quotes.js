@@ -25,6 +25,14 @@ function conditionKey(value) {
   return condition;
 }
 
+function expectedStarterDeckIdentity(value) {
+  const product = normalize(value);
+  if (!product.includes('スタートデッキ100')) return '';
+  return /白箱|詰め合わせ|カートン|assortment|whitebox/.test(product)
+    ? 'starter-deck-100-white-box'
+    : 'starter-deck-100-retail-single';
+}
+
 function quotePrice(quote) {
   const value = quote?.buybackYen ?? quote?.price;
   if (!Number.isSafeInteger(value) || value <= 0) return null;
@@ -57,6 +65,11 @@ function compatible(quote, lot) {
   // A bare lotId or guessed unit is not evidence of the product's identity.
   // The actual product and the selling unit must be independently supplied.
   if (!quoteProduct || !lotProduct || quoteProduct !== lotProduct) return false;
+  // Starter Deck 100 retail decks and white assortment cartons share loose names
+  // in market feeds. Require an explicit package identity; legacy ambiguous quotes
+  // (including the previously attached ¥42,000) must not value the retail deck.
+  const starterDeckIdentity = expectedStarterDeckIdentity(lot.productKey || lot.product);
+  if (starterDeckIdentity && quote.productIdentity !== starterDeckIdentity) return false;
   // Do not apply a shrink price to a no-shrink item, and do not reuse
   // carton/case or pack prices for individual BOX units.
   const unit = normalize(quote.unit || quote.salesUnit);
