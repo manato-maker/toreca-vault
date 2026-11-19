@@ -30,10 +30,11 @@ async function withDashboard(store, verifier, run) {
   finally { await new Promise(resolve => server.close(resolve)); }
 }
 test('dashboard escapes product names and shows read-only stock, calendar and profit', () => {
-  const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'));
+  const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', '', '', 'assets');
   assert.match(html, /資産ダッシュボード/);
-  assert.match(html, /予定カレンダー/);
-  assert.match(html, /在庫一覧/);
+  assert.doesNotMatch(html, /予定カレンダー/);
+  assert.doesNotMatch(html, /在庫一覧/);
+  assert.doesNotMatch(html, /id="history"/);
   assert.match(html, /確定売却益/);
   assert.match(html, /5,500/);
   assert.match(html, /11\/20/);
@@ -56,7 +57,7 @@ test('calendar date selection highlights the full cell and shows every event for
   };
   const html = renderDashboard(snapshot, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
     'all', '', '2026-11-20');
-  assert.match(html, /class="day is-selected" href="\/app\?month=2026-11&date=2026-11-20#event-list"/);
+  assert.match(html, /class="day is-selected" href="\/app\?view=calendar&month=2026-11&date=2026-11-20#event-list"/);
   assert.match(html, /aria-current="date"/);
   assert.match(html, /aria-describedby="event-list"/);
   assert.match(html, /id="event-list" class="event-list-head" tabindex="-1"/);
@@ -74,13 +75,13 @@ test('calendar date selection highlights the full cell and shows every event for
 test('calendar empty dates remain selectable and month navigation clears the date filter', () => {
   const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
     'all', '', '2026-11-21');
-  assert.match(html, /class="day is-selected" href="\/app\?month=2026-11&date=2026-11-21#event-list"/);
+  assert.match(html, /class="day is-selected" href="\/app\?view=calendar&month=2026-11&date=2026-11-21#event-list"/);
   assert.match(html, /この日に登録済み予定はありません。/);
-  assert.match(html, /href="\/app\?month=2026-10#calendar"/);
-  assert.match(html, /href="\/app\?month=2026-12#calendar"/);
+  assert.match(html, /href="\/app\?view=calendar&month=2026-10#calendar"/);
+  assert.match(html, /href="\/app\?view=calendar&month=2026-12#calendar"/);
   const otherMonth = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'),
     'all', '', '2026-10-31');
-  assert.match(otherMonth, /class="day" href="\/app\?month=2026-11&date=2026-11-21#event-list"/);
+  assert.match(otherMonth, /class="day" href="\/app\?view=calendar&month=2026-11&date=2026-11-21#event-list"/);
   assert.doesNotMatch(otherMonth, /aria-current="date"/);
 });
 
@@ -89,6 +90,28 @@ test('Android calendar navigation realigns the selected date after layout', () =
   assert.match(dashboardClientScript, /window\.addEventListener\('load', alignSelectedCalendarDate, \{ once: true \}\)/);
   assert.match(dashboardClientScript, /requestAnimationFrame\(\(\) => requestAnimationFrame/);
   assert.match(dashboardClientScript, /target\.scrollIntoView\(\{ behavior: 'auto', block: 'start' \}\)/);
+});
+
+test('dashboard category pages render separately and mark the active bottom tab', async () => {
+  await withDashboard({ async read() { return CURRENT; } }, async () => true, async base => {
+    const expectations = [
+      ['assets', /参考買取評価額/, /id="inventory"|id="calendar"|id="history"|id="handover"/],
+      ['inventory', /id="inventory"/, /参考買取評価額|id="calendar"|id="history"|id="handover"/],
+      ['calendar', /id="calendar"/, /参考買取評価額|id="inventory"|id="history"|id="handover"/],
+      ['history', /id="history"/, /参考買取評価額|id="inventory"|id="calendar"|id="handover"/],
+      ['handover', /id="handover"/, /参考買取評価額|id="inventory"|id="calendar"|id="history"/]
+    ];
+    for (const [view, visible, hidden] of expectations) {
+      const response = await fetch(base + '/app?view=' + view + '&month=2026-11', {
+        headers: { 'x-goog-iap-jwt-assertion': 'signed' }
+      });
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.match(html, visible, view + ' page content missing');
+      assert.doesNotMatch(html, hidden, view + ' page leaked another category');
+      assert.match(html, new RegExp('class="bottom-link active"[^>]*href="/app\\?view=' + view + '"|class="bottom-link active"[^>]*href="/app\\?view=' + view + '&'));
+    }
+  });
 });
 
 test('invalid month falls back to current JST calendar and does not inject HTML', () => {
@@ -177,7 +200,7 @@ test('sales filter lists every older sale even when mixed overview contains only
   assert.match(overview, /21件中 直近12件/);
   assert.doesNotMatch(overview, /過去の売却商品/);
   assert.match(overview, /売却 1/);
-  assert.match(overview, /type=sale#history/);
+  assert.match(overview, /view=history&month=2026-11&type=sale#history/);
 
   const sales = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale');
   assert.match(sales, /1件すべて/);
@@ -239,7 +262,7 @@ test('handover links point to the shared Markdown source and remain safe', () =>
   assert.doesNotMatch(unsafe, /evil/);
   assert.doesNotMatch(unsafe, /<script>alert/);
   const absent = renderDashboard(SNAPSHOT, 2925);
-  assert.match(absent, /id="handover"/);
+  assert.doesNotMatch(absent, /id="handover"/);
 });
 test('handover links require the same verified IAP identity as the dashboard', async () => {
   const docId = '1oXxw0pm8YoTCRMwQI16TiITDrtBBE9Gy-54kj90qlz0';
