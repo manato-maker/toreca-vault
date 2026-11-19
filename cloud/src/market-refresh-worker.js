@@ -35,7 +35,8 @@ function validQuote(value, target, checkedAt) {
   const lot = { category: target.category, productKey: target.productKey || target.product,
     condition: target.condition || target.shrinkStatus || '' };
   const matched = buybackForLot([checked], lot, checkedAt);
-  return ['current', 'stale'].includes(matched.status) && matched.price === value.price;
+  return matched.price === value.price && (matched.status === 'current'
+    || (matched.status === 'stale' && value.fresh === false && value.sourcePlatform === 'public-feed'));
 }
 
 function findQuoteIndex(quotes, target, key, sourceStore = '') {
