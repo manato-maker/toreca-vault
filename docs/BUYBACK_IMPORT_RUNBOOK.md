@@ -120,4 +120,5 @@ TV2_VERIFIED_BUYBACK_IMPORT=YES TV2_BACKUP_VERIFIED=YES \
 
 - 相場更新の起動条件を22:00 JST以降から、13:30 JST以降へ変更。既存の15分Intake tickを使い、専用Scheduler jobは追加しない。
 - 13:30のtickで実行し、Schedulerの遅延時は13:30以降の次のtickで実行する。同じ日付のmutation keyにより、日次1回の更新となる。
-- この変更は起動時刻のみ。取得元の公開価格表が24時間を超えて古い場合は、従来どおり新価格を採用しない。
+- 13:30以降の最初の15分tickで実行する。今回の旧価格表示対応は`stale-display-v1`付きの別idempotency keyを使うため、すでに実行済みの日でもstagingへ修正版を反映した後の次のtickで一度だけ更新できる。翌日以降も同じdaily keyで重複を防ぐ。手動Firestore書込みや手動Scheduler実行は不要。
+- 24時間を超えた提示は現行価格として使わず、7日以内に限って出典・投稿日時付きの「旧価格」として保存・表示する。旧価格は参考評価合計へ含めない。
