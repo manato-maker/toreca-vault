@@ -236,10 +236,10 @@ test('handover links point to the shared Markdown source and remain safe', () =>
   assert.match(html, /href="#handover"/);
   assert.doesNotMatch(html, /APIトークン/);
   const unsafe = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', 'evil"><script>alert(1)</script>');
-  assert.doesNotMatch(unsafe, /id="handover"/);
+  assert.doesNotMatch(unsafe, /evil/);
   assert.doesNotMatch(unsafe, /<script>alert/);
   const absent = renderDashboard(SNAPSHOT, 2925);
-  assert.doesNotMatch(absent, /id="handover"/);
+  assert.match(absent, /id="handover"/);
 });
 test('handover links require the same verified IAP identity as the dashboard', async () => {
   const docId = '1oXxw0pm8YoTCRMwQI16TiITDrtBBE9Gy-54kj90qlz0';
