@@ -1,6 +1,7 @@
 const FEED_URL = 'https://torekakaku-navi.com/';
 const MAX_HTML_BYTES = 5 * 1024 * 1024;
-const MAX_FEED_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_CURRENT_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_FEED_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const X_EPOCH_MS = 1_288_834_974_657n;
 
 const STORES = {
@@ -147,7 +148,7 @@ export function createPublicBuybackFeedProvider({
       let feed;
       try { feed = parsePublicBuybackFeed(html, { now: checkedAt }); } catch { return unsupported; }
 
-      const validUntil = new Date(feed.snapshotAt.getTime() + MAX_FEED_AGE_MS).toISOString();
+      const validUntil = new Date(feed.snapshotAt.getTime() + MAX_CURRENT_AGE_MS).toISOString();
       const found = [];
       for (const target of targets) {
         const condition = conditionForTarget(target);
@@ -170,7 +171,8 @@ export function createPublicBuybackFeedProvider({
             source: offer.sourceStore, sourceStore: offer.sourceStore, priceBasis: 'buyback',
             postUrl: offer.postUrl, postedAt: offer.postedAt.toISOString(), quotedAt: offer.postedAt.toISOString(),
             validUntil, lastCheckedAt: checkedAt.toISOString(), feedSnapshotAt: feed.snapshotAt.toISOString(),
-            sourcePlatform: 'public-feed', status: 'verified', fresh: true });
+            sourcePlatform: 'public-feed', status: 'verified',
+            fresh: checkedAt.getTime() <= feed.snapshotAt.getTime() + MAX_CURRENT_AGE_MS });
         }
       }
       return [...found, ...unsupported];
