@@ -255,7 +255,7 @@ export async function refreshMarketQuotes({
 export function createMarketRefreshHandler(options = {}) {
   return async function handleMarketRefresh(job) {
     if (job?.kind !== 'market-refresh' || typeof job.jobKey !== 'string'
-      || !/^market-refresh:\d{4}-\d{2}-\d{2}$/.test(job.jobKey)) {
+      || !/^market-refresh:\d{4}-\d{2}-\d{2}(?::stale-display-v1)?$/.test(job.jobKey)) {
       throw new TypeError('a scheduled daily market-refresh job is required');
     }
     return refreshMarketQuotes({
