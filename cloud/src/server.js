@@ -678,7 +678,7 @@ export async function start() {
         const date = `${jstValues.year}-${jstValues.month}-${jstValues.day}`;
         try {
           marketRefreshResult = await marketRefresh({ kind: 'market-refresh',
-            jobKey: `market-refresh:${date}`, scheduledAt });
+            jobKey: `market-refresh:${date}:stale-display-v1`, scheduledAt });
         } catch (error) {
           throw Object.assign(new Error('market refresh failed', { cause: error }), { intakeStage: 'unknown' });
         }
