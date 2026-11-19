@@ -29,7 +29,7 @@ async function withDashboard(store, verifier, run) {
   try { await run('http://127.0.0.1:' + server.address().port); }
   finally { await new Promise(resolve => server.close(resolve)); }
 }
-test('dashboard escapes product names and shows read-only stock, calendar and profit', () => {
+test('asset category escapes product names and shows read-only value metrics', () => {
   const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', '', '', 'assets');
   assert.match(html, /資産ダッシュボード/);
   assert.doesNotMatch(html, /予定カレンダー/);
@@ -196,10 +196,10 @@ test('sales filter lists every older sale even when mixed overview contains only
     date: '2026-01-01', quantity: 2, price: 9000, fee: 1000, acquisitionCost: 12000
   };
   const sample = { ...SNAPSHOT, transactions: [...manyPurchases, oldSale] };
-  const overview = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'));
-  assert.match(overview, /21件中 直近12件/);
+  const overview = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', '', '', 'assets');
+  assert.match(overview, /確定売却益/);
   assert.doesNotMatch(overview, /過去の売却商品/);
-  assert.match(overview, /売却 1/);
+  assert.match(overview, /view=history&month=2026-11&type=sale#history/);
   assert.match(overview, /view=history&month=2026-11&type=sale#history/);
 
   const sales = renderDashboard(sample, 10, '2026-11', new Date('2026-11-13T04:00:00Z'), 'sale');
@@ -256,7 +256,7 @@ test('handover links point to the shared Markdown source and remain safe', () =>
   assert.match(html, /Chat \/ Work 共通/);
   assert.ok(html.includes('最新版をダウンロード (.md)'));
   assert.ok(html.includes('https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view'));
-  assert.match(html, /href="#handover"/);
+  assert.match(html, /href="\/app\?view=handover"/);
   assert.doesNotMatch(html, /APIトークン/);
   const unsafe = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', 'evil"><script>alert(1)</script>');
   assert.doesNotMatch(unsafe, /evil/);
