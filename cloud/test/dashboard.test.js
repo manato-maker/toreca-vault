@@ -231,8 +231,8 @@ test('handover links point to the shared Markdown source and remain safe', () =>
   const html = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'));
 
   assert.match(html, /Chat \/ Work 共通/);
-  assert.match(html, /最新版をダウンロード \\(\\.md\\)/);
-  assert.match(html, /https:\\/\\/drive\\.google\\.com\\/file\\/d\\/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7\\/view/);
+  assert.ok(html.includes('最新版をダウンロード (.md)'));
+  assert.ok(html.includes('https://drive.google.com/file/d/1j8Mu-oz84zWFE-HPDhcT1_Ah22itSCo7/view'));
   assert.match(html, /href="#handover"/);
   assert.doesNotMatch(html, /APIトークン/);
   const unsafe = renderDashboard(SNAPSHOT, 2925, '2026-11', new Date('2026-11-13T04:00:00Z'), 'all', 'evil"><script>alert(1)</script>');
@@ -257,7 +257,7 @@ test('handover links require the same verified IAP identity as the dashboard', a
     assert.equal(forbidden.status, 403);
     const ok = await fetch(base + '/app', { headers: { 'x-goog-iap-jwt-assertion': 'accepted' } });
     assert.equal(ok.status, 200);
-    assert.match(await ok.text(), /最新版をダウンロード \\(\\.md\\)/);
+    assert.ok((await ok.text()).includes('最新版をダウンロード (.md)'));
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
