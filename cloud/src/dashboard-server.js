@@ -81,7 +81,10 @@ export function createDashboardServer({ store, verifyIap, now = () => new Date()
     try {
       const snapshot = await store.read();
       if (!snapshot?.payload) return reply(response, 503, 'Staging data is not initialized');
-      const html = renderDashboard(snapshot.payload, snapshot.revision, url.searchParams.get('month') || '', now(), url.searchParams.get('type') || 'all', handoverDocId, url.searchParams.get('date') || '');
+      const requestedView = url.searchParams.get('view') || (url.searchParams.has('date') ? 'calendar'
+        : url.searchParams.has('type') ? 'history'
+          : url.searchParams.has('month') ? 'calendar' : 'assets');
+      const html = renderDashboard(snapshot.payload, snapshot.revision, url.searchParams.get('month') || '', now(), url.searchParams.get('type') || 'all', handoverDocId, url.searchParams.get('date') || '', requestedView);
       if (request.method === 'HEAD') {
         response.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8' });
         return response.end();
