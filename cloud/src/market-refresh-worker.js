@@ -11,6 +11,14 @@ function valueKey(value) {
   return String(value ?? '').trim().toLocaleLowerCase('ja');
 }
 
+function expectedProductIdentity(target) {
+  const product = String(target.productKey || target.product || '').normalize('NFKC').toLocaleLowerCase('ja');
+  if (!product.includes('スタートデッキ100')) return '';
+  return /白箱|詰め合わせ|カートン|assortment|whitebox/.test(product)
+    ? 'starter-deck-100-white-box'
+    : 'starter-deck-100-retail-single';
+}
+
 export function marketTargetKey(target) {
   return JSON.stringify([
     String(target.category || ''),
@@ -20,7 +28,9 @@ export function marketTargetKey(target) {
 }
 
 function validQuote(value, target, checkedAt) {
+  const productIdentity = expectedProductIdentity(target);
   if (!value || !Number.isSafeInteger(value.price) || value.price <= 0
+    || (productIdentity && value.productIdentity !== productIdentity)
     || typeof value.source !== 'string' || !value.source.trim() || value.source.trim().length > 120
     || value.category !== target.category
     || !String(value.productKey || '').trim()
@@ -35,7 +45,8 @@ function validQuote(value, target, checkedAt) {
   const lot = { category: target.category, productKey: target.productKey || target.product,
     condition: target.condition || target.shrinkStatus || '' };
   const matched = buybackForLot([checked], lot, checkedAt);
-  return matched.status === 'current' && matched.price === value.price;
+  return matched.price === value.price && (matched.status === 'current'
+    || (matched.status === 'stale' && value.fresh === false && value.sourcePlatform === 'public-feed'));
 }
 
 function findQuoteIndex(quotes, target, key, sourceStore = '') {
@@ -92,6 +103,7 @@ export async function refreshMarketQuotes({
   if (targets.length > maxTargets) throw new RangeError('Market target count exceeds the configured limit');
 
   let responseByKey = new Map();
+  const skippedTargetKeys = new Set();
   const ambiguousShopKeys = new Set();
   try {
     const response = await provider.lookupMany(targets.map((target) => ({
@@ -100,6 +112,10 @@ export async function refreshMarketQuotes({
     if (Array.isArray(response)) {
       for (const item of response) {
         if (!item || typeof item.targetKey !== 'string') continue;
+        if (item.skip === true) {
+          skippedTargetKeys.add(item.targetKey);
+          continue;
+        }
         const shopKey = valueKey(item.sourceStore || item.source);
         const pairKey = JSON.stringify([item.targetKey, shopKey]);
         if (!responseByKey.has(item.targetKey)) responseByKey.set(item.targetKey, new Map());
@@ -125,6 +141,10 @@ export async function refreshMarketQuotes({
   let staleCount = 0;
   for (const target of targets) {
     const targetKey = marketTargetKey(target);
+    // Providers can explicitly exclude unsupported inventory (for example,
+    // singles when the public source only contains sealed products). Do not
+    // mark those existing quotes stale just because this provider cannot price them.
+    if (skippedTargetKeys.has(targetKey)) continue;
     const candidates = [...(responseByKey.get(targetKey)?.values() || [])];
     const accepted = candidates.filter(result => validQuote(result, target, checkedAt));
     let acceptedForTarget = 0;
@@ -170,9 +190,10 @@ export async function refreshMarketQuotes({
         unit: String(result.unit || ''),
         quoteType: String(result.quoteType || 'regular'),
         availabilityConfirmed: result.availabilityConfirmed === true,
+        ...(result.productIdentity ? { productIdentity: String(result.productIdentity) } : {}),
         lastCheckedAt: refreshedAt,
-        fresh: true,
-        trend: 'current'
+        fresh: result.fresh !== false,
+        trend: result.fresh === false ? 'stale' : 'current'
       };
       if (index >= 0 && previous?.postUrl === quote.postUrl) {
         next.marketQuotes[index] = { ...previous, ...quote };
@@ -246,7 +267,7 @@ export async function refreshMarketQuotes({
 export function createMarketRefreshHandler(options = {}) {
   return async function handleMarketRefresh(job) {
     if (job?.kind !== 'market-refresh' || typeof job.jobKey !== 'string'
-      || !/^market-refresh:\d{4}-\d{2}-\d{2}$/.test(job.jobKey)) {
+      || !/^market-refresh:\d{4}-\d{2}-\d{2}(?::stale-display-v1)?$/.test(job.jobKey)) {
       throw new TypeError('a scheduled daily market-refresh job is required');
     }
     return refreshMarketQuotes({
