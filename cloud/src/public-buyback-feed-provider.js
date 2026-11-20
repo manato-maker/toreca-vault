@@ -7,6 +7,7 @@ const X_EPOCH_MS = 1_288_834_974_657n;
 const STORES = {
   cardshop_allium: 'カードショップアリウム',
   mimi_kaitori: '買取ミミ',
+  amtaf_shop: 'AMTAF',
   kuro_tcg: 'トレカショップKURO'
 };
 
@@ -113,6 +114,7 @@ function starterDeckProductIdentity(name, official = '') {
   const value = normalized(`${name || ''} ${official || ''}`);
   if (!value.includes('スタートデッキ100')) return '';
   if (/白箱|詰め合わせ|カートン|assortment|whitebox/.test(value)) return 'starter-deck-100-white-box';
+  if (/バトルコレクション|battlecollection/.test(value)) return 'starter-deck-100-retail-single';
   if (/単品|単体|1個(?:入り)?|single(?:deck)?|retailpackage/.test(value)) return 'starter-deck-100-retail-single';
   return 'starter-deck-100-ambiguous';
 }
