@@ -7,7 +7,7 @@ const X_EPOCH_MS = 1_288_834_974_657n;
 const STORES = {
   cardshop_allium: 'カードショップアリウム',
   mimi_kaitori: '買取ミミ',
-  AMTAF_SHOP: 'AMTAF',
+  amtaf_shop: 'AMTAF',
   kuro_tcg: 'トレカショップKURO'
 };
 
