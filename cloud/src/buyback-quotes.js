@@ -9,7 +9,7 @@ const SHOPS = [
   { key: 'kuro', test: /トレカショップKURO|カードショップKURO|kuro_tcg/i, account: 'kuro_tcg' },
   { key: 'cardrush', test: /カードラッシュ/i },
   { key: 'toretoku', test: /トレトク/i },
-  { key: 'amtaf', test: /AMTAF/i }
+  { key: 'amtaf', test: /AMTAF/i, account: 'amtaf_shop' }
 ];
 const NON_BUYBACK = /希望小売価格|メーカー希望|公式定価|定価|参考小売|retail|msrp|販売価格/i;
 const TERMINAL = new Set(['review', 'unavailable', 'expired', 'superseded', 'availability_unconfirmed', 'rejected']);
