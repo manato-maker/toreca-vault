@@ -9,6 +9,8 @@ import { createGoogleSheetsIntakeStatusProcessor } from './google-sheets-intake-
 import { logIntakeFailure } from './worker-error-diagnostics.js';
 import { createGoogleSheetsIntakeProvider } from './google-sheets-intake-provider.js';
 import { createFirestoreGoogleSheetsIntakeCursorStore } from './firestore-google-sheets-intake-cursor.js';
+import { createPublicBuybackFeedProvider } from './public-buyback-feed-provider.js';
+import { createMarketRefreshHandler } from './market-refresh-worker.js';
 import {
   createFirestoreSchedulerHeartbeatStore,
   evaluateSchedulerHealth
@@ -638,6 +640,7 @@ export async function start() {
       provider, queue: commandQueue, cursorStore, spreadsheetId, maxRowsPerRun: 20
     });
     const statusWorker = createGoogleSheetsIntakeStatusProcessor({ provider, queue: commandQueue, spreadsheetId, maxRowsPerRun: 20 });
+    const marketRefresh = createMarketRefreshHandler({ store, provider: createPublicBuybackFeedProvider() });
     sheetsIntakeWorker = async (input) => {
       let intake;
       try {
@@ -653,7 +656,24 @@ export async function start() {
       } catch (error) {
         throw Object.assign(new Error('reconciliation failed', { cause: error }), { intakeStage: 'reconciliation' });
       }
-      return { ...intake, statusReconciliation };
+      let marketRefreshResult;
+      const scheduledAt = input?.scheduledAt instanceof Date ? input.scheduledAt : new Date(input?.scheduledAt);
+      const jst = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+      }).formatToParts(scheduledAt);
+      const jstValues = Object.fromEntries(jst.map(({ type, value }) => [type, value]));
+      if (Number(jstValues.hour) > 13
+        || (Number(jstValues.hour) === 13 && Number(jstValues.minute) >= 30)) {
+        const date = `${jstValues.year}-${jstValues.month}-${jstValues.day}`;
+        try {
+          marketRefreshResult = await marketRefresh({ kind: 'market-refresh',
+            jobKey: `market-refresh:${date}:stale-display-v1`, scheduledAt });
+        } catch (error) {
+          throw Object.assign(new Error('market refresh failed', { cause: error }), { intakeStage: 'unknown' });
+        }
+      }
+      return { ...intake, statusReconciliation, ...(marketRefreshResult ? { marketRefresh: marketRefreshResult } : {}) };
     };
   }
   const server = createServer({
