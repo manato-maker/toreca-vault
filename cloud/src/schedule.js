@@ -72,12 +72,12 @@ export function getDueJobs(now, { completedJobKeys = new Set(), scheduledAt = no
     });
   }
 
-  // First quarter-hour tick after 13:30. A durable success key keeps later
+  // First quarter-hour tick at 13:30. A durable success key keeps later
   // dispatcher ticks from repeating the daily market update.
-  if (hour > 13 || (hour === 13 && minute >= 45)) {
+  if (hour > 13 || (hour === 13 && minute >= 30)) {
     const jobKey = `market-refresh:${date}`;
     if (!completedJobKeys.has(jobKey)) {
-      due.push({ kind: 'market-refresh', jobKey, scheduledAt: `${date}T13:45+09:00` });
+      due.push({ kind: 'market-refresh', jobKey, scheduledAt: `${date}T13:30+09:00` });
     }
   }
 
