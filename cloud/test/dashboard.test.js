@@ -211,6 +211,25 @@ test('sales filter lists every older sale even when mixed overview contains only
   assert.match(sales, /確定利益 [¥￥]5,000/);
   assert.doesNotMatch(sales, /新しい購入品/);
 });
+test('sales history displays BOX and 9-set quantities without changing totals', () => {
+  const sample = {
+    ...SNAPSHOT,
+    transactions: [
+      { id: 'box-sale', type: 'sale', product: 'ポケモンカードゲーム MEGA 拡張パック「30th CELEBRATION」 1BOX',
+        category: 'BOX', quantity: 2, price: 17700, total: 35400, fee: 0, acquisitionCost: 14400,
+        date: '2026-11-22', store: '買取ミミ' },
+      { id: 'set-sale', type: 'sale', product: 'ポケモンカードゲーム MEGA 30th CELEBRATION カードセット (9種セット)',
+        category: 'BOX', quantity: 2, price: 13200, total: 26400, fee: 0, acquisitionCost: 21600,
+        date: '2026-11-22', store: '買取ミミ' }
+    ]
+  };
+  const sales = renderDashboard(sample, 10, '2026-11', new Date('2026-11-23T04:00:00Z'), 'sale');
+  assert.match(sales, /「30th CELEBRATION」 2BOX/);
+  assert.match(sales, /カードセット \(9種セット\) ×2セット/);
+  assert.match(sales, /売却 · [¥￥]35,400/);
+  assert.match(sales, /売却 · [¥￥]26,400/);
+  assert.doesNotMatch(sales, /1BOX/);
+});
 test('history filters only accept known types and escape transaction descriptions', () => {
   const sample = {
     ...SNAPSHOT,
