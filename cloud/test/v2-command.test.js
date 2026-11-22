@@ -52,7 +52,7 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   }).state;
   const opened = run(state, {
     type: 'open-box', requestId: 'op18-open-2', product: '神の支配【OP-18】',
-    quantity: 2, sourcePurchaseRequestIds: ['op18-furuichi', 'op18-bic'], date: '2026-11-22'
+    quantity: 2, date: '2026-11-22'
   });
   state = opened.state;
   assert.equal(state.inventoryLots.length, 0);
@@ -60,7 +60,8 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   assert.equal(opening.type, 'opening');
   assert.equal(opening.quantity, 2);
   assert.equal(opening.acquisitionCost, 11520);
-  assert.deepEqual(new Set(opening.sourceStores), new Set(['ふるいち 久宝寺店', 'ビックカメラ アリオ八尾店']));
+  assert.equal(Object.hasOwn(opening, 'sourcePurchaseRequestIds'), false);
+  assert.equal(Object.hasOwn(opening, 'sourceStores'), false);
 
   const saleCommand = {
     type: 'sale-aggregate', requestId: 'op18-singles-sale',
