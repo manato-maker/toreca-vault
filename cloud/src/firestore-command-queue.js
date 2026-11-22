@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 const ALLOWED_TYPES = new Set([
-  'purchase', 'sale', 'lottery', 'lottery-bulk', 'open-packs',
+  'purchase', 'sale', 'lottery', 'lottery-bulk', 'open-packs', 'open-box', 'sale-aggregate',
   'lottery-result-exact', 'lottery-receipt', 'pokemoncenter-spouse-result',
   'repair-receipt-sale'
 ]);
