@@ -234,9 +234,10 @@ function applyAggregateSale(state, command, requestId, mutationId) {
   const store = String(command.store || command.soldTo || '').trim();
   const date = commandDate(command);
   const quantity = Number(command.quantity ?? 1);
-  const total = Number(command.totalPrice ?? command.saleTotal ?? command.unitPrice ?? command.price);
-  const unitPrice = command.unitPrice == null && command.price == null
-    ? total / quantity : Number(command.unitPrice ?? command.price);
+  const enteredTotal = command.totalPrice ?? command.saleTotal;
+  const enteredUnitPrice = command.unitPrice ?? command.price;
+  const unitPrice = enteredUnitPrice == null ? Number(enteredTotal) / quantity : Number(enteredUnitPrice);
+  const total = enteredTotal == null ? Math.round(unitPrice * quantity) : Number(enteredTotal);
   const fee = Number(command.fee || 0);
   const sourceOpeningRequestIds = [...new Set((Array.isArray(command.sourceOpeningRequestIds)
     ? command.sourceOpeningRequestIds : command.sourceOpeningRequestId ? [command.sourceOpeningRequestId] : []).map(String))];
