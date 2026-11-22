@@ -21,6 +21,14 @@ function fakeFirestore() {
             return documentPath.startsWith(`${path}/`) && (operation === '==' ? actual === expected : operation === 'in' && expected.includes(actual));
           });
           return {
+            orderBy(field, direction = 'asc') {
+              results.sort((left, right) => {
+                const a = Number(left[1]?.[field]);
+                const b = Number(right[1]?.[field]);
+                return (a - b) * (direction === 'desc' ? -1 : 1);
+              });
+              return this;
+            },
             limit(maximum) {
               return {
                 async get() {
@@ -119,9 +127,9 @@ test('business event keys reject empty, oversized, and control-character values'
 test('pending queue listing is bounded and excludes business-event index rows', async () => {
   const db = fakeFirestore();
   const queue = createFirestoreCommandQueue(db);
-  await queue.enqueue({ requestId: 'r1', command: lottery('r1'), now: 10 });
   await queue.enqueue({ requestId: 'r2', command: lottery('r2'), now: 20 });
-  assert.deepEqual(await queue.listPending({ limit: 1 }), [{ requestId: 'r1' }]);
+  await queue.enqueue({ requestId: 'r1', command: lottery('r1'), now: 10 });
+  assert.deepEqual(await queue.listPending({ limit: 1 }), [{ requestId: 'r1', createdAtMs: 10 }]);
   await assert.rejects(queue.listPending({ limit: 51 }), /limit must be from 1 to 50/);
 });
 
