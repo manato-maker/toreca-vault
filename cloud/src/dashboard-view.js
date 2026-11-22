@@ -169,13 +169,19 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     esc(e.label) + (e.store ? '<small>' + esc(e.store) + '</small>' : '') + '</span></div>').join('')
     : '<p class="empty">この月の登録済み予定はありません。</p>';
   const transactionRows = visibleTransactions.length ? visibleTransactions.map(t => {
+    const breakdown = Array.isArray(t.breakdown) ? t.breakdown.slice(0, 8).map(item => {
+      const name = String(item?.product || '').trim();
+      const amount = Number(item?.amountYen);
+      return name && Number.isSafeInteger(amount) && amount >= 0 ? name + ' ' + money(amount) : '';
+    }).filter(Boolean).join(' · ') : '';
     const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
     const amount = t.type === 'sale'
       ? num(t.price) * num(t.quantity) - num(t.fee)
       : known(t.total) ? num(t.total) : num(t.price) * num(t.quantity);
     const profit = t.type === 'sale' && known(t.acquisitionCost) ? amount - num(t.acquisitionCost) : null;
     return '<div class="history-row"><div><b>' + esc(t.product || t.productKey || '取引') +
-      '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small></div>' +
+      '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small>' +
+      (breakdown ? '<small>内訳: ' + esc(breakdown) + '</small>' : '') + '</div>' +
       '<div class="history-money"><span class="' + (t.type === 'sale' ? 'positive' : '') + '">' +
       esc(kind) + ' · ' + esc(money(amount)) + '</span>' +
       (profit !== null ? '<small>確定利益 ' + esc(money(profit)) + '</small>' :
