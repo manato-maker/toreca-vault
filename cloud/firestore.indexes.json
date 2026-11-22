@@ -1,0 +1,40 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "inlinePayload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "payloadHash",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "segmentIds",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "payloadOrder",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "torecaVaultV2",
+      "fieldPath": "arrayChunkCounts",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "segments",
+      "fieldPath": "items",
+      "indexes": []
+    }
+  ]
+}
