@@ -64,6 +64,16 @@ function lottery(requestId, product = 'MEGA Dream ex') {
   return { requestId, type: 'lottery', product, retailer: 'store-a', roundId: 'round-2026-11' };
 }
 
+test('the queue accepts box-opening and aggregate-sale command types', async () => {
+  const queue = createFirestoreCommandQueue(fakeFirestore());
+  for (const [type, requestId] of [['open-box', 'box-open-1'], ['sale-aggregate', 'sale-batch-1']]) {
+    const command = { type, requestId };
+    const result = await queue.enqueue({ requestId, command, now: 10 });
+    assert.equal(result.accepted, true);
+    assert.equal(result.status, 'pending');
+  }
+});
+
 test('a shared business event key prevents the same lottery from being queued twice across sources', async () => {
   const db = fakeFirestore();
   const queue = createFirestoreCommandQueue(db);
