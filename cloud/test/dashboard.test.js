@@ -43,6 +43,32 @@ test('dashboard escapes product names and shows read-only stock, calendar and pr
   assert.match(html, /参考買取評価額/);
   assert.match(html, /買取相場未取得/);
 });
+test('aggregate sale history shows its breakdown without requiring per-card inventory', () => {
+  const sample = {
+    ...SNAPSHOT,
+    inventoryLots: [],
+    transactions: [{
+      id: 'aggregate-sale', type: 'sale', saleMode: 'aggregate',
+      product: '神の支配 開封シングルまとめ売り', category: 'カード',
+      quantity: 1, price: 4600, total: 4600, fee: 0,
+      acquisitionCost: null, date: '2026-11-22', store: 'トレカボム大阪日本橋',
+      breakdown: [
+        { product: 'シャムロック聖 通常版描きおろしパラレル', amountYen: 3000 },
+        { product: 'キリンガム聖 レアパラレル', amountYen: 500 },
+        { product: 'その他SR・Rまとめ', amountYen: 1100 }
+      ]
+    }]
+  };
+  const html = renderDashboard(sample, 10, '2026-11', new Date('2026-11-22T04:00:00Z'), 'sale');
+  assert.match(html, /売却 · [¥￥]4,600/);
+  assert.match(html, /内訳:/);
+  assert.match(html, /シャムロック聖 通常版描きおろしパラレル [¥￥]3,000/);
+  assert.match(html, /キリンガム聖 レアパラレル [¥￥]500/);
+  assert.match(html, /その他SR・Rまとめ [¥￥]1,100/);
+  assert.match(html, /原価未確認/);
+  assert.doesNotMatch(html, /確定利益/);
+});
+
 test('invalid month falls back to current JST calendar and does not inject HTML', () => {
   const html = renderDashboard(SNAPSHOT, 1, '2026-11"><script>', new Date('2026-11-13T04:00:00Z'));
   assert.match(html, /2026年11月/);
