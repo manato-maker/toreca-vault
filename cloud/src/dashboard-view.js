@@ -205,11 +205,23 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     : '<p class="winning-empty">当選・未受取の商品はありません。</p>';
   const transactionRows = visibleTransactions.length ? visibleTransactions.map(t => {
     const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
+    const rawProduct = String(t.product || t.productKey || '取引');
+    const quantity = num(t.quantity);
+    let productLabel = rawProduct;
+    if (t.type === 'sale' && quantity > 1) {
+      if (/9種セット|カードセット/.test(rawProduct)) productLabel += ' ×' + quantity + 'セット';
+      else if (t.category === 'BOX') {
+        productLabel = /1\\s*BOX\\s*$/i.test(rawProduct)
+          ? rawProduct.replace(/1\\s*BOX\\s*$/i, quantity + 'BOX')
+          : rawProduct + ' ' + quantity + 'BOX';
+      } else if (t.category === 'カード') productLabel += ' ×' + quantity + '枚';
+      else if (t.category === 'パック') productLabel += ' ×' + quantity + 'パック';
+    }
     const amount = t.type === 'sale'
       ? num(t.price) * num(t.quantity) - num(t.fee)
       : known(t.total) ? num(t.total) : num(t.price) * num(t.quantity);
     const profit = t.type === 'sale' && known(t.acquisitionCost) ? amount - num(t.acquisitionCost) : null;
-    return '<div class="history-row"><div><b>' + esc(t.product || t.productKey || '取引') +
+    return '<div class="history-row"><div><b>' + esc(productLabel) +
       '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small></div>' +
       '<div class="history-money"><span class="' + (t.type === 'sale' ? 'positive' : '') + '">' +
       esc(kind) + ' · ' + esc(money(amount)) + '</span>' +
