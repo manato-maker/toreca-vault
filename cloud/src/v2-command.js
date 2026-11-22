@@ -182,9 +182,7 @@ function applyBoxOpening(state, command, requestId, mutationId) {
   const quantity = Number(command.quantity);
   const condition = String(command.condition || '').trim();
   const store = String(command.store || '').trim();
-  const sourcePurchaseRequestIds = [...new Set((Array.isArray(command.sourcePurchaseRequestIds)
-    ? command.sourcePurchaseRequestIds : [command.sourcePurchaseRequestId]).filter(Boolean).map(String))];
-  if (!product || !Number.isSafeInteger(quantity) || quantity <= 0 || !sourcePurchaseRequestIds.length) {
+  if (!product || !Number.isSafeInteger(quantity) || quantity <= 0) {
     throw new TypeError('invalid box opening fields');
   }
   const id = `chat-opening-${requestId}`;
@@ -192,35 +190,24 @@ function applyBoxOpening(state, command, requestId, mutationId) {
     if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
     throw new Error('opening ID exists without its mutation record; manual review required');
   }
-  const wanted = norm(product);
-  const sourcePurchases = state.transactions.filter((tx) =>
-    tx.type === 'purchase' && tx.category === 'BOX'
-      && sourcePurchaseRequestIds.includes(String(tx.requestId || ''))
-      && norm(tx.productKey || tx.product) === wanted);
-  if (sourcePurchases.length !== sourcePurchaseRequestIds.length) {
-    throw new Error('box purchase source was not found');
-  }
+
+  // An opening report consumes matching sealed BOX stock in FIFO order. It does
+  // not require purchase IDs or preserve which store/purchase each opened box came from.
   let candidates = state.inventoryLots.filter((lot) =>
     qty(lot) > 0 && lot.category === 'BOX'
-      && sourcePurchaseRequestIds.includes(String(lot.requestId || ''))
-      && norm(lot.productKey || lot.product) === wanted);
+      && norm(lot.productKey || lot.product) === norm(product));
   if (condition) candidates = candidates.filter((lot) => String(lot.condition || '') === condition);
   if (store) candidates = candidates.filter((lot) => norm(lot.store) === norm(store));
   if (!candidates.length) throw new Error('box inventory was not found');
-  if (!condition && new Set(candidates.map((lot) => String(lot.condition || ''))).size > 1) {
-    throw new Error('box condition is ambiguous');
-  }
+
   const next = clone(state);
-  const sourceLotIds = new Set(candidates.map((lot) => lot.id));
-  const lots = next.inventoryLots.filter((lot) => sourceLotIds.has(lot.id));
+  const candidateIds = new Set(candidates.map((lot) => lot.id));
+  const lots = next.inventoryLots.filter((lot) => candidateIds.has(lot.id));
   const acquisitionCost = consumeLots(next, lots, quantity);
   const opening = {
     id, type: 'opening', product, productKey: product, category: 'BOX',
-    condition: condition || String(lots[0]?.condition || ''), quantity,
-    price: 0, total: 0, date,
-    store: store || (new Set(lots.map((lot) => String(lot.store || ''))).size === 1 ? String(lots[0]?.store || '') : ''),
-    sourceStores: [...new Set(lots.map((lot) => String(lot.store || '')).filter(Boolean))],
-    source: 'chat', requestId, sourcePurchaseRequestIds, acquisitionCost,
+    condition: '開封済み', quantity, price: 0, total: 0, date,
+    store, source: 'chat', requestId, acquisitionCost,
     memo: String(command.memo || `BOX開封｜${product}`)
   };
   next.transactions.push(opening);
