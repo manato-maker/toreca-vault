@@ -85,6 +85,16 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   assert.equal(state.inventoryLots.length, 0);
   assert.equal(realizedProfit(state), 0);
   assert.equal(run(state, saleCommand).duplicate, true);
+
+  const arSale = run(state, {
+    type: 'sale-aggregate', requestId: 'pokemon-ar-batch-sale',
+    product: 'ポケモンカード AR まとめ売り', category: 'カード',
+    quantity: 30, unitPrice: 200, date: '2026-11-22', store: '買取ミミ',
+    memo: 'ARをカード単位で分割せず、まとめ売りとして記録'
+  });
+  assert.equal(arSale.state.transactions.at(-1).total, 6000);
+  assert.equal(arSale.state.transactions.at(-1).quantity, 30);
+  assert.equal(arSale.state.inventoryLots.length, 0);
 });
 
 test('aggregate sales validate totals and opening provenance before changing state', () => {
