@@ -68,7 +68,6 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
     product: '神の支配 開封シングルまとめ売り', category: 'カード',
     quantity: 1, unitPrice: 4600, totalPrice: 4600,
     date: '2026-11-22', store: 'トレカボム大阪日本橋',
-    sourceOpeningRequestIds: ['op18-open-2'],
     breakdown: [
       { product: 'シャムロック聖 通常版描きおろしパラレル', amountYen: 3000 },
       { product: 'キリンガム聖 レアパラレル', amountYen: 500 },
@@ -98,7 +97,7 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   assert.equal(arSale.state.inventoryLots.length, 0);
 });
 
-test('aggregate sales validate totals and opening provenance before changing state', () => {
+test('aggregate sales reject inconsistent totals without requiring box provenance', () => {
   const bought = run(emptyV2(), {
     type: 'purchase', requestId: 'box-1', product: '商品BOX',
     category: 'BOX', quantity: 1, unitCost: 1000, date: '2026-11-01', store: '店'
@@ -111,12 +110,6 @@ test('aggregate sales validate totals and opening provenance before changing sta
     breakdown: [{ product: 'カードA', amountYen: 900 }]
   }), /invalid aggregate sale/);
   assert.deepEqual(bought, before);
-  assert.throws(() => run(bought, {
-    type: 'sale-aggregate', requestId: 'sale-no-opening', product: '開封カードまとめ',
-    category: 'カード', quantity: 1, unitPrice: 1000, totalPrice: 1000,
-    date: '2026-11-02', store: '買取店',
-    sourceOpeningRequestIds: ['missing-opening']
-  }), /opened box source was not found/);
   assert.deepEqual(bought, before);
 });
 
