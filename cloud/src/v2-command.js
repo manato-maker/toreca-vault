@@ -210,9 +210,6 @@ function applyBoxOpening(state, command, requestId, mutationId) {
   if (!condition && new Set(candidates.map((lot) => String(lot.condition || ''))).size > 1) {
     throw new Error('box condition is ambiguous');
   }
-  if (!store && new Set(candidates.map((lot) => norm(lot.store))).size > 1) {
-    throw new Error('box store is ambiguous');
-  }
   const next = clone(state);
   const sourceLotIds = new Set(candidates.map((lot) => lot.id));
   const lots = next.inventoryLots.filter((lot) => sourceLotIds.has(lot.id));
@@ -220,7 +217,9 @@ function applyBoxOpening(state, command, requestId, mutationId) {
   const opening = {
     id, type: 'opening', product, productKey: product, category: 'BOX',
     condition: condition || String(lots[0]?.condition || ''), quantity,
-    price: 0, total: 0, date, store: store || String(lots[0]?.store || ''),
+    price: 0, total: 0, date,
+    store: store || (new Set(lots.map((lot) => String(lot.store || ''))).size === 1 ? String(lots[0]?.store || '') : ''),
+    sourceStores: [...new Set(lots.map((lot) => String(lot.store || '')).filter(Boolean))],
     source: 'chat', requestId, sourcePurchaseRequestIds, acquisitionCost,
     memo: String(command.memo || `BOX開封｜${product}`)
   };
