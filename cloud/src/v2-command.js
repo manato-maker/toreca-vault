@@ -226,8 +226,6 @@ function applyAggregateSale(state, command, requestId, mutationId) {
   const unitPrice = enteredUnitPrice == null ? Number(enteredTotal) / quantity : Number(enteredUnitPrice);
   const total = enteredTotal == null ? Math.round(unitPrice * quantity) : Number(enteredTotal);
   const fee = Number(command.fee || 0);
-  const sourceOpeningRequestIds = [...new Set((Array.isArray(command.sourceOpeningRequestIds)
-    ? command.sourceOpeningRequestIds : command.sourceOpeningRequestId ? [command.sourceOpeningRequestId] : []).map(String))];
   const breakdown = Array.isArray(command.breakdown) ? command.breakdown.map((entry) => ({
     product: String(entry?.product || '').trim(),
     amountYen: Number(entry?.amountYen),
@@ -241,11 +239,6 @@ function applyAggregateSale(state, command, requestId, mutationId) {
     || (breakdown.length && breakdown.reduce((sum, entry) => sum + entry.amountYen, 0) !== total)) {
     throw new TypeError('invalid aggregate sale fields');
   }
-  if (sourceOpeningRequestIds.length) {
-    const openings = state.transactions.filter((tx) => tx.type === 'opening'
-      && sourceOpeningRequestIds.includes(String(tx.requestId || '')));
-    if (openings.length !== sourceOpeningRequestIds.length) throw new Error('opened box source was not found');
-  }
   const id = `chat-sale-${requestId}`;
   if (transactionIdExists(state, id)) {
     if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
@@ -256,7 +249,7 @@ function applyAggregateSale(state, command, requestId, mutationId) {
     id, type: 'sale', saleMode: 'aggregate', product, productKey: norm(product), category,
     condition: String(command.condition || ''), quantity, price: unitPrice, total,
     fee, date, store, soldTo: store, source: 'chat', requestId,
-    sourceOpeningRequestIds, breakdown, inventoryEffect: 'none', acquisitionCost: null,
+    breakdown, inventoryEffect: 'none', acquisitionCost: null,
     memo: String(command.memo || '開封済みカードのまとめ売却｜在庫は開封時に減算済み')
   };
   next.transactions.push(tx);
