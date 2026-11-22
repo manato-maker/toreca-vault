@@ -176,6 +176,107 @@ function applySale(state, command, requestId, mutationId) {
   return { state: next, duplicate: false, mutationId, transactionIds: [id] };
 }
 
+function applyBoxOpening(state, command, requestId, mutationId) {
+  const product = String(command.product || '').trim();
+  const date = commandDate(command);
+  const quantity = Number(command.quantity);
+  const condition = String(command.condition || '').trim();
+  const store = String(command.store || '').trim();
+  const sourcePurchaseRequestIds = [...new Set((Array.isArray(command.sourcePurchaseRequestIds)
+    ? command.sourcePurchaseRequestIds : [command.sourcePurchaseRequestId]).filter(Boolean).map(String))];
+  if (!product || !Number.isSafeInteger(quantity) || quantity <= 0 || !sourcePurchaseRequestIds.length) {
+    throw new TypeError('invalid box opening fields');
+  }
+  const id = `chat-opening-${requestId}`;
+  if (transactionIdExists(state, id)) {
+    if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('opening ID exists without its mutation record; manual review required');
+  }
+  const wanted = norm(product);
+  const sourcePurchases = state.transactions.filter((tx) =>
+    tx.type === 'purchase' && tx.category === 'BOX'
+      && sourcePurchaseRequestIds.includes(String(tx.requestId || ''))
+      && norm(tx.productKey || tx.product) === wanted);
+  if (sourcePurchases.length !== sourcePurchaseRequestIds.length) {
+    throw new Error('box purchase source was not found');
+  }
+  let candidates = state.inventoryLots.filter((lot) =>
+    qty(lot) > 0 && lot.category === 'BOX'
+      && sourcePurchaseRequestIds.includes(String(lot.requestId || ''))
+      && norm(lot.productKey || lot.product) === wanted);
+  if (condition) candidates = candidates.filter((lot) => String(lot.condition || '') === condition);
+  if (store) candidates = candidates.filter((lot) => norm(lot.store) === norm(store));
+  if (!candidates.length) throw new Error('box inventory was not found');
+  if (!condition && new Set(candidates.map((lot) => String(lot.condition || ''))).size > 1) {
+    throw new Error('box condition is ambiguous');
+  }
+  if (!store && new Set(candidates.map((lot) => norm(lot.store))).size > 1) {
+    throw new Error('box store is ambiguous');
+  }
+  const next = clone(state);
+  const sourceLotIds = new Set(candidates.map((lot) => lot.id));
+  const lots = next.inventoryLots.filter((lot) => sourceLotIds.has(lot.id));
+  const acquisitionCost = consumeLots(next, lots, quantity);
+  const opening = {
+    id, type: 'opening', product, productKey: product, category: 'BOX',
+    condition: condition || String(lots[0]?.condition || ''), quantity,
+    price: 0, total: 0, date, store: store || String(lots[0]?.store || ''),
+    source: 'chat', requestId, sourcePurchaseRequestIds, acquisitionCost,
+    memo: String(command.memo || `BOX開封｜${product}`)
+  };
+  next.transactions.push(opening);
+  finishMutation(next, mutationId, [id]);
+  return { state: next, duplicate: false, mutationId, transactionIds: [id] };
+}
+
+function applyAggregateSale(state, command, requestId, mutationId) {
+  const product = String(command.product || '').trim();
+  const category = String(command.category || '').trim();
+  const store = String(command.store || command.soldTo || '').trim();
+  const date = commandDate(command);
+  const quantity = Number(command.quantity ?? 1);
+  const total = Number(command.totalPrice ?? command.saleTotal ?? command.unitPrice ?? command.price);
+  const unitPrice = command.unitPrice == null && command.price == null
+    ? total / quantity : Number(command.unitPrice ?? command.price);
+  const fee = Number(command.fee || 0);
+  const sourceOpeningRequestIds = [...new Set((Array.isArray(command.sourceOpeningRequestIds)
+    ? command.sourceOpeningRequestIds : command.sourceOpeningRequestId ? [command.sourceOpeningRequestId] : []).map(String))];
+  const breakdown = Array.isArray(command.breakdown) ? command.breakdown.map((entry) => ({
+    product: String(entry?.product || '').trim(),
+    amountYen: Number(entry?.amountYen),
+    quantity: entry?.quantity == null ? null : Number(entry.quantity)
+  })) : [];
+  if (!product || !store || !CATEGORIES.has(category) || !Number.isSafeInteger(quantity) || quantity <= 0
+    || !Number.isSafeInteger(total) || total <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0
+    || !Number.isFinite(fee) || fee < 0 || Math.round(unitPrice * quantity) !== total
+    || breakdown.some((entry) => !entry.product || !Number.isSafeInteger(entry.amountYen) || entry.amountYen < 0
+      || (entry.quantity !== null && (!Number.isSafeInteger(entry.quantity) || entry.quantity <= 0)))
+    || (breakdown.length && breakdown.reduce((sum, entry) => sum + entry.amountYen, 0) !== total)) {
+    throw new TypeError('invalid aggregate sale fields');
+  }
+  if (sourceOpeningRequestIds.length) {
+    const openings = state.transactions.filter((tx) => tx.type === 'opening'
+      && sourceOpeningRequestIds.includes(String(tx.requestId || '')));
+    if (openings.length !== sourceOpeningRequestIds.length) throw new Error('opened box source was not found');
+  }
+  const id = `chat-sale-${requestId}`;
+  if (transactionIdExists(state, id)) {
+    if (priorMutation(state, mutationId)) return { state: clone(state), duplicate: true, mutationId };
+    throw new Error('sale ID exists without its mutation record; manual review required');
+  }
+  const next = clone(state);
+  const tx = {
+    id, type: 'sale', saleMode: 'aggregate', product, productKey: norm(product), category,
+    condition: String(command.condition || ''), quantity, price: unitPrice, total,
+    fee, date, store, soldTo: store, source: 'chat', requestId,
+    sourceOpeningRequestIds, breakdown, inventoryEffect: 'none', acquisitionCost: null,
+    memo: String(command.memo || '開封済みカードのまとめ売却｜在庫は開封時に減算済み')
+  };
+  next.transactions.push(tx);
+  finishMutation(next, mutationId, [id]);
+  return { state: next, duplicate: false, mutationId, transactionIds: [id] };
+}
+
 function applyOpening(state, command, requestId, mutationId) {
   const product = String(command.product || '').trim();
   const date = commandDate(command);
@@ -452,6 +553,8 @@ export function applyChatCommand(currentState, command, { now = Date.now() } = {
   switch (type) {
     case 'purchase': return applyPurchase(currentState, command, requestId, mutationId);
     case 'sale': return applySale(currentState, command, requestId, mutationId);
+    case 'open-box': return applyBoxOpening(currentState, command, requestId, mutationId);
+    case 'sale-aggregate': return applyAggregateSale(currentState, command, requestId, mutationId);
     case 'open-packs': return applyOpening(currentState, command, requestId, mutationId);
     case 'lottery': return applyLottery(currentState, command, requestId, mutationId, now);
     case 'lottery-result-exact': return applyLotteryResult(currentState, command, requestId, mutationId, now);
