@@ -41,6 +41,74 @@ test('sale failures and ambiguous conditions leave the input state unchanged', (
   assert.deepEqual(state, before);
 });
 
+test('opening boxes removes BOX stock and aggregate sales record proceeds without individual card lots', () => {
+  let state = run(emptyV2(), {
+    type: 'purchase', requestId: 'op18-furuichi', product: '神の支配【OP-18】',
+    category: 'BOX', quantity: 1, unitCost: 5760, date: '2026-11-22', store: 'ふるいち 久宝寺店'
+  }).state;
+  state = run(state, {
+    type: 'purchase', requestId: 'op18-bic', product: '神の支配【OP-18】',
+    category: 'BOX', quantity: 1, unitCost: 5760, date: '2026-11-22', store: 'ビックカメラ アリオ八尾店'
+  }).state;
+  const opened = run(state, {
+    type: 'open-box', requestId: 'op18-open-2', product: '神の支配【OP-18】',
+    quantity: 2, sourcePurchaseRequestIds: ['op18-furuichi', 'op18-bic'], date: '2026-11-22'
+  });
+  state = opened.state;
+  assert.equal(state.inventoryLots.length, 0);
+  const opening = state.transactions.find((tx) => tx.requestId === 'op18-open-2');
+  assert.equal(opening.type, 'opening');
+  assert.equal(opening.quantity, 2);
+  assert.equal(opening.acquisitionCost, 11520);
+  assert.deepEqual(new Set(opening.sourceStores), new Set(['ふるいち 久宝寺店', 'ビックカメラ アリオ八尾店']));
+
+  const saleCommand = {
+    type: 'sale-aggregate', requestId: 'op18-singles-sale',
+    product: '神の支配 開封シングルまとめ売り', category: 'カード',
+    quantity: 1, unitPrice: 4600, totalPrice: 4600,
+    date: '2026-11-22', store: 'トレカボム大阪日本橋',
+    sourceOpeningRequestIds: ['op18-open-2'],
+    breakdown: [
+      { product: 'シャムロック聖 通常版描きおろしパラレル', amountYen: 3000 },
+      { product: 'キリンガム聖 レアパラレル', amountYen: 500 },
+      { product: 'その他SR・Rまとめ', amountYen: 1100 }
+    ]
+  };
+  const sale = run(state, saleCommand);
+  state = sale.state;
+  const transaction = state.transactions.at(-1);
+  assert.equal(transaction.type, 'sale');
+  assert.equal(transaction.saleMode, 'aggregate');
+  assert.equal(transaction.total, 4600);
+  assert.equal(transaction.acquisitionCost, null);
+  assert.equal(transaction.inventoryEffect, 'none');
+  assert.equal(state.inventoryLots.length, 0);
+  assert.equal(realizedProfit(state), 0);
+  assert.equal(run(state, saleCommand).duplicate, true);
+});
+
+test('aggregate sales validate totals and opening provenance before changing state', () => {
+  const bought = run(emptyV2(), {
+    type: 'purchase', requestId: 'box-1', product: '商品BOX',
+    category: 'BOX', quantity: 1, unitCost: 1000, date: '2026-11-01', store: '店'
+  }).state;
+  const before = structuredClone(bought);
+  assert.throws(() => run(bought, {
+    type: 'sale-aggregate', requestId: 'sale-bad-total', product: '開封カードまとめ',
+    category: 'カード', quantity: 1, unitPrice: 1000, totalPrice: 900,
+    date: '2026-11-02', store: '買取店',
+    breakdown: [{ product: 'カードA', amountYen: 900 }]
+  }), /invalid aggregate sale/);
+  assert.deepEqual(bought, before);
+  assert.throws(() => run(bought, {
+    type: 'sale-aggregate', requestId: 'sale-no-opening', product: '開封カードまとめ',
+    category: 'カード', quantity: 1, unitPrice: 1000, totalPrice: 1000,
+    date: '2026-11-02', store: '買取店',
+    sourceOpeningRequestIds: ['missing-opening']
+  }), /opened box source was not found/);
+  assert.deepEqual(bought, before);
+});
+
 test('opening packs removes sealed stock but retains the purchase history and acquisition cost', () => {
   const bought = run(emptyV2(), { type: 'purchase', requestId: 'p-pack', product: '拡張パック', category: 'パック', condition: '', quantity: 3, unitCost: 180, date: '2026-11-01', store: '店' }).state;
   const opened = run(bought, { type: 'open-packs', requestId: 'open-1', product: '拡張パック', quantity: 2, sourcePurchaseRequestId: 'p-pack', date: '2026-11-02' }).state;
