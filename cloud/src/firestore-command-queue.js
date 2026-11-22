@@ -294,7 +294,7 @@ export function createFirestoreCommandQueue(db, collectionPath = 'torecaVaultV2/
       return snapshot.docs.map((document) => {
         const row = document.data();
         if (typeof row.requestId !== 'string' || !row.requestId.trim()) throw new Error('pending command row has an invalid request ID');
-        return { requestId: row.requestId };
+        return { requestId: row.requestId, createdAtMs: Number.isSafeInteger(row.createdAtMs) ? row.createdAtMs : 0 };
       });
     },
 
