@@ -211,8 +211,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     if (t.type === 'sale' && quantity > 1) {
       if (/9種セット|カードセット/.test(rawProduct)) productLabel += ' ×' + quantity + 'セット';
       else if (t.category === 'BOX') {
-        productLabel = /1\\s*BOX\\s*$/i.test(rawProduct)
-          ? rawProduct.replace(/1\\s*BOX\\s*$/i, quantity + 'BOX')
+        productLabel = /1\s*BOX\s*$/i.test(rawProduct)
+          ? rawProduct.replace(/1\s*BOX\s*$/i, quantity + 'BOX')
           : rawProduct + ' ' + quantity + 'BOX';
       } else if (t.category === 'カード') productLabel += ' ×' + quantity + '枚';
       else if (t.category === 'パック') productLabel += ' ×' + quantity + 'パック';
