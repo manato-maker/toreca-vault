@@ -1418,3 +1418,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - バグ原因：先にChat経由で64行目を反映させた際、G64の処理日時に実キューのupdatedAtMsではなく修復受付日時を設定していた。Google Sheets receipt status workerは `v2-applied` の既存確定行に対し status/result/id/processedAtMs の**完全一致**を要求するため、キューreceipt `final` への自動確定を阻害した可能性がある。
 - `cloud/scripts/staging-op18-resume-workers.js --finalize-receipt` を追加。実際のG64を独立して再読込し確認済みの場合に限り、明示的な `TV_OP18_RECEIPT_RECONCILED=true`、exact canonical revision2971、queue `done/v2-applied`、updatedAtMs正確一致、Intake ENABLED/commands PAUSED、original Intake row64/hash照合を必須として、対象元キューの `intakeReceipt.state` だけを idempotent `final` に変更し再読込する。手動で他のIntake行、Firestore canonicalを編集しない。
 - 次の本人操作は、実際のステージングを最終復旧するため、`cd ~/tv-scoped-op18 && git pull --ff-only origin build/cloudrun-firestore-foundation-20261103 && TV_OP18_RECEIPT_RECONCILED=true node cloud/scripts/staging-op18-resume-workers.js --finalize-receipt && node cloud/scripts/staging-op18-resume-workers.js --resume-commands`。どちらかがBLOCKEDなら後続実行はしない。最終的には再度 `--status`、Intake62〜63の処理/アプリ画面で検証。PR #108 broad retry、旧V2・本番は操作しない。
+
+
+## 2026-11-23 — OP-18 staging 2BOX修復と自動処理復旧の最終確認
+
+- Owner Cloud Shell実行ログ（01:50 JST）で `TV_OP18_RECEIPT_RECONCILED=true node cloud/scripts/staging-op18-resume-workers.js --finalize-receipt` は `PASS: only original Intake #64 queue receipt finalized after verified Sheet readback`。Firestore canonical revisionは **2971** のまま（追加の在庫書込みなし）。
+- 続く `--resume-commands` は `PASS: exact staging commands Scheduler ENABLED`。最終 `--status` で `Original Intake receipt correlation: final`、`Original queue: done/v2-applied`、**Intake Scheduler ENABLED / command Scheduler ENABLED**、`READ ONLY: no job or data changes` を確認。
+- 接続済Google Sheetsの `Intake!A62:G64` 再読込でも、64行目は `v2-applied / canonical-readback-verified`。62〜63行目は `new` のままで二重受付や新規行の追加なし。これらの独立した売却報告は**未処理**であり、今回のBOX修復完了と混同しない。
+- OP-18開封2BOX在庫修復・Mint Games売却元補正・Intake64確定・staging両Schedulerの復旧は完了。旧V2・本番変更なし、PR #108のbroad retry未使用。残る一般運用確認は staging UIの最新在庫表示とIntake62〜63の通常処理であり、今回の復旧のためのCloud Shell追加操作は不要。
