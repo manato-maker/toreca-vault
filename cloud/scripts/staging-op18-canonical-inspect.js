@@ -36,7 +36,7 @@ export const SOURCE_EVIDENCE = Object.freeze({
     storeHash: '3735c0f7c314ff50c5af215c41ed2283ed09a9f8d15339ff463b731408d7c2d5'
   })
 });
-const SALE_EVIDENCE = Object.freeze({
+export const SALE_EVIDENCE = Object.freeze({
   idHash: '9cb762dfc88090c7fe15a7f0945ea7cfe35ec4c18db5a3a890fd99e94a995f65',
   storeHash: '3594f4cd00ceaaf9ad17774d658d538ba7162cd6e94cacd1dc985a452cbc93a8'
 });
