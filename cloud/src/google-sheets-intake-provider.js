@@ -14,7 +14,13 @@ function validateSpreadsheetId(id) {
 async function responseJson(response, label) {
   const text = await response.text();
   if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) throw new RangeError(`${label} response is too large`);
-  if (!response.ok) throw new Error(`${label} failed with HTTP ${response.status}`);
+  if (!response.ok) {
+    // The upstream body may contain private identifiers. Preserve only the
+    // numeric HTTP status for sanitized diagnostics in the staging operator.
+    const error = new Error(`${label} failed with HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   try {
     return JSON.parse(text || '{}');
   } catch {
