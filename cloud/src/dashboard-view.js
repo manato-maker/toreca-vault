@@ -147,20 +147,24 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       grokReportedTotal += maxGrok * quantity;
       grokReportedCount += quantity;
     }
+    let referencePrice = null;
     if (picked.status === 'current') {
+      referencePrice = picked.price;
       buybackTotal += picked.price * quantity;
       verifiedBuybackTotal += picked.price * quantity;
       verifiedPriceCount += quantity;
+    } else if (maxSingle !== null || maxGrok !== null) {
+      referencePrice = maxSingle ?? maxGrok;
+      buybackTotal += referencePrice * quantity;
+    } else noPrice += quantity;
+    if (referencePrice !== null) {
       pricedCount += quantity;
       if (known(lot.unitCost)) {
-        comparableBuyback += picked.price * quantity;
+        comparableBuyback += referencePrice * quantity;
         comparableCost += num(lot.unitCost) * quantity;
         comparableQuantity += quantity;
       }
-    } else if (maxSingle !== null || maxGrok !== null) {
-      buybackTotal += (maxSingle ?? maxGrok) * quantity;
-      pricedCount += quantity;
-    } else noPrice += quantity;
+    }
   }
   const sales = transactions.filter(t => t.type === 'sale');
   const knownSales = sales.filter(t => known(t.acquisitionCost));
@@ -275,7 +279,7 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 <div class="metrics">
 ${metric('在庫の参考評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考価格を合算（未確認の参考価格を含む）' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
-${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
+${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','在庫の参考価格と原価を比較（原価不明・相場未取得分は除外）')}
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
