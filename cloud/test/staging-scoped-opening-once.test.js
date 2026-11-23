@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { emptyV2 } from '../../v2/core.js';
 import { applyChatCommand } from '../src/v2-command.js';
-import { run } from '../scripts/staging-scoped-opening-once.js';
+import { run, assertCommandWorkerPaused, classifyRepairSources } from '../scripts/staging-scoped-opening-once.js';
 
 const product = 'Example Card BOX';
 const date = '2026-11-22';
@@ -126,4 +126,42 @@ test('staging apply does not queue original request when approval or revision is
     if (old === undefined) delete process.env.TV_STAGING_REPAIR_APPROVED;
     else process.env.TV_STAGING_REPAIR_APPROVED = old;
   }
+});
+
+test('scoped repair requires the precise command worker Scheduler to be paused', () => {
+  const url = 'https://toreca-vault-staging-235108293761.asia-northeast1.run.app';
+  const job = { state: 'ENABLED', httpTarget: { uri: url + '/internal/worker/commands', httpMethod: 'POST' } };
+  assert.throws(() => assertCommandWorkerPaused([], url), /PAUSED/);
+  assert.throws(() => assertCommandWorkerPaused([job], url), /PAUSED/);
+  assert.throws(() => assertCommandWorkerPaused([{ ...job, state: 'PAUSED', httpTarget: { ...job.httpTarget, uri: url + '/other' } }], url), /PAUSED/);
+  assert.throws(() => assertCommandWorkerPaused([job, { ...job, state: 'PAUSED' }], url), /PAUSED/);
+  assert.doesNotThrow(() => assertCommandWorkerPaused([{ ...job, state: 'PAUSED' }], url));
+});
+
+test('read-only diagnosis identifies historically wrong FIFO sale provenance without exposing identities', async () => {
+  const env = fixtures();
+  // Simulate equal-date purchases and the generic FIFO sale taking target-a
+  // instead of Mint. This is the reason explicit source matching is mandatory.
+  let state = emptyV2();
+  for (const cmd of [p('mint', 'Mint'), p('a', 'Shop A'), p('b', 'Shop B'), sale]) {
+    state = applyChatCommand(state, cmd).state;
+  }
+  const stale = { payload: state, revision: state.revision, lastMutationId: state.lastMutationId };
+  env.store.read = async () => structuredClone(stale);
+  const diag = classifyRepairSources({
+    canonical: stale,
+    purchaseRows: [56, 57].map(n => ({ rowNumber: n, values: [env.rows.get(n)[0].requestId,
+      JSON.stringify(env.rows.get(n)[0]), '', 'v2-applied'] })),
+    excludedPurchaseRow: { rowNumber: 58, values: [env.rows.get(58)[0].requestId,
+      JSON.stringify(env.rows.get(58)[0]), '', 'v2-applied'] }
+  });
+  assert.deepEqual(diag.targets, ['missing', 'present-and-matched']);
+  assert.equal(diag.excluded, 'present-and-matched');
+  const log = [];
+  await assert.rejects(() => run({ ...env, apply: false, output: line => log.push(line) }), /source-lot discrepancy/);
+  assert.match(log.join('\n'), /Source lot 1: missing/);
+  assert.doesNotMatch(log.join('\n'), /Shop A|Shop B|Mint/);
+  assert.equal(env.store.writes, 0);
+  assert.equal(env.provider.writes.length, 0);
+  assert.deepEqual(env.queue.calls, []);
 });
