@@ -74,3 +74,22 @@ node cloud/scripts/staging-op18-canonical-inspect.js --inspect
 ```
 
 It prints the actual canonical revision, whether each of the two target lots and the unrelated Mint sold-source lot currently exist with matching original purchase details, whether the Mint sale and opening history are present, and whether the resulting stock pattern is exact / suspicious historical FIFO / requires manual review. If Firestore is inaccessible, it prints only the sanitized failure category. **A successful `--inspect` is not permission to perform a mutation.** Compare with the private Intake readback and validate the original revision before any subsequent staging-only CAS action. Rows 62–64 must never be re-appended, and the PR #108 broad retry stays disabled.
+
+
+## 2026-11-23 — Original-Intake #64 one-shot canonical provenance repair (safe plan first)
+
+**Latest known read-only evidence:** staging canonical revision **2970**, Furuichi target lot present-and-matched, BicCamera target lot missing, independently sold Mint source lot present-and-matched, Mint sale transaction verified, original opening not recorded. Thus the original FIFO sale likely consumed the wrong purchase lot. This is a **possible historical FIFO misattribution**, not evidence that an extra two boxes must be blindly subtracted.
+
+Run this read-only plan in the existing authenticated Android Cloud Shell:
+
+\`\`\`bash
+cd ~/tv-scoped-op18
+git pull --ff-only origin build/cloudrun-firestore-foundation-20261103
+node cloud/scripts/staging-op18-provenance-repair.js --inspect
+\`\`\`
+
+The new operator verifies the three original purchase transactions, Mint sale and original opening identity against hashes independently checked from the private Intake rows 56–58, 61, 64. It creates an **in-memory** plan using \`planScopedBoxOpeningRepair\`, confirms the original 2BOX acquisition cost is **¥11,520**, corrects only the Mint-sale provenance and creates **one** 2BOX opening under the original row-64 request ID. It does not read Sheets, request impersonation permissions, register a new row or mutate any data during \`--inspect\`.
+
+**Do not run the following write procedure until the read-only plan and current Intake row status have been separately reviewed.** Staging-only \`--apply\` requires (a) explicit double opt-in; (b) exact current revision, never a guessed or stale value; (c) BOTH exact staging intake and staging command Scheduler workers uniquely verified PAUSED by \`verifiedStagingConfiguration\`; (d) private local backup written before any mutation; (e) original request queue create-once/lease; (f) a single Firestore revision-CAS save; (g) full canonical readback and queue \`done/v2-applied\` settlement. Any ambiguity blocks. Old V2 and production are never targeted.
+
+**Important receipt limitation:** the operator deliberately does not write Google Sheets because this operator's Cloud Shell ADC has Sheets HTTP 403. After a successful write verified independently, reconcile **only the original Intake row 64** through the owner's already authorized Sheets connector and verify the receipt; do not append a second row and do not change existing rows 62–63. Do not resume the schedulers until queue/canonical/receipt consistency and pending-work compatibility are checked. PR #108 broad retry remains disabled.
