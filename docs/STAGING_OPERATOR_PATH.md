@@ -19,9 +19,10 @@ This is a *staging-only, fail-closed* remote retry entry point. It is **not yet 
 
 ## Later normal-Chat usage
 
-A connected GitHub account can open an Issue on `manato-maker/toreca-vault` with exact title:
+A connected GitHub account can open an Issue on `manato-maker/toreca-vault` with one of these exact titles:
 
-`[Toreca Vault] Staging intake retry`
+- `[Toreca Vault] Staging intake check` (read-only diagnostics)
+- `[Toreca Vault] Staging intake retry` (re-invoke the existing staging Intake Scheduler job)
 
 Issue body should be empty or fixed generic text. **No product names, dates, prices, quantities, emails, request IDs, Sheet ID, or secrets in the public Issue**.
 
