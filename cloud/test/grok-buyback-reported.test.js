@@ -70,7 +70,8 @@ test('all seven reported boxes and six product families are strict matching and 
   assert.match(html,/100/);
   assert.match(html,/200/);
   assert.match(html,/参考買取評価額/);
-  assert.match(html,/買取相場未取得/);
+  assert.match(html,/参考買取評価額<\/div><strong>[¥￥]700<\/strong>/);
+  assert.match(html,/出典確認済み買取額<\/div><strong>未取得<\/strong>/);
   assert.doesNotMatch(html,/確認済み評価としてGrok/);
 });
 test('the batch is idempotent and blocks any quantity mismatch or contradictory condition',()=>{
