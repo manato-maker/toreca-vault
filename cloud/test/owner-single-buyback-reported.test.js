@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {emptyV2} from '../../v2/core.js';
 import {renderDashboard} from '../src/dashboard-view.js';
 import {parseOwnerSinglePrices,previewOwnerSinglePrices,ownerSingleReportedOffersForLot} from '../src/owner-single-buyback-reported.js';
-import {applyOwnerSinglePrices} from '../scripts/staging-owner-single-buyback.js';
+import {applyOwnerSinglePrices,inspectOwnerSinglePersistence,classifyFirestoreError} from '../scripts/staging-owner-single-buyback.js';
 const privateInput={
   reportDate:'2026-04-03',expectedLots:3,expectedCards:4,
   priceSpec:'AA_001/100=1,200,20260403,f;BB_002/100=2,450,20260402,k,m'
@@ -136,4 +136,33 @@ test('contradictory legacy number and product identity fail closed before CAS',(
     priceSpec:privateInput.priceSpec+';CC_003/100=1,120,20260403,k'};
   assert.throws(()=>previewOwnerSinglePrices(original,input),
     /card number contradicts explicit expansion identity/);
+});
+
+test('read-only status reports no owner quotes after failed Firestore write',async()=>{
+  const store=fakeStore(),logs=[];
+  const result=await inspectOwnerSinglePersistence({store,out:x=>logs.push(x)});
+  assert.equal(result.quotes,0);
+  assert.equal(result.audits,0);
+  assert.equal(result.revision,45);
+  assert.equal(store.writes,0);
+  assert.match(logs.join('\n'),/READ ONLY/);
+});
+test('read-only status recognizes a completed previous write without adding duplicates',async()=>{
+  const store=fakeStore(),home=mkdtempSync(join(tmpdir(),'single-persistence-'));
+  try{
+    await applyOwnerSinglePrices({store,privateInput,mode:'apply',home,out:()=>{}});
+    const logs=[];
+    const result=await inspectOwnerSinglePersistence({store,out:x=>logs.push(x)});
+    assert.equal(result.quotes,2);assert.equal(result.identities,2);
+    assert.equal(result.cardUnits,3);assert.equal(result.audits,1);
+    assert.equal(store.writes,1);
+  }finally{rmSync(home,{recursive:true,force:true});}
+});
+test('gRPC code 3 is invalid argument, not evidence of failed authentication or network loss',()=>{
+  assert.deepEqual(classifyFirestoreError({code:3,message:'3 INVALID_ARGUMENT: index size exceeded'}),
+    {code:'3',category:'index-constraint'});
+  assert.deepEqual(classifyFirestoreError({code:3,message:'INVALID_ARGUMENT: unknown'}),
+    {code:'3',category:'invalid-argument-unspecified'});
+  assert.deepEqual(classifyFirestoreError({code:7,message:'PERMISSION_DENIED'}),
+    {code:'7',category:'permission-denied'});
 });
