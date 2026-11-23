@@ -114,7 +114,7 @@ function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers =
     ? '<div class="shop-offers" aria-label="チャット調査の未検証シングルカード買取額">' +
       '<span class="minor">カード調査（元掲載未検証）</span>' +
       singleOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore || '調査報告') + ' ' +
-        esc(money(q.price)) + (q.reportedDate ? '（' + esc(q.reportedDate) + '）' : '') + '</span>').join('') +
+        esc(money(q.price)) + (q.claimedFinish && q.claimedFinish !== '通常・加工未指定' ? ' · ' + esc(q.claimedFinish) : '') + (q.reportedDate ? '（' + esc(q.reportedDate) + '）' : '') + '</span>').join('') +
       '</div>' : '';
   return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(displayProductName) +
     '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
