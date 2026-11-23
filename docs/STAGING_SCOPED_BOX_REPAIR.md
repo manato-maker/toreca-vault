@@ -57,3 +57,20 @@ The current one-shot operator reads the existing opening row 64, the two already
 ## Limits
 
 This is an explicitly staged **operator** path requiring Google Cloud permissions. It is not an already authenticated normal-Chat-to-Firestore bridge. Nothing in this code authorizes old V2 or production writes, grants extra IAM roles, deploys Cloud Run, or guarantees completion without real canonical and UI readback.
+
+
+## 2026-11-23: read-only canonical-only alternative when Cloud Shell Sheets access is denied
+
+The signed-in Cloud Shell operator had ADC available but Sheets returned HTTP 403; a short-lived staging service-account impersonation attempt also returned IAM 403. **Do not grant Token Creator, share the Sheet with additional identities, or weaken IAM as a workaround.**
+
+A new standalone diagnostic reads **only** the fixed staging Firestore canonical under the exact project verified through `gcloud`. Its expected purchase/sale/request IDs and merchant/product values were cross-checked in the existing private Intake rows 56–58, 61, and 64 through the owner's separately connected Sheets account, then stored only as SHA-256 digests. The diagnostic has no Sheets client, no impersonation, no queue, no scheduler calls, and **no write mode**.
+
+From the authenticated Cloud Shell:
+
+```bash
+cd ~/tv-scoped-op18
+git pull --ff-only origin build/cloudrun-firestore-foundation-20261103
+node cloud/scripts/staging-op18-canonical-inspect.js --inspect
+```
+
+It prints the actual canonical revision, whether each of the two target lots and the unrelated Mint sold-source lot currently exist with matching original purchase details, whether the Mint sale and opening history are present, and whether the resulting stock pattern is exact / suspicious historical FIFO / requires manual review. If Firestore is inaccessible, it prints only the sanitized failure category. **A successful `--inspect` is not permission to perform a mutation.** Compare with the private Intake readback and validate the original revision before any subsequent staging-only CAS action. Rows 62–64 must never be re-appended, and the PR #108 broad retry stays disabled.
