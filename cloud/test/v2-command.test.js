@@ -52,7 +52,11 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   }).state;
   const opened = run(state, {
     type: 'open-box', requestId: 'op18-open-2', product: '神の支配【OP-18】',
-    quantity: 2, date: '2026-11-22'
+    quantity: 2, date: '2026-11-22', expectedRevision: state.revision,
+    sourceLots: [
+      { lotId: 'chat-purchase-op18-furuichi-lot', purchaseRequestId: 'op18-furuichi', store: 'ふるいち 久宝寺店', acquiredAt: '2026-11-22', unitCost: 5760, quantity: 1 },
+      { lotId: 'chat-purchase-op18-bic-lot', purchaseRequestId: 'op18-bic', store: 'ビックカメラ アリオ八尾店', acquiredAt: '2026-11-22', unitCost: 5760, quantity: 1 }
+    ]
   });
   state = opened.state;
   assert.equal(state.inventoryLots.length, 0);
@@ -60,8 +64,8 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   assert.equal(opening.type, 'opening');
   assert.equal(opening.quantity, 2);
   assert.equal(opening.acquisitionCost, 11520);
-  assert.equal(Object.hasOwn(opening, 'sourcePurchaseRequestIds'), false);
-  assert.equal(Object.hasOwn(opening, 'sourceStores'), false);
+  assert.deepEqual(opening.sourcePurchaseRequestIds, ['op18-furuichi', 'op18-bic']);
+  assert.deepEqual(opening.sourceLotIds, ['chat-purchase-op18-furuichi-lot', 'chat-purchase-op18-bic-lot']);
 
   const saleCommand = {
     type: 'sale-aggregate', requestId: 'op18-singles-sale',
@@ -95,6 +99,47 @@ test('opening boxes removes BOX stock and aggregate sales record proceeds withou
   assert.equal(arSale.state.transactions.at(-1).total, 6000);
   assert.equal(arSale.state.transactions.at(-1).quantity, 30);
   assert.equal(arSale.state.inventoryLots.length, 0);
+});
+
+test('multi-source BOX opening fails closed without explicit source or revision', () => {
+  let state = run(emptyV2(), { type: 'purchase', requestId: 'box-a', product: 'BOX X', category: 'BOX', quantity: 1, unitCost: 100, date: '2026-11-20', store: 'A' }).state;
+  state = run(state, { type: 'purchase', requestId: 'box-b', product: 'BOX X', category: 'BOX', quantity: 1, unitCost: 100, date: '2026-11-21', store: 'B' }).state;
+  const before = structuredClone(state);
+  const request = { type: 'open-box', requestId: 'opening', product: 'BOX X', quantity: 2, date: '2026-11-22' };
+  assert.throws(() => run(state, request), /ambiguous/);
+  assert.deepEqual(state, before);
+  const sources = [
+    { lotId: 'chat-purchase-box-a-lot', purchaseRequestId: 'box-a', store: 'A', acquiredAt: '2026-11-20', unitCost: 100, quantity: 1 },
+    { lotId: 'chat-purchase-box-b-lot', purchaseRequestId: 'box-b', store: 'B', acquiredAt: '2026-11-21', unitCost: 100, quantity: 1 }
+  ];
+  assert.throws(() => run(state, { ...request, sourceLots: sources }), /expectedRevision/);
+  assert.throws(() => run(state, { ...request, expectedRevision: state.revision - 1, sourceLots: sources }), (error) => error.name === 'RevisionConflict');
+  assert.throws(() => run(state, { ...request, expectedRevision: state.revision, sourceLots: [sources[0], sources[0]] }), /duplicated/);
+  assert.throws(() => run(state, { ...request, expectedRevision: state.revision, sourceLots: [sources[0], {...sources[1], store: 'X'}] }), /not found/);
+  assert.throws(() => run(state, { ...request, expectedRevision: state.revision, sourceLots: [sources[0], {...sources[1], unitCost: 101}] }), /not found/);
+  assert.deepEqual(state, before);
+  const opened = run(state, { ...request, expectedRevision: state.revision, sourceLots: sources });
+  assert.equal(opened.state.inventoryLots.length, 0);
+  assert.equal(opened.state.transactions.filter(tx => tx.type === 'purchase').length, 2);
+  assert.equal(opened.state.transactions.at(-1).acquisitionCost, 200);
+  assert.equal(run(opened.state, { ...request, expectedRevision: state.revision, sourceLots: sources }).duplicate, true);
+});
+
+test('source-bound BOX opening never consumes a different purchase even when the product matches', () => {
+  const purchase = (state, requestId, store) => run(state, {type:'purchase', requestId, category:'BOX',
+    product:'BOX X', quantity:1, unitCost:50, date:'2026-11-22', store}).state;
+  let state = purchase(emptyV2(), 'p-mint', 'Mint Games');
+  state = purchase(state, 'p-a', 'A');
+  state = purchase(state, 'p-b', 'B');
+  const sources = ['p-a', 'p-b'].map((id, i) => ({
+    lotId: `chat-purchase-${id}-lot`, purchaseRequestId: id,
+    store: i ? 'B' : 'A', acquiredAt:'2026-11-22', unitCost:50, quantity:1
+  }));
+  const opened = run(state, {type:'open-box',requestId:'open-two',product:'BOX X',quantity:2,
+    date:'2026-11-22', expectedRevision:state.revision,sourceLots:sources});
+  assert.deepEqual(opened.state.inventoryLots.map(l => l.requestId), ['p-mint']);
+  assert.equal(opened.state.inventoryLots[0].quantity, 1);
+  assert.equal(opened.state.transactions.at(-1).acquisitionCost, 100);
 });
 
 test('aggregate sales reject inconsistent totals without requiring box provenance', () => {
