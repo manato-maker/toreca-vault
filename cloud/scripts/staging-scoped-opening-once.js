@@ -32,6 +32,29 @@ const OPENING_ROW = 64;
 
 class Blocked extends Error {}
 
+/** Expose only the failed operation and a bounded error category. Never echo
+ * exception messages, HTTP response bodies, identifiers, URLs, or tokens. */
+export async function stageRead(label, operation) {
+  try { return await operation(); }
+  catch (error) {
+    if (error instanceof Blocked) throw error;
+    const code = String(error?.code ?? error?.status ?? error?.statusCode
+      ?? error?.response?.status ?? '');
+    const category = ['401', '16', 'UNAUTHENTICATED'].includes(code)
+      ? 'unauthenticated (check Cloud Shell application-default credentials)'
+      : ['403', '7', 'PERMISSION_DENIED'].includes(code)
+        ? 'permission denied (check source identity and scopes)'
+        : ['404', '5', 'NOT_FOUND'].includes(code)
+          ? 'missing resource (check staging binding)'
+          : ['429', '8', 'RESOURCE_EXHAUSTED'].includes(code)
+            ? 'quota or resource limit'
+            : ['4', '14', 'DEADLINE_EXCEEDED', 'UNAVAILABLE'].includes(code)
+              ? 'remote service unavailable or timed out'
+              : 'operation failed (check credentials, permissions, or data shape)';
+    throw new Blocked(label + ': ' + category);
+  }
+}
+
 function cli(...args) {
   try {
     return execFileSync('gcloud', args, { encoding: 'utf8', timeout: 45000, maxBuffer: 500000 }).trim();
@@ -170,11 +193,13 @@ function originalOpening(rowValue) {
 }
 
 export async function run({ apply, expectedRevision, store, queue, provider, spreadsheetId, output = console.log, backup = privateBackup } = {}) {
-  const [openingRow, ...sourceRows] = await Promise.all([
+  const [openingRow, ...sourceRows] = await stageRead('Intake Sheets source-row read', () => Promise.all([
     row(provider, OPENING_ROW), ...PURCHASE_ROWS.map(number => row(provider, number))
-  ]);
-  const excluded = await row(provider, EXCLUDED_PURCHASE_ROW);
-  const excludedSale = await row(provider, EXCLUDED_SALE_ROW);
+  ]));
+  const excluded = await stageRead('Intake Sheets excluded purchase read',
+    () => row(provider, EXCLUDED_PURCHASE_ROW));
+  const excludedSale = await stageRead('Intake Sheets excluded sale read',
+    () => row(provider, EXCLUDED_SALE_ROW));
   const otherPurchase = parseGoogleSheetsIntakeRow(excluded).command;
   const otherSale = parseGoogleSheetsIntakeRow(excludedSale).command;
   if (String(excluded.values[3] || '') !== 'v2-applied'
@@ -185,12 +210,14 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     throw new Blocked('separate previously sold BOX evidence differs from verified Intake');
   }
   const opening = originalOpening(openingRow);
-  const queueRow = await queue.inspect(opening.requestId);
+  const queueRow = await stageRead('Firestore command queue lookup',
+    () => queue.inspect(opening.requestId));
   if (queueRow && (queueRow.status !== 'pending'
     || JSON.stringify(queueRow.command) !== JSON.stringify(opening))) {
     throw new Blocked('existing repair request is not an identical pending command');
   }
-  const canonical = await store.read();
+  const canonical = await stageRead('Firestore canonical snapshot read',
+    () => store.read());
   const sourceStatus = classifyRepairSources({ canonical, purchaseRows: sourceRows,
     excludedPurchaseRow: excluded });
   output('Canonical revision: ' + sourceStatus.revision);
@@ -298,9 +325,11 @@ async function main(argv = process.argv.slice(2)) {
   const { GoogleAuth } = await import('google-auth-library');
   const scopes = args.apply ? ['https://www.googleapis.com/auth/spreadsheets']
     : ['https://www.googleapis.com/auth/spreadsheets.readonly'];
-  const client = await new GoogleAuth({ scopes }).getClient();
+  const client = await stageRead('Cloud Shell application-default authentication',
+    () => new GoogleAuth({ scopes }).getClient());
   const { Firestore } = await import('@google-cloud/firestore');
-  const firestore = new Firestore({ projectId: PROJECT });
+  const firestore = await stageRead('Firestore SDK initialization',
+    () => new Firestore({ projectId: PROJECT }));
   const store = createFirestoreStore(firestore, DOCUMENT);
   const queue = createFirestoreCommandQueue(firestore);
   const provider = createGoogleSheetsIntakeProvider({
