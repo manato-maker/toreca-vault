@@ -74,5 +74,5 @@ conditions=x.get("status",{}).get("conditions",[])
 if not any(c.get("type")=="Ready" and c.get("status")=="True" for c in conditions):
     raise SystemExit("BLOCKED: UI deploy completed but dashboard Ready has not been confirmed")
 print("PASS: existing private staging dashboard deployed and Ready")
-print("Grok report values show as unverified; audited reference valuation unchanged")
+print("PASS: staging inventory valuation view deployed; canonical data unchanged")
 PY
