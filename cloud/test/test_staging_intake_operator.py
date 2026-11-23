@@ -26,7 +26,7 @@ class OperatorContract(unittest.TestCase):
             'gcloud iam workload-identity-pools create',
             'gcloud iam workload-identity-pools providers create-oidc',
         ):
-            match = re.search(re.escape(command) + r'[\\s\\S]*?--display-name="([^"]+)"', script)
+            match = re.search(re.escape(command) + r'[\s\S]*?--display-name="([^"]+)"', script)
             self.assertIsNotNone(match, command)
             self.assertLessEqual(len(match.group(1)), 32, command)
 
