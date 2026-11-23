@@ -8,6 +8,8 @@
  * It reads them from the existing PRIVATE Intake and Firestore canonical.
  */
 import { createHash } from 'node:crypto';
+import { mkdirSync, openSync, writeFileSync, fsyncSync, closeSync } from 'node:fs';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createFirestoreStore } from '../src/firestore-store.js';
@@ -89,6 +91,24 @@ function verifiedStagingConfiguration({ apply }) {
   return id;
 }
 
+function privateBackup(canonical) {
+  const home = process.env.HOME;
+  if (typeof home !== 'string' || !home.startsWith('/')) {
+    throw new Blocked('operator HOME unavailable for a private snapshot backup');
+  }
+  const dir = join(home, '.toreca-vault-staging-private-backups');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const name = 'before-scoped-opening-rev-' + canonical.revision + '-' + Date.now() + '.json';
+  const file = join(dir, name);
+  const fd = openSync(file, 'wx', 0o600);
+  try {
+    writeFileSync(fd, JSON.stringify({ project: PROJECT, document: DOCUMENT,
+      capturedAt: new Date().toISOString(), snapshot: canonical }) + '\\n', 'utf8');
+    fsyncSync(fd);
+  } finally { closeSync(fd); }
+  return file;
+}
+
 async function row(provider, number) {
   const items = await provider.readRows({ startRow: number, limit: 1 });
   if (items.length !== 1 || items[0].rowNumber !== number) {
@@ -100,7 +120,7 @@ function originalOpening(rowValue) {
   return parseGoogleSheetsIntakeRow(rowValue).command;
 }
 
-export async function run({ apply, expectedRevision, store, queue, provider, spreadsheetId, output = console.log } = {}) {
+export async function run({ apply, expectedRevision, store, queue, provider, spreadsheetId, output = console.log, backup = privateBackup } = {}) {
   const [openingRow, ...sourceRows] = await Promise.all([
     row(provider, OPENING_ROW), ...PURCHASE_ROWS.map(number => row(provider, number))
   ]);
@@ -138,7 +158,7 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     || expectedRevision !== plan.expectedRevision) {
     throw new Blocked('explicit approval and matching expected revision required');
   }
-  const spreadsheetIdHash = createHash('sha256').update(spreadsheetId).digest('hex');
+  // Snapshot backup is a hard prerequisite to any queue, sheet or Firestore change.\n  backup(canonical);\n  output('PASS: private local staging snapshot backup written before mutation');\n  const spreadsheetIdHash = createHash('sha256').update(spreadsheetId).digest('hex');
   const queued = await queue.enqueue({
     requestId: opening.requestId, command: opening,
     intakeReceipt: { spreadsheetIdHash, rowNumber: OPENING_ROW }
