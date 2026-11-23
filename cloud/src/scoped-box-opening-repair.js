@@ -95,6 +95,10 @@ export async function applyScopedBoxOpeningRepair({ store, plan } = {}) {
   // Refuse a stale plan even before the Firestore CAS. The CAS remains decisive.
   const before = await store.read();
   if (!before || before.revision !== plan.expectedRevision) fail('canonical revision changed before save');
+  const openedIds = new Set(plan.sourceLots.map(source => source.lotId));
+  const previousUnrelatedLots = before.payload.inventoryLots.filter(lot => !openedIds.has(lot.id));
+  const previousPurchaseRows = plan.sourceLots.map(source => before.payload.transactions.find(tx => tx.id === `chat-purchase-${source.purchaseRequestId}`));
+  if (previousPurchaseRows.some(row => !row)) fail('original purchase history missing at save time');
   const written = await store.save({
     expectedRevision: plan.expectedRevision,
     mutationId: plan.mutationId,
@@ -109,6 +113,12 @@ export async function applyScopedBoxOpeningRepair({ store, plan } = {}) {
       && JSON.stringify(tx.sourceLotIds) === JSON.stringify(plan.sourceLots.map(l => l.lotId)))
     || plan.sourceLots.some(source => after.payload.inventoryLots.some(lot => lot.id === source.lotId))) {
     fail('post-write canonical opening readback did not match');
+  }
+  const nextUnrelatedLots = after.payload.inventoryLots.filter(lot => !openedIds.has(lot.id));
+  const nextPurchaseRows = plan.sourceLots.map(source => after.payload.transactions.find(tx => tx.id === `chat-purchase-${source.purchaseRequestId}`));
+  if (JSON.stringify(nextUnrelatedLots) !== JSON.stringify(previousUnrelatedLots)
+    || JSON.stringify(nextPurchaseRows) !== JSON.stringify(previousPurchaseRows)) {
+    fail('unrelated inventory or original purchase cost changed during repair');
   }
   return { status: 'canonical-readback-verified', revision: after.revision,
     quantity: plan.quantity };
