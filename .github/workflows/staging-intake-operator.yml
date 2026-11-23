@@ -1,0 +1,72 @@
+name: Toreca Vault staging intake operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check only, or retry the existing staging intake Scheduler job
+        type: choice
+        options: [check, retry]
+        required: true
+        default: check
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: tv-staging-intake-operator
+  cancel-in-progress: false
+
+jobs:
+  intake-operator:
+    # Do not parse issue body or use its contents in commands.
+    # An exact-title issue from the repository owner is the only Chat trigger.
+    if: >-
+      github.repository == 'manato-maker/toreca-vault' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'manato-maker' &&
+      (github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'issues' &&
+         (github.event.issue.title == '[Toreca Vault] Staging intake retry' ||
+          github.event.issue.title == '[Toreca Vault] Staging intake check') &&
+         github.event.issue.user.login == 'manato-maker' &&
+         github.actor == 'manato-maker'))
+    runs-on: ubuntu-latest
+    environment: staging-intake-operator
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline guard tests
+        run: python3 -m unittest discover -s cloud/test -p test_staging_intake_operator.py
+      - name: Require a configured staging-only identity
+        env:
+          PROVIDER: ${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.TV_STAGING_OPERATOR_SA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$PROVIDER" || -z "$SERVICE_ACCOUNT" ]]; then
+            echo 'BLOCKED: staging operator identity is not configured.'
+            exit 2
+          fi
+      - name: Authenticate with short-lived GitHub OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
+          service_account: ${{ vars.TV_STAGING_OPERATOR_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Validate staging target and execute selected bounded operation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ inputs.mode }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          TV_STAGING_OPERATOR_RETRY_ENABLED: ${{ vars.TV_STAGING_OPERATOR_RETRY_ENABLED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode=retry
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then mode="$INPUT_MODE"; fi
+          if [[ "$EVENT_NAME" == issues && "$ISSUE_TITLE" == "[Toreca Vault] Staging intake check" ]]; then mode=check; fi
+          python3 cloud/scripts/staging-intake-operator.py "$mode"
