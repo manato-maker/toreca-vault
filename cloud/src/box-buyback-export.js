@@ -22,7 +22,8 @@ export function classifyBoxCondition(raw) {
   }
   if (shrinkPresent) return { label: 'シュリンクあり', group: 'target' };
   if (shrinkAbsent) return { label: 'シュリンクなし', group: 'target' };
-  if (tapePresent) return { label: 'テープ付き（未カット）', group: 'target' };
+  if (/テープ(?:未カット|未切断)/.test(value)) return { label: 'テープ未カット', group: 'target' };
+  if (tapePresent) return { label: 'テープ付き（カット有無未確認）', group: 'review' };
   if (tapeAbsent) return { label: 'テープなし（要確認）', group: 'review' };
   return { label: 'シュリンク・テープ状態未記録', group: 'review' };
 }
@@ -41,7 +42,7 @@ export function buildBoxBuybackExport(canonical) {
       throw new Error('BOX inventory quantity requires review; no export created');
     }
     if (quantity === 0) continue;
-    const product = cleanName(lot.productKey || lot.product);
+    const product = cleanName(lot.product || lot.productKey);
     if (!product || product.length > 500) throw new Error('BOX inventory product name is invalid');
     const state = classifyBoxCondition(lot.condition);
     const key = JSON.stringify([norm(product),state.group,state.label]);
@@ -75,7 +76,7 @@ export function formatBoxBuybackExport(exported, time = new Date()) {
     '元データ: staging Firestore 正本 revision '+exported.revision,
     '在庫の真偽はこの取得時点に限る。買取価格の照合に使い、固定データを最新在庫として扱わないこと。',
     '',
-    '■ 調査対象（未開封の封印状態を記録済みのBOX）'
+    '■ 買取価格の調査対象（状態を確認できたBOX）'
   ];
   if(exported.target.length===0) lines.push('該当なし');
   for(const row of exported.target)lines.push('- '+row.product+'｜'+row.quantity+'BOX｜'+row.label);
