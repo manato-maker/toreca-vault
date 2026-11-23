@@ -197,14 +197,20 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
   output('Source lot 1: ' + sourceStatus.targets[0]);
   output('Source lot 2: ' + sourceStatus.targets[1]);
   output('Excluded sold-source lot: ' + sourceStatus.excluded);
-  if (!sourceStatus.targets.every(s => s === 'present-and-matched')
-    || sourceStatus.excluded === 'present-but-mismatched') {
-    throw new Blocked('source-lot discrepancy; no writes. Review historical FIFO sale provenance');
+  const direct = sourceStatus.targets.every(s => s === 'present-and-matched')
+    && sourceStatus.excluded === 'missing';
+  const potentialOldFifo = sourceStatus.targets.filter(s => s === 'missing').length === 1
+    && sourceStatus.targets.filter(s => s === 'present-and-matched').length === 1
+    && sourceStatus.excluded === 'present-and-matched';
+  if (!direct && !potentialOldFifo) {
+    throw new Blocked('source-lot discrepancy; no writes. Manual provenance review required');
   }
   const plan = planScopedBoxOpeningRepair({
     canonical, openingRow, purchaseRows: sourceRows,
-    excludedRequestIds: [otherPurchase.requestId]
+    excludedRequestIds: [otherPurchase.requestId],
+    excludedPurchaseRow: excluded, excludedSaleRow: excludedSale
   });
+  output('Historical sale provenance correction planned: ' + Boolean(plan.provenanceCorrection));
   output('PASS: original private Intake evidence and staging source lots match');
   output('Expected canonical revision: ' + plan.expectedRevision);
   output('Planned opened BOX quantity: ' + plan.quantity);
@@ -216,6 +222,9 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
   if (process.env.TV_STAGING_REPAIR_APPROVED !== 'true'
     || expectedRevision !== plan.expectedRevision) {
     throw new Blocked('explicit approval and matching expected revision required');
+  }
+  if (plan.provenanceCorrection && process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED !== 'true') {
+    throw new Blocked('separate historical sale provenance repair approval is required');
   }
   // Snapshot backup is a hard prerequisite to any queue, sheet or Firestore change. 
   backup(canonical);
@@ -248,8 +257,12 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     }
     const fresh = planScopedBoxOpeningRepair({
       canonical: nowState, openingRow, purchaseRows: sourceRows,
-      excludedRequestIds: [otherPurchase.requestId]
+      excludedRequestIds: [otherPurchase.requestId],
+      excludedPurchaseRow: excluded, excludedSaleRow: excludedSale
     });
+    if (JSON.stringify(fresh.provenanceCorrection) !== JSON.stringify(plan.provenanceCorrection)) {
+      throw new Blocked('source provenance plan changed since dry-run');
+    }
     const result = await applyScopedBoxOpeningRepair({ store, plan: fresh });
     saved = true;
     const settled = await queue.finish(opening.requestId, claim.claimToken, {
