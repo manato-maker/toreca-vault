@@ -6,6 +6,7 @@ job, URL or command payload. This does not directly edit Sheets or Firestore.
 """
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -54,7 +55,11 @@ def validate_target(project_number, service, job):
     if not isinstance(url, str) or not url.startswith('https://'):
         raise Blocked('staging service URL is missing')
     url_parts = urlsplit(url)
-    if url_parts.path not in ('', '/') or url_parts.query or url_parts.fragment:
+    if (url_parts.scheme != 'https' or url_parts.username or url_parts.password
+        or url_parts.port is not None or not url_parts.hostname
+        or not url_parts.hostname.startswith(SERVICE + '-')
+        or not url_parts.hostname.endswith('.run.app')
+        or url_parts.path not in ('', '/') or url_parts.query or url_parts.fragment):
         raise Blocked('staging service URL is invalid')
     traffic = (service.get('status') or {}).get('traffic') or []
     active = [v for v in traffic if isinstance(v, dict) and v.get('percent', 0) > 0]
@@ -108,6 +113,11 @@ def validate_serving_revision(revision):
 
 
 def run(mode):
+    # An explicitly enabled retry is required; diagnostic checks stay read-only.
+    # This opt-in must remain disabled until unsupported Intake command types
+    # are repaired and staging readback has been independently verified.
+    if mode == 'retry' and os.environ.get('TV_STAGING_OPERATOR_RETRY_ENABLED') != 'true':
+        raise Blocked('retry is disabled; verify command compatibility and enable staging approval gate')
     number = gcloud('projects', 'describe', PROJECT, '--format=value(projectNumber)')
     service = gcloud_json('run', 'services', 'describe', SERVICE,
                           '--project', PROJECT, '--region', REGION, '--format=json')
