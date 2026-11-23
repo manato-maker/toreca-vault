@@ -49,11 +49,20 @@ function harness({receipt='queued',intake='PAUSED',commands='PAUSED'}={}){
   let jobs=workers();
   jobs.jobs[0].state=intake;
   jobs.jobs[1].state=commands;
-  const resumes=[];
+  const resumes=[],queueWrites=[];
   return {
-    f,resumes,
+    f,resumes,queueWrites,
     store:{read:async()=>structuredClone(f.canonical)},
-    queue:{inspect:async()=>structuredClone(f.queueRow)},
+    queue:{
+      inspect:async()=>structuredClone(f.queueRow),
+      setIntakeReceiptStatus:async(requestId,{state})=>{
+        queueWrites.push({requestId,state});
+        assert.equal(requestId,f.queueRow.requestId);
+        if(state!=='final')throw new Error('unexpected queue receipt update');
+        f.queueRow.intakeReceipt.state='final';
+        return {updated:true,status:'final'};
+      }
+    },
     readJobs:async()=>structuredClone(jobs),
     resumeJob:async name=>{
       resumes.push(name);
@@ -120,4 +129,56 @@ test('no resume if canonical revision changed even though job metadata is fine',
   const h=harness();h.f.canonical.payload.revision=2972;h.f.canonical.revision=2972;
   await assert.rejects(()=>run({...h,action:'--resume-intake',output:()=>{}}),/BLOCKED/);
   assert.deepEqual(h.resumes,[]);
+});
+
+
+test('verified owner Sheet timestamp permits only original OP-18 receipt finalization',async()=>{
+  const h=harness({intake:'ENABLED',commands:'PAUSED'});
+  h.f.queueRow.updatedAtMs=1795408147687;
+  const before=structuredClone(h.f.canonical);
+  const old=process.env.TV_OP18_RECEIPT_RECONCILED;
+  process.env.TV_OP18_RECEIPT_RECONCILED='true';
+  try{
+    const result=await run({...h,action:'--finalize-receipt',output:()=>{}});
+    assert.equal(result.status,'original-receipt-final');
+    assert.deepEqual(h.queueWrites,[{requestId:h.f.opening.requestId,state:'final'}]);
+    assert.equal(h.f.queueRow.intakeReceipt.state,'final');
+    assert.deepEqual(h.f.canonical,before);
+    assert.deepEqual(h.resumes,[]);
+    const again=await run({...h,action:'--finalize-receipt',output:()=>{}});
+    assert.equal(again.status,'already-final');
+    assert.equal(h.queueWrites.length,1);
+    const resumed=await run({...h,action:'--resume-commands',output:()=>{}});
+    assert.equal(resumed.status,'resumed-commands');
+    assert.deepEqual(h.resumes,['toreca-vault-staging-command-worker']);
+  }finally{
+    if(old===undefined)delete process.env.TV_OP18_RECEIPT_RECONCILED;
+    else process.env.TV_OP18_RECEIPT_RECONCILED=old;
+  }
+});
+
+test('receipt reconciliation fails closed for no approval, mismatched timestamp or worker state',async()=>{
+  const old=process.env.TV_OP18_RECEIPT_RECONCILED;
+  delete process.env.TV_OP18_RECEIPT_RECONCILED;
+  try{
+    const h=harness({intake:'ENABLED',commands:'PAUSED'});
+    h.f.queueRow.updatedAtMs=1795408147687;
+    await assert.rejects(()=>run({...h,action:'--finalize-receipt',output:()=>{}}),/attestation/);
+    assert.equal(h.queueWrites.length,0);
+    process.env.TV_OP18_RECEIPT_RECONCILED='true';
+    for(const options of [
+      {intake:'ENABLED',commands:'PAUSED',queueTime:1795408147688},
+      {intake:'PAUSED',commands:'PAUSED',queueTime:1795408147687},
+      {intake:'ENABLED',commands:'ENABLED',queueTime:1795408147687}
+    ]){
+      const state=harness(options);
+      state.f.queueRow.updatedAtMs=options.queueTime;
+      await assert.rejects(()=>run({...state,action:'--finalize-receipt',output:()=>{}}),/BLOCKED/);
+      assert.equal(state.queueWrites.length,0);
+      assert.deepEqual(state.resumes,[]);
+    }
+  }finally{
+    if(old===undefined)delete process.env.TV_OP18_RECEIPT_RECONCILED;
+    else process.env.TV_OP18_RECEIPT_RECONCILED=old;
+  }
 });
