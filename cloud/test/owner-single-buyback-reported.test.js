@@ -103,3 +103,37 @@ test('inspect writes nothing; apply safeguards private backup, CAS and verifies 
     assert.match(outputs.join('\n'),/purchases, sales and lotteries unchanged/);
   }finally{rmSync(home,{force:true,recursive:true});}
 });
+
+test('legacy inventory number-only set plus matching expansion in product resolves without guessing',()=>{
+  const original=sample();
+  const last=original.inventoryLots[2];
+  last.set='003/100';
+  last.product='テストカードC CC 003/100';
+  last.productKey=last.product;
+  const input={...privateInput,
+    priceSpec:privateInput.priceSpec+';CC_003/100=1,120,20260403,k'};
+  const result=previewOwnerSinglePrices(original,input);
+  assert.equal(result.changed,3);
+  assert.equal(result.pricedCards,4);
+  assert.equal(result.reportedTotalYen,1220);
+  assert.equal(result.unpricedCards,0);
+  assert.deepEqual(result.state.inventoryLots,original.inventoryLots);
+});
+test('bare number and foil descriptor without registered expansion cannot be priced as a guessed edition',()=>{
+  const original=sample();
+  original.inventoryLots[2].set='003/100';
+  original.inventoryLots[2].product='テストカードC（金色・特殊仕様）';
+  const input={...privateInput,
+    priceSpec:privateInput.priceSpec+';CC_003/100=1,120,20260403,k'};
+  assert.throws(()=>previewOwnerSinglePrices(original,input),
+    /card identity CC 003\/100 is not fully recorded/);
+});
+test('contradictory legacy number and product identity fail closed before CAS',()=>{
+  const original=sample();
+  original.inventoryLots[2].set='004/100';
+  original.inventoryLots[2].product='テストカードC CC 003/100';
+  const input={...privateInput,
+    priceSpec:privateInput.priceSpec+';CC_003/100=1,120,20260403,k'};
+  assert.throws(()=>previewOwnerSinglePrices(original,input),
+    /card number contradicts explicit expansion identity/);
+});
