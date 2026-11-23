@@ -93,3 +93,20 @@ The new operator verifies the three original purchase transactions, Mint sale an
 **Do not run the following write procedure until the read-only plan and current Intake row status have been separately reviewed.** Staging-only \`--apply\` requires (a) explicit double opt-in; (b) exact current revision, never a guessed or stale value; (c) BOTH exact staging intake and staging command Scheduler workers uniquely verified PAUSED by \`verifiedStagingConfiguration\`; (d) private local backup written before any mutation; (e) original request queue create-once/lease; (f) a single Firestore revision-CAS save; (g) full canonical readback and queue \`done/v2-applied\` settlement. Any ambiguity blocks. Old V2 and production are never targeted.
 
 **Important receipt limitation:** the operator deliberately does not write Google Sheets because this operator's Cloud Shell ADC has Sheets HTTP 403. After a successful write verified independently, reconcile **only the original Intake row 64** through the owner's already authorized Sheets connector and verify the receipt; do not append a second row and do not change existing rows 62–63. Do not resume the schedulers until queue/canonical/receipt consistency and pending-work compatibility are checked. PR #108 broad retry remains disabled.
+
+
+## 2026-11-23 — Guarded staging worker isolation on Android
+
+After the successful read-only OP-18 plan (revision 2970, Furuichi and BicCamera 1 BOX each, Mint Games sale source correction), the new `cloud/scripts/staging-op18-pause-workers.js` isolates **only** two exact staging Scheduler jobs.
+
+Read-only status:
+
+```bash
+cd ~/tv-scoped-op18
+git pull --ff-only origin build/cloudrun-firestore-foundation-20261103
+node cloud/scripts/staging-op18-pause-workers.js --status
+```
+
+After reviewing the exact two matches, run `node cloud/scripts/staging-op18-pause-workers.js --pause` **only immediately before separately approved staged write**. Commands are paused before Intake and both are confirmed PAUSED. This delays unrelated staging Intake reports; avoid an extended pause. The script cannot resume, retry, or mutate Firestore/Sheets. Never pause old V2 or production.
+
+The original-row CAS operator must still independently verify the currently PAUSED workers, current revision, source evidence, local backup, approval flags, exclusive queue lease and canonical readback. The historical 2970 is not an automatic write authorization. Intake row 64 requires separate verified receipt reconciliation after any successful staging write.
