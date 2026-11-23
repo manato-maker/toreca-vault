@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { emptyV2 } from '../../v2/core.js';
 import { previewScopedCostCorrection, singleCardResearchList, readCostCorrection } from '../src/single-card-market-setup.js';
 import { reconcilePromoAndExportSingles } from '../scripts/staging-promo-card-market.js';
@@ -92,4 +95,53 @@ test('one CLI invocation corrects canonical once then exports a private single c
   const repeated=await reconcilePromoAndExportSingles({...args,mode:'apply'});
   assert.equal(repeated.changed,false);assert.equal(store.saves,1);
   assert.match(logs.join('\n'),/PASS: staging scoped cost corrected/);
+});
+
+test('a failed staging save identifies the failing step and reuse of exactly matching backup works',async()=>{
+  const home=mkdtempSync(join(tmpdir(),'staging-single-cost-'));
+  try{
+    const backing=stub();
+    let fail=true;
+    const store={
+      read:()=>backing.read(),
+      async save(args){
+        if(fail){fail=false;const e=new Error('simulated sensitive cloud reason');e.code='PERMISSION_DENIED';throw e;}
+        return backing.save(args);
+      }
+    };
+    await assert.rejects(
+      reconcilePromoAndExportSingles({store,privateInput:input,mode:'apply',home,say:()=>{}}),
+      /BLOCKED: scoped staging Firestore save failed \(PERMISSION_DENIED\)/
+    );
+    assert.equal(backing.saves,0);
+    const output=[];
+    const result=await reconcilePromoAndExportSingles({store,privateInput:input,mode:'apply',home,say:x=>output.push(x)});
+    assert.equal(result.changed,true);
+    assert.equal(backing.saves,1);
+    assert.match(output.join('\n'),/exact matching private backup reused/);
+    const again=await reconcilePromoAndExportSingles({store,privateInput:input,mode:'apply',home,say:()=>{}});
+    assert.equal(again.changed,false);
+    assert.equal(backing.saves,1);
+  }finally{rmSync(home,{force:true,recursive:true});}
+});
+
+test('if Firestore saved successfully but response failed, canonical readback recognizes success',async()=>{
+  const home=mkdtempSync(join(tmpdir(),'staging-single-postwrite-'));
+  try{
+    const backing=stub();
+    const store={
+      read:()=>backing.read(),
+      async save(args){
+        await backing.save(args);
+        const error=new Error('lost connection after successful commit');
+        error.code='UNAVAILABLE';
+        throw error;
+      }
+    };
+    const logs=[];
+    const result=await reconcilePromoAndExportSingles({store,privateInput:input,mode:'apply',home,say:x=>logs.push(x)});
+    assert.equal(result.changed,true);
+    assert.equal(backing.saves,1);
+    assert.match(logs.join('\n'),/canonical readback verifies the exact requested change/);
+  }finally{rmSync(home,{force:true,recursive:true});}
 });
