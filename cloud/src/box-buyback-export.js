@@ -80,13 +80,15 @@ export function formatBoxBuybackExport(exported, time = new Date()) {
   ];
   if(exported.target.length===0) lines.push('該当なし');
   for(const row of exported.target)lines.push('- '+row.product+'｜'+row.quantity+'BOX｜'+row.label);
-  lines.push('', '■ 状態要確認（買取照合対象には自動追加しない）');
+  lines.push('', '■ 状態未確認BOX（商品名で参考価格を調査する候補。状態確定前は査定額を算定しない）');
   if(exported.review.length===0)lines.push('該当なし');
   for(const row of exported.review)lines.push('- '+row.product+'｜'+row.quantity+'BOX｜'+row.label);
   lines.push('', '■ 除外（開封済み・テープカット等）');
   if(exported.excluded.length===0) lines.push('該当なし');
   for(const row of exported.excluded)lines.push('- '+row.product+'｜'+row.quantity+'BOX｜'+row.label);
   lines.push('', '価格確認: 買取ミミ / カードショップアリウム / AMTAF日本橋',
+    '状態未確認BOXについても商品名で投稿を検索し、状態別の参考買取額を記録する。状態が一致した確定買取額として扱わない。',
+    '同一商品らしい別表記があっても、所有者による確認なしに数量を統合しない。',
     '画像と商品・封印状態を照合し、投稿日時・X URL・店舗別買取額を添える。未確認の価格は推測しない。',
     '※購入原価、店舗、取引履歴、ユーザー識別子は出力していません。');
   return lines.join('\n')+'\n';
