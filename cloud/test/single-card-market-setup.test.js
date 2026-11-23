@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { emptyV2 } from '../../v2/core.js';
 import { previewScopedCostCorrection, singleCardResearchList, readCostCorrection } from '../src/single-card-market-setup.js';
-import { reconcilePromoAndExportSingles } from '../scripts/staging-promo-card-market.js';
+import { reconcilePromoAndExportSingles, exportSingleCardsOnly } from '../scripts/staging-promo-card-market.js';
 
 const input={productName:'テスト用付属パック',category:'パック',
   expectedCost:250,newCost:0,expectedQuantity:1};
@@ -144,4 +144,39 @@ test('if Firestore saved successfully but response failed, canonical readback re
     assert.equal(backing.saves,1);
     assert.match(logs.join('\n'),/canonical readback verifies the exact requested change/);
   }finally{rmSync(home,{force:true,recursive:true});}
+});
+
+test('V2 setCardIdentity previously recorded card numbers are exported from lot.set',()=>{
+  const state=snapshot();
+  // The actual V2 field populated by setCardIdentity() is "set".
+  state.inventoryLots[2].set='M6a 127/103';
+  state.inventoryLots[3].set='PROMO 001/SV-P';
+  const report=singleCardResearchList({revision:state.revision,payload:state},
+    new Date('2026-11-23T06:00:00Z'));
+  assert.match(report.text,/テストカードA SAR｜1枚｜番号要確認（識別情報不一致）｜M6a｜SAR/);
+  assert.match(report.text,/テストカードB｜2枚｜001\/SV-P｜PROMO/);
+  assert.match(report.text,/lot\.set（V2登録済みの識別情報）/);
+});
+test('V2 legacy purchase set is read when the inventory lot has no set',()=>{
+  const state=snapshot();
+  state.inventoryLots[3].sourceTransactionId='purchase-abc';
+  state.transactions.push({id:'purchase-abc',type:'purchase',set:'mF 044/040'});
+  const report=singleCardResearchList({revision:state.revision,payload:state},
+    new Date('2026-11-23T06:00:00Z'));
+  assert.match(report.text,/テストカードB｜2枚｜044\/040｜mF/);
+});
+test('new read-only re-export does not require the cost correction or mutate canonical',async()=>{
+  const backing=stub();
+  const writes=[],log=[];
+  const data=await exportSingleCardsOnly({store:backing,home:'/private',
+    now:new Date('2026-11-23T06:00:00Z'),
+    say:message=>log.push(message),
+    write:(path,contents,opts)=>writes.push({path,contents,opts}),chmod:()=>{}});
+  assert.equal(backing.saves,0);
+  assert.deepEqual({revision:data.revision,lots:data.lots,quantity:data.quantity},
+    {revision:3000,lots:2,quantity:3});
+  assert.equal(writes.length,1);
+  assert.equal(writes[0].opts.mode,0o600);
+  assert.match(writes[0].path,/toreca-single-cards-for-market\.txt/);
+  assert.match(log.join('\n'),/canonical remains unchanged/);
 });
