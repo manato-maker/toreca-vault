@@ -72,7 +72,7 @@ test('idempotent import; mismatched quantity, edition or dates fail closed',()=>
   const broken=sample();broken.inventoryLots[1].quantity=3;
   assert.throws(()=>previewOwnerSinglePrices(broken,privateInput),/inventory counts changed/);
   const wrongSet=sample();wrongSet.inventoryLots[1].set='ZZ 999/100';
-  assert.throws(()=>previewOwnerSinglePrices(wrongSet,privateInput),/card number is absent/);
+  assert.throws(()=>previewOwnerSinglePrices(wrongSet,privateInput),/card identity BB 002\/100 is not fully recorded/);
   const dup=sample();dup.inventoryLots[2].set='BB 002/100';
   assert.throws(()=>previewOwnerSinglePrices(dup,privateInput),/two card lots share/);
   const identityReview=sample();identityReview.inventoryLots[1].identityNeedsReview=true;
