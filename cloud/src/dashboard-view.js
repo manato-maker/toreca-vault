@@ -79,12 +79,17 @@ function inventoryCard(lot, picked, offers = [], grokOffers = []) {
     && !/白箱|詰め合わせ|カートン/i.test(rawProductName)
     ? rawProductName + '（単品パッケージ）' : rawProductName;
   const active = picked.status === 'current';
-  const stale = picked.status === 'stale';
-  const priceLabel = active ? money(picked.price) : stale ? money(picked.price) + '（旧価格）' : '買取相場未取得';
-  const shop = picked.quote ? String(picked.quote.sourceStore || picked.quote.source || '') : '';
-  const quoteDate = buybackTimestamp(picked.quote);
-  const sourceUrl = buybackSourceUrl(picked.quote);
-  const source = active ? '参考買取価格' : stale ? '過去の買取提示額・要更新' : '買取相場確認待ち';
+  // Grok user-provided prices can inform the indicative value, not verified market data.
+  const usableGrok = grokOffers.filter(q => !q.priceCaveat);
+  const topGrok = usableGrok.reduce((best, q) => !best || q.price > best.price ? q : best, null);
+  const priceLabel = active ? money(picked.price) : topGrok
+    ? money(topGrok.price) + '（Grok参考・未検証）' : '買取相場未取得';
+  // Do not promote stale historical prices (such as legacy carton ¥42,000) to the main stock row.
+  const shop = active && picked.quote ? String(picked.quote.sourceStore || picked.quote.source || '') : '';
+  const quoteDate = active ? buybackTimestamp(picked.quote) : '';
+  const sourceUrl = active ? buybackSourceUrl(picked.quote) : '';
+  const source = active ? '出典確認済みの参考買取価格'
+    : topGrok ? 'Grok報告・元投稿未検証（買取保証なし）' : '買取相場確認待ち';
   const evidence = shop ? ' · ' + esc(shop) + (quoteDate ? ' (' + esc(quoteDate) + ')' : '') : '';
   const link = sourceUrl ? ' <a class="quote-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">元投稿</a>' : '';
   const shopOffers = offers.length
@@ -115,7 +120,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
   const lotteries = Array.isArray(snapshot.lotteries) ? snapshot.lotteries : [];
   const quotes = Array.isArray(snapshot.marketQuotes) ? snapshot.marketQuotes : [];
-  let cost = 0, buybackTotal = 0, comparableBuyback = 0, comparableCost = 0, pricedCount = 0;
+  let cost = 0, buybackTotal = 0, verifiedBuybackTotal = 0, verifiedPriceCount = 0, comparableBuyback = 0, comparableCost = 0, pricedCount = 0;
   let noPrice = 0, unknownCost = 0, comparableQuantity = 0;
   let grokReportedTotal = 0, grokReportedCount = 0;
   const grokByLot = new Map();
@@ -132,18 +137,25 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
     const grokOffers = grokReportedOffersForLot(quotes, lot, now);
     grokByLot.set(lot, grokOffers);
-    if (grokOffers.length) {
-      grokReportedTotal += Math.max(...grokOffers.map(q => q.price)) * quantity;
+    const usableGrok = grokOffers.filter(q => !q.priceCaveat);
+    const maxGrok = usableGrok.length ? Math.max(...usableGrok.map(q => q.price)) : null;
+    if (maxGrok !== null) {
+      grokReportedTotal += maxGrok * quantity;
       grokReportedCount += quantity;
     }
     if (picked.status === 'current') {
       buybackTotal += picked.price * quantity;
+      verifiedBuybackTotal += picked.price * quantity;
+      verifiedPriceCount += quantity;
       pricedCount += quantity;
       if (known(lot.unitCost)) {
         comparableBuyback += picked.price * quantity;
         comparableCost += num(lot.unitCost) * quantity;
         comparableQuantity += quantity;
       }
+    } else if (maxGrok !== null) {
+      buybackTotal += maxGrok * quantity;
+      pricedCount += quantity;
     } else noPrice += quantity;
   }
   const sales = transactions.filter(t => t.type === 'sale');
@@ -178,6 +190,23 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     : counts[selectedType] + '件すべて';
   const metric = (name, value, sub) => '<div class="metric"><div>' + esc(name) + '</div><strong>' + esc(value) + '</strong><small>' + esc(sub) + '</small></div>';
   const rows = [...lots].sort((a,b) => String(b.acquiredAt || '').localeCompare(String(a.acquiredAt || ''))).slice(0, 80);
+  const inventoryGroups = [['BOX', 'BOX'], ['パック', 'パック'], ['カード', 'カード']]
+    .map(([key, label]) => {
+      const items = rows.filter(l => category(l) === key);
+      const amount = items.reduce((sum,l) => sum + num(l.quantity), 0);
+      return {key,label,items,amount};
+    });
+  const stockFilters = '<nav class="stock-filters" aria-label="在庫カテゴリー">' +
+    inventoryGroups.map(g => '<a href="#stock-' + (g.key === 'BOX' ? 'box' : g.key === 'パック' ? 'pack' : 'card') +
+      '" class="stock-filter">' + esc(g.label) + ' ' + esc(g.amount) + '点</a>').join('') + '</nav>';
+  const stockCategoryRows = inventoryGroups.map(g => {
+    const anchor = g.key === 'BOX' ? 'box' : g.key === 'パック' ? 'pack' : 'card';
+    return '<section class="stock-category" id="stock-' + anchor + '">' +
+      '<h3>' + esc(g.label) + '<small>' + esc(g.amount) + '点 · ' + esc(g.items.length) + 'ロット</small></h3>' +
+      (g.items.length ? g.items.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l), grokByLot.get(l))).join('')
+        : '<p class="empty">このカテゴリーの在庫はありません。</p>') +
+      '</section>';
+  }).join('');
   const eventRows = relevantEvents.length ? relevantEvents.map(e =>
     '<div class="event"><span class="event-date">' + esc(e.date.slice(5).replace('-', '/')) +
     '</span><span class="event-kind">' + esc(e.kind) + '</span><span class="event-description">' +
@@ -225,6 +254,7 @@ a{color:inherit;text-decoration:none}main{max-width:1040px;margin:auto;padding:1
 .panel{padding:18px;margin-top:18px;scroll-margin-top:16px}.panel-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.panel-top h2{margin:0}.minor{font-size:12px;color:var(--muted)}
 .warning{border:1px solid #5c4d39;background:#29261f;color:#f7d79f;border-radius:10px;padding:12px;margin-top:14px;font-size:12px}.stock-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,40%);align-items:start;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.event,.history-row{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.stock-row:last-child,.event:last-child,.history-row:last-child{border:0}
 .stock-main{min-width:0}.stock-name{min-width:0;font-weight:700;word-break:normal;overflow-wrap:anywhere}.stock-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--muted);font-size:11px;margin-top:6px}.pill{background:#25423f;color:var(--aqua);padding:3px 8px;border-radius:50px}.stock-money{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:normal}.stock-money span{color:var(--txt);font-size:12px}.stock-money small{color:var(--muted);font-size:10px;overflow-wrap:anywhere;word-break:normal}.quote-link{color:var(--aqua);text-decoration:underline}.shop-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.shop-offer{font-size:10px;color:var(--muted);background:#202f40;border:1px solid var(--line);border-radius:7px;padding:4px 6px}.shop-offer a{color:var(--aqua);text-decoration:underline}
+.stock-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:13px 0 15px}.stock-filter{padding:12px 6px;text-align:center;background:#223a46;border:1px solid #345866;border-radius:12px;color:var(--aqua);font-size:12px;font-weight:700}.stock-filter:focus-visible{outline:2px solid var(--aqua)}.stock-category{scroll-margin-top:16px;margin-top:12px}.stock-category h3{font-size:16px;color:var(--aqua);display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);margin:0;padding:13px 0}.stock-category h3 small{font-size:11px;font-weight:400;color:var(--muted)}
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.calendar-head a{background:#24344b;border-radius:10px;padding:5px 14px;font-size:24px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.weekday{text-align:center;color:var(--muted);font-size:11px;padding:5px}.w0{color:#ff9f9f}.w6{color:#a6afff}.day{min-height:50px;border-radius:9px;background:#1e2a3d;padding:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}.day.muted{background:transparent}.day.is-today{outline:2px solid var(--aqua)}.day small{color:var(--aqua);font-size:10px}
 .history-filters{display:flex;gap:8px;overflow-x:auto;padding:9px 0 13px;scrollbar-width:thin}.history-filter{white-space:nowrap;border:1px solid var(--line);padding:9px 12px;background:#213047;border-radius:12px;color:var(--txt);font-size:12px;min-width:64px;text-align:center}.history-filter.selected{background:#24504d;color:var(--aqua);border-color:var(--aqua);font-weight:700}.history-money{min-width:110px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;text-align:right}.history-money span{font-size:12px;white-space:nowrap}.history-money small{color:var(--muted);font-size:11px}.event{align-items:center;justify-content:flex-start}.event-date{font-weight:750;color:var(--aqua);min-width:45px}.event-kind{font-size:11px;color:var(--muted);min-width:58px}.event-description{overflow-wrap:anywhere}.event-description small{display:block;color:var(--muted)}.history-row{align-items:center}.history-row b{display:block;overflow-wrap:anywhere}.history-row small{display:block;color:var(--muted);font-size:11px}.history-row>span{white-space:nowrap;font-size:12px}.positive{color:var(--aqua)}.empty{color:var(--muted);padding:15px 0}
 .bottom{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101b2deb;backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:11px 6px max(17px,env(safe-area-inset-bottom));z-index:3}.bottom a{text-align:center;font-size:12px;min-width:60px;color:#e6effe}.bottom span{display:block;font-size:20px;color:var(--aqua)}
@@ -239,7 +269,8 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 <main id="top"><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
 <p class="meta">更新 ${esc(today)} · V2 revision ${esc(revision)}</p></section>
 <div class="metrics">
-${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
+${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考買取価格（うちGrok報告 ' + (pricedCount - verifiedPriceCount) + '点・元投稿未検証）' + (partiallyPriced ? '・一部未取得' : ''))}
+${metric('出典確認済み買取額',verifiedPriceCount ? money(verifiedBuybackTotal) : '未取得',verifiedPriceCount + '点の確認済み価格のみ・Grok未検証分を除く')}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
 ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
@@ -247,9 +278,9 @@ ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パ�
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
 ${metric('Grok報告参考額',grokReportedCount ? money(grokReportedTotal) : '未取得',grokReportedCount + '点分・元投稿未検証・確認済み評価と別枠')}
 </div>
-<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
+<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額には、出典確認済みの買取価格に加え、Grokユーザー提供の未検証報告も含まれます。Grok報告は売却保証額ではありません。出典確認済み買取額とは別に確認できます。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l), grokByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
+${rows.length ? stockFilters + stockCategoryRows : '<p class="empty">在庫がありません。</p>'}
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
 ${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
