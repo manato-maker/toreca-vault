@@ -18,7 +18,7 @@ const sale = { type: 'sale', requestId: 'sold-other', product, category: 'BOX',
 
 function fixtures() {
   let state = emptyV2();
-  for (const cmd of [p('mint', 'Mint'), p('a', 'Shop A'), p('b', 'Shop B'), sale]) {
+  for (const cmd of [{ ...p('mint', 'Mint'), date: '2026-11-21' }, p('a', 'Shop A'), p('b', 'Shop B'), sale]) {
     state = applyChatCommand(state, cmd).state;
   }
   const rows = new Map([
