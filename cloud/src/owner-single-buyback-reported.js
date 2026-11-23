@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { validateState } from '../../v2/core.js';
 
 const SOURCE='owner-chat-researched-single-buyback-v1';
-const SHOP_LABELS={f:'フルコンプ（チャット調査報告）',k:'カードラッシュ参照・二次掲載（チャット調査報告）',n:'ナタデココ（チャット調査報告）'};
+const SHOP_LABELS={f:'フルコンプ（チャット調査報告）',k:'カードラッシュ参照・二次掲載（チャット調査報告）',n:'ナタデココ（チャット調査報告）',h:'晴れる屋2（チャット調査報告）',u:'ふるいち（チャット調査報告）'};
 const FINISH={m:'マスターボールミラー',o:'モンスターボールミラー',l:'ミラー',r:'通常・加工未指定'};
 const clone=structuredClone;
 const equality=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -49,7 +49,7 @@ export function parseOwnerSinglePrices({priceSpec,reportDate,expectedLots,expect
   if(rows.length<1||rows.length>100)blocked('price batch invalid');
   const items=new Map();
   for(const row of rows) {
-    const m=/^([A-Za-z0-9]{1,14})_([0-9]{1,4}\/(?:[0-9]{1,4}|[A-Za-z0-9]{1,8}-[Pp]))=([1-9]\d{0,2}),([1-9]\d{0,7}),(\d{8}),([fkn])(?:,([mlor]))?$/i.exec(row);
+    const m=/^([A-Za-z0-9]{1,14})_([0-9]{1,4}\/(?:[0-9]{1,4}|[A-Za-z0-9]{1,8}-[Pp]))=([1-9]\d{0,2}),([1-9]\d{0,7}),(\d{8}),([fknhu])(?:,([mlor]))?$/i.exec(row);
     if(!m)blocked('price row syntax invalid');
     const identity=norm(m[1]+' '+m[2]);
     const expectedQty=Number(m[3]),price=Number(m[4]);
