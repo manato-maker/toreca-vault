@@ -27,7 +27,7 @@ function make(){
   const {plan,opening}=buildCanonicalOnlyOpeningPlan(canonicalBefore);
   const canonical={revision:2971,lastMutationId:plan.mutationId,payload:structuredClone(plan.payload)};
   canonical.payload.revision=2971;
-  const queueRow={requestId:opening.requestId,command:opening,status:'done',resultCode:'v2-applied',
+  const queueRow={requestId:opening.requestId,command:opening,status:'done',resultCode:'v2-applied',updatedAtMs:1795408000000,
     intakeReceipt:{spreadsheetIdHash:SHEET_HASH,rowNumber:64,state:'queued'}};
   return {canonical,queueRow,opening};
 }
@@ -101,6 +101,7 @@ test('post-repair status reads only canonical and queue and does not modify stag
   assert.equal(result.status,'inspect-only');
   assert.deepEqual(h.resumes,[]);
   assert.match(lines.join('\n'),/READ ONLY/);
+  assert.match(lines.join('\n'),/Original queue updatedAtMs: 1795408000000/);
   assert.doesNotMatch(lines.join('\n'),/normalchat:|Sheet ID/);
 });
 test('only staging Intake resumes first; command resumes after final receipt evidence',async()=>{
