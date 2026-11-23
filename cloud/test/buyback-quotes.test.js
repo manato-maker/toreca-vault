@@ -86,7 +86,7 @@ test('dashboard never substitutes MSRP or purchase cost for buyback price and se
   assert.match(msrp, /買取相場未取得/);
   assert.match(msrp, /未算定/);
   const priced = renderDashboard({ ...base, marketQuotes: [mimi] }, 1, '2026-11', NOW);
-  assert.match(priced, /18,500（出典確認済み）/);
+  assert.match(priced, /[¥￥]18,500（出典確認済み）/);
   assert.match(priced, /18,200/);
   assert.match(priced, /36,400/);
   assert.match(priced, /22,000/); // (18,200 - 7,200) × 2
