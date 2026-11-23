@@ -22,6 +22,8 @@ const REGION = 'asia-northeast1';
 const DOCUMENT = 'torecaVaultStaging/canonical';
 const SHEET_HASH = 'a191bc306fcfb2898af83fd66f72808f9f1a4b553805319cbf62e80fb29565ad';
 const REPAIRED_REVISION = 2971;
+// Independently re-read and verified by the owner's Sheets connection in Intake!G64.
+const VERIFIED_SHEET_RECEIPT_TIME = 1795408147687;
 const OPENING_HASH = '7b3a00c2513769733a652fb09c155d3586f9362c0c06c388996c6353e8527437';
 function hash(value) { return createHash('sha256').update(String(value || '')).digest('hex'); }
 function blocked(reason) { throw new Error('BLOCKED: ' + reason); }
@@ -79,6 +81,63 @@ export function decideResume({kind,workers,verified}) {
     && verified.receiptState==='final')return 'commands';
   blocked('worker isolation or original Intake receipt finalization not satisfied');
 }
+/**
+ * Close only the existing OP-18 Intake receipt after an independent Sheets
+ * readback matched its completed queue timestamp. Does NOT write Google Sheets,
+ * inventory, purchases, canonical or any other Intake request.
+ *
+ * The external Sheets A64:G64 verification occurred before this commit:
+ * original row/requestId, v2-applied, canonical-readback-verified, accepted
+ * request ID and processedAtMs exactly 1795408147687. If that verification
+ * is unavailable/revoked, never run this operator.
+ */
+export async function finalizeVerifiedOriginalReceipt({ store, queue, readJobs, output = console.log } = {}) {
+  if (process.env.TV_OP18_RECEIPT_RECONCILED !== 'true') {
+    blocked('explicit receipt readback attestation is required');
+  }
+  const before = await dataRead({ store, queue });
+  const workers = exactStagingJobs(await readJobs());
+  if (before.queueUpdatedAtMs !== VERIFIED_SHEET_RECEIPT_TIME
+    || workers.intake.state !== 'ENABLED' || workers.commands.state !== 'PAUSED') {
+    blocked('queue timestamp or staging worker isolation differs from verified Sheet readback');
+  }
+  if (before.receiptState === 'final') {
+    output('PASS: original Intake #64 receipt already final; no queue write needed');
+    return {status: 'already-final', ...before};
+  }
+  if (before.receiptState !== 'queued') {
+    blocked('unexpected original Intake receipt lifecycle');
+  }
+  // Race-safe, read back the original canonical and single queue record before
+  // requesting the existing Firestore adapter's idempotent transaction.
+  const second = await dataRead({store,queue,openingRequestId:before.requestId});
+  const newest = exactStagingJobs(await readJobs());
+  if (second.queueUpdatedAtMs !== VERIFIED_SHEET_RECEIPT_TIME
+    || second.receiptState !== 'queued'
+    || newest.intake.state !== 'ENABLED'
+    || newest.commands.state !== 'PAUSED') {
+    blocked('original receipt or workers changed; do not finalize');
+  }
+  if (typeof queue.setIntakeReceiptStatus !== 'function') {
+    blocked('single original queue receipt finalizer unavailable');
+  }
+  const settled = await queue.setIntakeReceiptStatus(before.requestId, {
+    state:'final', now: Date.now()
+  });
+  if (!settled?.updated || settled.status !== 'final') {
+    blocked('single original queue receipt finalization did not succeed');
+  }
+  const after = await dataRead({store,queue,openingRequestId:before.requestId});
+  if (after.receiptState !== 'final'
+    || after.queueUpdatedAtMs !== VERIFIED_SHEET_RECEIPT_TIME
+    || after.revision !== before.revision) {
+    blocked('original receipt finalization readback failed');
+  }
+  output('PASS: only original Intake #64 queue receipt finalized after verified Sheet readback');
+  output('Firestore canonical unchanged: revision '+after.revision);
+  return {status:'original-receipt-final',...after};
+}
+
 async function dataRead({store,queue,openingRequestId}={}) {
   const canonical=await store.read();
   if(!canonical)blocked('staging canonical missing');
@@ -93,8 +152,11 @@ async function dataRead({store,queue,openingRequestId}={}) {
   return {...verified,queueUpdatedAtMs};
 }
 export async function run({action,store,queue,readJobs,resumeJob,output=console.log}={}) {
-  if(!['--status','--resume-intake','--resume-commands'].includes(action)) {
-    blocked('only --status, --resume-intake, --resume-commands are supported');
+  if(!['--status','--resume-intake','--resume-commands','--finalize-receipt'].includes(action)) {
+    blocked('only --status, --resume-intake, --resume-commands or --finalize-receipt are supported');
+  }
+  if(action==='--finalize-receipt') {
+    return finalizeVerifiedOriginalReceipt({store,queue,readJobs,output});
   }
   const initial=await dataRead({store,queue});
   const metadata=await readJobs();
@@ -127,8 +189,8 @@ export async function run({action,store,queue,readJobs,resumeJob,output=console.
   return {status:'resumed-'+kind,...current};
 }
 async function main(args=process.argv.slice(2)) {
-  if(args.length!==1 || !['--status','--resume-intake','--resume-commands'].includes(args[0])){
-    blocked('use --status, --resume-intake or --resume-commands');
+  if(args.length!==1 || !['--status','--resume-intake','--resume-commands','--finalize-receipt'].includes(args[0])){
+    blocked('use --status, --resume-intake, --resume-commands or --finalize-receipt');
   }
   verifiedStagingConfiguration({apply:false});
   const { Firestore }=await import('@google-cloud/firestore');
