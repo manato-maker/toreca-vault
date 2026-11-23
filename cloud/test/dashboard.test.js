@@ -40,7 +40,7 @@ test('dashboard escapes product names and shows read-only stock, calendar and pr
   assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
   assert.match(html, /相場未取得/);
   assert.match(html, /定価・購入原価は買取価格に代用していません/);
-  assert.match(html, /参考買取評価額/);
+  assert.match(html, /在庫の参考評価額/);
   assert.match(html, /買取相場未取得/);
 });
 test('aggregate sale history shows its breakdown without requiring per-card inventory', () => {
