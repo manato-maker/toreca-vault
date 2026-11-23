@@ -64,14 +64,14 @@ test('all seven reported boxes and six product families are strict matching and 
     assert.equal(r.state.inventoryLots[i].store,s.inventoryLots[i].store);
   }
   const html=renderDashboard(r.state,r.state.revision,'2026-11',date);
-  assert.match(html,/Grok報告参考額/);
+  assert.doesNotMatch(html,/Grok報告参考額/);
   assert.match(html,/700/);
-  assert.match(html,/Grok報告（元投稿未検証）/);
+  assert.match(html,/参考価格・出典未確認/);
   assert.match(html,/100/);
   assert.match(html,/200/);
-  assert.match(html,/参考買取評価額/);
-  assert.match(html,/参考買取評価額<\/div><strong>[¥￥]700<\/strong>/);
-  assert.match(html,/出典確認済み買取額<\/div><strong>未取得<\/strong>/);
+  assert.match(html,/在庫の参考評価額/);
+  assert.match(html,/在庫の参考評価額<\/div><strong>[¥￥]700<\/strong>/);
+  assert.doesNotMatch(html,/出典確認済み買取額/);
   assert.doesNotMatch(html,/確認済み評価としてGrok/);
 });
 test('the batch is idempotent and blocks any quantity mismatch or contradictory condition',()=>{
@@ -180,15 +180,15 @@ test('mobile inventory groups categories and prioritizes Grok provisional refere
   assert.match(html, /BOX 8点/);
   assert.match(html, /パック 3点/);
   assert.match(html, /カード 1点/);
-  assert.match(html, /参考買取評価額<\/div><strong>[¥￥]700<\/strong>/);
+  assert.match(html, /在庫の参考評価額<\/div><strong>[¥￥]700<\/strong>/);
   assert.match(html, /出典確認済み買取額<\/div><strong>未取得<\/strong>/);
-  assert.match(html, /Grok参考・未検証/);
-  assert.match(html, /カードショップアリウム/);
-  assert.match(html, /AMTAF日本橋/);
+  assert.match(html, /参考価格・出典未確認/);
+  assert.doesNotMatch(html, /Grok報告参考額/);
+  assert.doesNotMatch(html, /Grok参考額/);
   assert.doesNotMatch(html, /42,000/);
   assert.doesNotMatch(html, /旧価格/);
   const expired=renderDashboard(imported,imported.revision,'2026-04',new Date('2026-04-10T06:00:00Z'));
   assert.doesNotMatch(expired, /42,000/);
-  assert.doesNotMatch(expired, /Grok参考・未検証/);
+  assert.doesNotMatch(expired, /参考価格・出典未確認/);
   assert.match(expired, /買取相場未取得/);
 });
