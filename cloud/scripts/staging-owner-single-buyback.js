@@ -65,7 +65,8 @@ export async function applyOwnerSinglePrices({store,privateInput,mode='inspect',
       !same(observed.payload.inventoryLots,before.payload.inventoryLots) ||
       !same(observed.payload.transactions,before.payload.transactions) ||
       !same(observed.payload.lotteries,before.payload.lotteries)) {
-      blocked('Firestore save or readback failed ('+String(error?.code||error?.name||'unknown')+'); do not retry blindly');
+      const diag=classifyFirestoreError(error);
+      blocked('Firestore save or readback failed ('+diag.code+':'+diag.category+'); do not retry blindly');
     }
   }
   const after=await store.read();
@@ -81,8 +82,45 @@ export async function applyOwnerSinglePrices({store,privateInput,mode='inspect',
   out('New canonical revision: '+after.revision);
   return {applied:true,revision:after.revision,changed:result.changed};
 }
+/** Read-only diagnostic for owner singles market import. No private quotes required. */
+export async function inspectOwnerSinglePersistence({store,out=console.log}={}){
+  if(!store||typeof store.read!=='function')blocked('staging read unavailable');
+  const state=await store.read();
+  if(!state?.payload||state.revision!==state.payload.revision)blocked('canonical missing or revision mismatch');
+  const q=state.payload.marketQuotes.filter(row=>row?.quoteBasis==='owner-chat-researched-single-buyback-v1');
+  const unique=new Set(q.map(row=>row.cardIdentity));
+  const qtyByLot=new Map(state.payload.inventoryLots.map(l=>[l.id,l.quantity]));
+  const cardUnits=[...new Map(q.map(row=>[row.lotId,row])).values()].reduce((sum,row)=>
+    sum+(Number(qtyByLot.get(row.lotId))||0),0);
+  const audit=state.payload.auditLog.filter(row=>row?.kind==='owner-chat-single-card-reference-import');
+  const marketQuoteBytes=Buffer.byteLength(JSON.stringify(state.payload.marketQuotes),'utf8');
+  const snapshotBytes=Buffer.byteLength(JSON.stringify(state.payload),'utf8');
+  out('READ ONLY: staging canonical revision '+state.revision);
+  out('Owner singles reference quotes present: '+q.length+' / unique identities: '+unique.size);
+  out('Matched current units (unique lots): '+cardUnits);
+  out('Owner singles import audit records: '+audit.length);
+  out('Snapshot size: '+snapshotBytes+' bytes; market quotes size: '+marketQuoteBytes+' bytes');
+  out('No inventory, costs, sales, schedulers or dashboard changed');
+  return {revision:state.revision,quotes:q.length,identities:unique.size,cardUnits,audits:audit.length};
+}
+/** Classify the API's gRPC code without exposing Firestore document content. */
+export function classifyFirestoreError(error){
+  const msg=String(error?.details||error?.message||'');
+  const code=String(error?.code??'unknown');
+  let category='unknown';
+  if(code==='3'){
+    category=/index/i.test(msg)?'index-constraint'
+      :/size|large|exceed|limit|10 mib|10mb/i.test(msg)?'request-or-document-size'
+      :/transaction/i.test(msg)?'transaction-argument'
+      :/field|value|data/i.test(msg)?'field-value-argument':'invalid-argument-unspecified';
+  } else if(code==='8')category='resource-exhausted';
+  else if(code==='7')category='permission-denied';
+  else if(code==='4')category='deadline-exceeded';
+  else if(code==='10')category='concurrent-revision-change';
+  return {code,category};
+}
 async function main(args=process.argv.slice(2)){
-  if(args.length!==1||!['--inspect','--apply'].includes(args[0]))blocked('only --inspect or --apply');
+  if(args.length!==1||!['--status','--inspect','--apply'].includes(args[0]))blocked('only --status, --inspect or --apply');
   if(args[0]==='--apply'&&process.env.TV_SINGLES_REPORT_APPROVED!=='YES')
     blocked('explicit staging-only quote approval missing');
   verifyProject();
@@ -94,6 +132,7 @@ async function main(args=process.argv.slice(2)){
   };
   const {Firestore}=await import('@google-cloud/firestore');
   const store=createFirestoreStore(new Firestore({projectId:PROJECT}),DOC);
+  if(args[0]==='--status')return inspectOwnerSinglePersistence({store});
   await applyOwnerSinglePrices({store,privateInput,mode:args[0].slice(2)});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
