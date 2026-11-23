@@ -42,7 +42,7 @@ fi
 
 gcloud iam workload-identity-pools create "$POOL" \
   --project="$PROJECT" --location=global \
-  --display-name="Toreca Vault staging Intake operator"
+  --display-name="TV staging Intake WIF"
 gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" \
   --project="$PROJECT" --location=global --workload-identity-pool="$POOL" \
   --display-name="Github Actions owner/main only" \
