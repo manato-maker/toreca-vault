@@ -273,3 +273,35 @@ test('read-only inspect reports Intake, queue and canonical failure locations sa
     assert.deepEqual(env.queue.calls, []);
   }
 });
+
+test('missing application-default login is classified without printing the credential error', async () => {
+  await assert.rejects(() => stageRead('Intake Sheets source-row read', () => {
+    throw new Error('Could not load the default credentials. LEAK_PRIVATE_ACCOUNT');
+  }), error => {
+    assert.match(error.message, /application-default credentials missing/);
+    assert.doesNotMatch(error.message, /LEAK_PRIVATE_ACCOUNT/);
+    return true;
+  });
+  await assert.rejects(() => stageRead('Intake Sheets source-row read', () => {
+    throw new Error('Request had insufficient authentication scopes LEAK_TOKEN');
+  }), error => {
+    assert.match(error.message, /OAuth scope insufficient/);
+    assert.doesNotMatch(error.message, /LEAK_TOKEN/);
+    return true;
+  });
+});
+
+test('Sheets HTTP 403 from the real adapter is shown as sanitized permission failure', async () => {
+  const { createGoogleSheetsIntakeProvider } = await import('../src/google-sheets-intake-provider.js');
+  const provider = createGoogleSheetsIntakeProvider({
+    spreadsheetId: '1abcdefghijklmnopqrstuvwxyz0123456789',
+    getAccessToken: async () => 'synthetic-private-token',
+    fetchImpl: async () => new Response('private sheet details and tokens', {status: 403})
+  });
+  await assert.rejects(() => stageRead('Intake Sheets source-row read',
+    () => provider.readRows({startRow:64,limit:1})), error => {
+    assert.match(error.message, /permission denied/);
+    assert.doesNotMatch(error.message, /private sheet details|synthetic-private-token/);
+    return true;
+  });
+});
