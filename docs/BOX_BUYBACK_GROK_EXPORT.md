@@ -25,3 +25,22 @@ cd ~/tv-scoped-op18 && git pull --ff-only origin build/cloudrun-firestore-founda
 - Grok側は調査対象に載った商品・数量・状態を照合し、**要確認BOXも名前による参考相場検索のみ可能**とする。名称が似た2行があっても勝手に結合しない。要確認と除外は別欄として扱う。価格は買取ミミ、カードショップアリウム、AMTAF日本橋のX投稿の文章と画像の両方で判定し、投稿日時・URLを出典とする。情報がない価格は未確認とする。
 
 **重要:** この出力は実行時点の在庫スナップショットで、Grokへの毎日自動同期ではない。商品が増減したときに同じコマンドで再出力して最新の一覧を渡す。直接同期を実現する場合は、共有方法・認可・Grokが受け取れるAPIを別途設計する必要がある。
+
+
+## Grok報告価格 → staging在庫の一括取込（プライベート入力）
+
+本人が提供するGrok報告表を、出典未検証の参考値として限定的にステージングへ取り込める。公開GitHubのコードには、本人の在庫数量・買取価格・取引先別の具体的な数値を埋め込まない。
+
+実行環境: 認証済みのCloud Shell。まず `git pull --ff-only` で最新の開発ブランチに同期する。
+
+入力は環境変数 `TV_GROK_REPORT_DATE` （YYYY-MM-DD）、`TV_GROK_STOCK` （SKU略号: d/i/s/t/f/e = MEGAドリームex/インフェルノX/スタートデッキ100/スペシャルBOXトウホク/フクオカ/30thデッキセット。例 `d=2a;i=1a;...`、a=シュリンクあり、u=未開封のみ）、`TV_GROK_PRICES` （店舗順: ミミ,アリウム,AMTAF、`0`=未確認、`r`=参考値。例 `d=100,0,50;...`）でのみ渡す。
+
+```bash
+TV_GROK_REPORT_DATE=YYYY-MM-DD TV_GROK_STOCK='d=2a;...' TV_GROK_PRICES='d=100,0,50;...' TV_GROK_PRICES_APPROVED=YES node cloud/scripts/apply-grok-prices-staging.js --apply
+```
+
+* 出力時には在庫数量・価格の中身を表示しない。設定値はユーザーが非公開で渡す。環境変数の値・操作記録の扱いに注意する。
+* データ適用は最新revision CAS、BOX種類と数量の完全一致、既知の状態確認、事前のローカル非公開バックアップ、書込み後再読込がゲート。購入原価・数量・売買履歴は不変更。
+* 報告価格は全て `marketQuotes` の `status=review` で元投稿検証を装わない。UIでは確認済み価格の参考評価額とは区別し、7日経過すると表示しない。
+* 画面は `bash cloud/scripts/deploy-grok-price-dashboard-staging.sh` で既存 `toreca-vault-ui-staging` を更新する。IAM公開不可・既存IAP・Service Accountの完全一致を要求。新規権限付与・旧V2・本番・worker変更なし。
+* UIデプロイ/適用は所有者Cloud Shellでの実行まで未完了。

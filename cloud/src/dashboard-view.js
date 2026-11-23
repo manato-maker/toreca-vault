@@ -1,4 +1,5 @@
 import { buybackForLot, buybackOffersForLot, buybackSourceUrl, buybackTimestamp } from './buyback-quotes.js';
+import { grokReportedOffersForLot } from './grok-buyback-reported.js';
 
 const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 const jstDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -70,7 +71,7 @@ function calendar(month, events, today) {
     '<div class="calendar-grid">' + ['日','月','火','水','木','金','土'].map((s,i) => '<span class="weekday w'+i+'">' + s + '</span>').join('') +
     grid.join('') + '</div>';
 }
-function inventoryCard(lot, picked, offers = []) {
+function inventoryCard(lot, picked, offers = [], grokOffers = []) {
   const n = num(lot.quantity);
   const c = category(lot);
   const rawProductName = String(lot.product || lot.productKey || '商品名未設定');
@@ -95,9 +96,15 @@ function inventoryCard(lot, picked, offers = []) {
         const reference = url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">出典</a>' : '';
         return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
       }).join('') + '</div>' : '';
+  const grokLabel = grokOffers.length
+    ? '<div class="shop-offers" aria-label="Grokユーザー提供の未検証買取価格">' +
+      '<span class="minor">Grok報告（元投稿未検証）</span>' +
+      grokOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore) + ' ' +
+        esc(money(q.price)) + (q.priceCaveat ? '（' + esc(q.priceCaveat) + '）' : '') + '</span>').join('') +
+      '</div>' : '';
   return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(displayProductName) +
     '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
-    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + '</div>' +
+    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + grokLabel + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
@@ -110,6 +117,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const quotes = Array.isArray(snapshot.marketQuotes) ? snapshot.marketQuotes : [];
   let cost = 0, buybackTotal = 0, comparableBuyback = 0, comparableCost = 0, pricedCount = 0;
   let noPrice = 0, unknownCost = 0, comparableQuantity = 0;
+  let grokReportedTotal = 0, grokReportedCount = 0;
+  const grokByLot = new Map();
   const categoryTotals = { 'BOX': 0, 'パック': 0, 'カード': 0 };
   const pickedByLot = new Map();
   const offersByLot = new Map();
@@ -121,6 +130,12 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     const picked = buybackForLot(quotes, lot, now);
     pickedByLot.set(lot, picked);
     offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
+    const grokOffers = grokReportedOffersForLot(quotes, lot, now);
+    grokByLot.set(lot, grokOffers);
+    if (grokOffers.length) {
+      grokReportedTotal += Math.max(...grokOffers.map(q => q.price)) * quantity;
+      grokReportedCount += quantity;
+    }
     if (picked.status === 'current') {
       buybackTotal += picked.price * quantity;
       pricedCount += quantity;
@@ -230,10 +245,11 @@ ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - com
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
+${metric('Grok報告参考額',grokReportedCount ? money(grokReportedTotal) : '未取得',grokReportedCount + '点分・元投稿未検証・確認済み評価と別枠')}
 </div>
 <div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
-${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
+${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l), grokByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}
 </section>
 <section class="panel" id="calendar"><div class="panel-top"><h2>予定カレンダー</h2><span class="minor">抽選・購入期限</span></div>
 ${calendar(month,events,today)}<h2 style="margin-top:23px">${esc(month)} の予定</h2>${eventRows}
