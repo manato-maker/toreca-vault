@@ -176,6 +176,7 @@ test('provider rejects unsafe token, row bounds, invalid receipt, and API errors
   });
   await assert.rejects(apiFailure.readRows(), (error) => {
     assert.match(error.message, /HTTP 403/);
+    assert.equal(error.status, 403);
     assert.equal(error.message.includes('secret payload'), false);
     return true;
   });
