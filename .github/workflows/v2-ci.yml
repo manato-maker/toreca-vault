@@ -16,3 +16,5 @@ jobs:
       - run: npm run check
       - name: Verify staging operator fail-closed guards
         run: python3 -m unittest discover -s cloud/test -p test_staging_intake_operator.py -v
+      - name: Check IAM bootstrap syntax and dry run
+        run: bash -n cloud/scripts/bootstrap-staging-operator-wif.sh && bash cloud/scripts/bootstrap-staging-operator-wif.sh
