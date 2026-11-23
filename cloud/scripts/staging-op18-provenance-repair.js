@@ -11,7 +11,6 @@
  */
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { Firestore } from '@google-cloud/firestore';
 import { createFirestoreStore } from '../src/firestore-store.js';
 import { createFirestoreCommandQueue } from '../src/firestore-command-queue.js';
 import { planScopedBoxOpeningRepair, applyScopedBoxOpeningRepair } from '../src/scoped-box-opening-repair.js';
@@ -206,6 +205,7 @@ async function main(args = process.argv.slice(2)) {
   // Full serving-revision, project, Sheet binding, intake scheduler and worker
   // isolation checks happen before the first Firestore access.
   verifiedStagingConfiguration({ apply: options.apply });
+  const { Firestore } = await import('@google-cloud/firestore');
   const db = new Firestore({ projectId: PROJECT });
   const store = createFirestoreStore(db, DOCUMENT);
   const queue = createFirestoreCommandQueue(db);
