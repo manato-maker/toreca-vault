@@ -130,7 +130,12 @@ function verifiedStagingConfiguration({ apply }) {
     }
     assertCommandWorkerPaused(jobs, serviceUrl);
   }
-  return id;
+  const runtimeIdentity = String(revision.spec?.serviceAccountName || '');
+  if (!runtimeIdentity.endsWith('.gserviceaccount.com')
+    || runtimeIdentity.includes('/') || runtimeIdentity.length > 256) {
+    throw new Blocked('staging Cloud Run serving identity is not a verifiable service account');
+  }
+  return { spreadsheetId: id, runtimeIdentity };
 }
 
 /** The running command worker must not be able to claim the source request concurrently. */
@@ -169,6 +174,59 @@ export function classifyRepairSources({ canonical, purchaseRows, excludedPurchas
   return { revision: canonical.revision,
     targets: purchaseRows.map(classify),
     excluded: classify(excludedPurchaseRow) };
+}
+
+/** Inspect-only fallback for the pre-existing staging runtime identity, whose
+ * Sheets share is already configured. No IAM/share changes, no long-lived keys. */
+export async function scopedReadOnlySheetsToken({ runtimeIdentity, cliFn = cli,
+  fetchImpl = fetch } = {}) {
+  if (typeof runtimeIdentity !== 'string' || !runtimeIdentity.endsWith('.gserviceaccount.com')
+    || runtimeIdentity.length > 256 || runtimeIdentity.includes('/')) {
+    throw new Blocked('staging runtime Sheets identity is unverified');
+  }
+  let operatorToken;
+  try { operatorToken = cliFn('auth', 'print-access-token'); }
+  catch { throw new Blocked('Cloud Shell CLI account has no valid operator access token'); }
+  if (typeof operatorToken !== 'string' || operatorToken.length < 32
+    || /\s/.test(operatorToken)) {
+    throw new Blocked('Cloud Shell CLI account has no usable operator access token');
+  }
+  const endpoint = 'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/'
+    + encodeURIComponent(runtimeIdentity) + ':generateAccessToken';
+  let response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + operatorToken,
+        'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+        lifetime: '600s'
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch {
+    throw new Blocked('read-only service impersonation API unavailable');
+  }
+  if (!response.ok) {
+    if (response.status === 403) {
+      throw new Blocked('read-only service impersonation permission denied; no IAM changes made');
+    }
+    if (response.status === 401) {
+      throw new Blocked('Cloud Shell CLI operator authentication rejected; no IAM changes made');
+    }
+    throw new Blocked('read-only service impersonation API HTTP ' + (
+      [400, 404, 429, 500, 502, 503, 504].includes(response.status)
+        ? response.status : 'unavailable'));
+  }
+  let result;
+  try { result = await response.json(); }
+  catch { throw new Blocked('read-only impersonation response is invalid'); }
+  const token = result?.accessToken;
+  if (typeof token !== 'string' || token.length < 32 || /\s/.test(token)) {
+    throw new Blocked('read-only service token unavailable');
+  }
+  return token;
 }
 
 function privateBackup(canonical) {
@@ -334,24 +392,36 @@ async function main(argv = process.argv.slice(2)) {
   if (args.apply && process.env.TV_STAGING_REPAIR_APPROVED !== 'true') {
     throw new Blocked('write approval is disabled');
   }
-  const spreadsheetId = verifiedStagingConfiguration(args);
+  const { spreadsheetId, runtimeIdentity } = verifiedStagingConfiguration(args);
   const { GoogleAuth } = await import('google-auth-library');
   const scopes = args.apply ? ['https://www.googleapis.com/auth/spreadsheets']
     : ['https://www.googleapis.com/auth/spreadsheets.readonly'];
   const client = await stageRead('Cloud Shell application-default authentication',
     () => new GoogleAuth({ scopes }).getClient());
+  const makeProvider = getAccessToken => createGoogleSheetsIntakeProvider({
+    spreadsheetId, getAccessToken
+  });
+  let provider = makeProvider(async () => {
+    const value = await client.getAccessToken();
+    return typeof value === 'string' ? value : value?.token;
+  });
+  try {
+    await provider.probeRead(); // Metadata and header only; never mutates.
+  } catch (error) {
+    if (args.apply || Number(error?.status) !== 403) {
+      await stageRead('Intake Sheets authorization probe', () => { throw error; });
+    }
+    console.log('INFO: ADC cannot read Intake; checking the existing staging service identity read-only');
+    const scopedToken = await scopedReadOnlySheetsToken({ runtimeIdentity });
+    provider = makeProvider(async () => scopedToken);
+    await stageRead('Staging service Sheets read-only probe', () => provider.probeRead());
+    console.log('PASS: existing staging service identity can read Intake without new share or IAM changes');
+  }
   const { Firestore } = await import('@google-cloud/firestore');
   const firestore = await stageRead('Firestore SDK initialization',
     () => new Firestore({ projectId: PROJECT }));
   const store = createFirestoreStore(firestore, DOCUMENT);
   const queue = createFirestoreCommandQueue(firestore);
-  const provider = createGoogleSheetsIntakeProvider({
-    spreadsheetId,
-    getAccessToken: async () => {
-      const value = await client.getAccessToken();
-      return typeof value === 'string' ? value : value?.token;
-    }
-  });
   return run({ ...args, store, queue, provider, spreadsheetId });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
