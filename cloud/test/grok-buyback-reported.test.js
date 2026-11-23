@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { emptyV2 } from '../../v2/core.js';
 import { renderDashboard } from '../src/dashboard-view.js';
 import {
@@ -122,4 +125,31 @@ test('inspect is read only; applying makes private backup and only revisioned st
     display:x=>logs.push(x)});
   assert.equal(repeat.reportAlreadyApplied,true);assert.equal(store.writes,1);
   assert.match(logs.join(' '),/readback verified/);
+});
+
+test('a failed first CAS may retry after verifying identical private prewrite backup',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'grok-import-backup-'));
+  try {
+    const backing=storeFor();
+    let failFirst=true;
+    const store={
+      read:()=>backing.read(),
+      async save(args){
+        if(failFirst){failFirst=false;throw Object.assign(new Error('temporary failure'),{code:'UNAVAILABLE'});}
+        return backing.save(args);
+      }
+    };
+    await assert.rejects(
+      applyGrokReportedPrices({store,privateInput,mode:'apply',home:dir,display:()=>{}}),
+      /temporary failure/
+    );
+    assert.equal(backing.writes,0);
+    const path=join(dir,'toreca-staging-before-grok-rev2971-'+privateInput.reportDate+'.json');
+    assert.deepEqual(JSON.parse(readFileSync(path,'utf8')),state());
+    const log=[];
+    const done=await applyGrokReportedPrices({store,privateInput,mode:'apply',home:dir,display:x=>log.push(x)});
+    assert.equal(done.applied,true);
+    assert.equal(backing.writes,1);
+    assert.match(log.join('\n'),/reusing it/);
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });
