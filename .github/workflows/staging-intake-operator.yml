@@ -28,13 +28,16 @@ jobs:
       github.repository == 'manato-maker/toreca-vault' &&
       (github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'issues' &&
-         github.event.issue.title == '[Toreca Vault] Staging intake retry' &&
+         (github.event.issue.title == '[Toreca Vault] Staging intake retry' ||
+          github.event.issue.title == '[Toreca Vault] Staging intake check') &&
          github.event.issue.user.login == 'manato-maker' &&
          github.actor == 'manato-maker'))
     runs-on: ubuntu-latest
     environment: staging-intake-operator
     steps:
       - uses: actions/checkout@v4
+      - name: Offline guard tests
+        run: python3 -m unittest discover -s cloud/test -p test_staging_intake_operator.py
       - name: Require a configured staging-only identity
         env:
           PROVIDER: ${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
@@ -56,9 +59,11 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         shell: bash
         run: |
           set -euo pipefail
           mode=retry
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then mode="$INPUT_MODE"; fi
+          if [[ "$EVENT_NAME" == issues && "$ISSUE_TITLE" == "[Toreca Vault] Staging intake check" ]]; then mode=check; fi
           python3 cloud/scripts/staging-intake-operator.py "$mode"
