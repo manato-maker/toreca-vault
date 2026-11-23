@@ -17,6 +17,13 @@ const PROJECT='project-8ff0bbc4-675d-4596-a8a', NUMBER='235108293761';
 const DOC='torecaVaultStaging/canonical';
 const eq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function blocked(msg){throw new Error('BLOCKED: '+msg);}
+function stepError(step,error){
+  if(String(error?.message||'').startsWith('BLOCKED:'))return error;
+  const code=String(error?.code||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,36);
+  const name=String(error?.name||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,36);
+  const detail=code||name||'unknown';
+  return new Error('BLOCKED: scoped staging '+step+' failed ('+detail+'); no unverified write claims');
+}
 function checkProject(runner=execFileSync) {
   let result;
   try {result=String(runner('gcloud',['projects','describe',PROJECT,'--format=value(projectNumber)'],
@@ -29,7 +36,8 @@ export async function reconcilePromoAndExportSingles({
   home=homedir(),now=new Date(),privateInput,say=console.log
 }={}) {
   if(!['inspect','apply'].includes(mode)||!store||typeof store.read!=='function')blocked('invalid store or mode');
-  const original=await store.read();
+  let original;
+  try{original=await store.read();}catch(e){throw stepError('initial read',e);}
   if(!original?.payload||original.revision!==original.payload.revision)blocked('canonical revision mismatch');
   const preview=previewScopedCostCorrection(original.payload,privateInput);
   say('PASS: one exact scoped inventory cost target found');
@@ -40,14 +48,33 @@ export async function reconcilePromoAndExportSingles({
     const backup=join(home,'toreca-staging-before-scoped-cost-rev'+original.revision+'.json');
     try {write(backup,JSON.stringify(original.payload),{encoding:'utf8',mode:0o600,flag:'wx'});}
     catch(error){
-      if(error?.code!=='EEXIST')throw error;
+      if(error?.code!=='EEXIST')throw stepError('private backup write',error);
       let existing;
       try{existing=JSON.parse(read(backup,'utf8'));}catch{blocked('existing private backup unreadable');}
       if(!eq(existing,original.payload))blocked('existing backup conflicts with current canonical; no writes');
       say('PASS: exact matching private backup reused');
     }
-    await store.save({expectedRevision:original.revision,mutationId:preview.mutationId,payload:preview.state});
-    current=await store.read();
+    say('PASS: private staging canonical backup verified');
+    try{
+      await store.save({expectedRevision:original.revision,mutationId:preview.mutationId,payload:preview.state});
+    }catch(error){
+      // Firestore may have committed yet a postwrite network read failed.
+      // Never assume failure means the mutation was not applied.
+      let recovered=null;
+      try{recovered=await store.read();}catch{}
+      if(recovered?.revision===original.revision+1 &&
+        recovered.payload?.lastMutationId===preview.mutationId &&
+        eq(recovered.payload.inventoryLots,preview.state.inventoryLots) &&
+        eq(recovered.payload.marketQuotes,original.payload.marketQuotes) &&
+        eq(recovered.payload.transactions,original.payload.transactions) &&
+        eq(recovered.payload.lotteries,original.payload.lotteries)) {
+        say('PASS: Firestore save reported an error, but canonical readback verifies the exact requested change');
+        current=recovered;
+      }else throw stepError('Firestore save',error);
+    }
+    if(current===original){
+      try{current=await store.read();}catch(e){throw stepError('postwrite readback',e);}
+    }
     if(current?.revision!==original.revision+1||
       current.payload?.lastMutationId!==preview.mutationId||
       !eq(current.payload.inventoryLots,preview.state.inventoryLots)||
@@ -58,14 +85,17 @@ export async function reconcilePromoAndExportSingles({
     changed=true;
   } else if(mode==='apply')say('PASS: approved cost already present; no duplicate write');
   else say('READ ONLY: preview only');
-  const exportData=singleCardResearchList(current,now);
+  let exportData;
+  try{exportData=singleCardResearchList(current,now);}catch(e){throw stepError('single card list build',e);}
   say('PASS: single-card inventory: '+exportData.lots+' lots / '+exportData.quantity+' cards');
   const path=join(home,'toreca-single-cards-for-market.txt');
   // Preview must not write to disk; the apply command writes only an owner-
   // private text file and the scoped correction above.
   if(mode==='apply'){
-    write(path,exportData.text,{encoding:'utf8',mode:0o600});
-    chmod(path,0o600);
+    try{
+      write(path,exportData.text,{encoding:'utf8',mode:0o600});
+      chmod(path,0o600);
+    }catch(e){throw stepError('private single card file write',e);}
     say('Private card research list: '+path);
     say('--- COPY FOR CARD MARKET RESEARCH ---');
     say(exportData.text);
@@ -93,7 +123,7 @@ async function main(args=process.argv.slice(2)){
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   main().catch(error=>{
     const msg=String(error?.message||'');
-    console.error(msg.startsWith('BLOCKED:')?msg:'BLOCKED: scoped staging promo/card step failed; do not blindly retry');
+    console.error(msg.startsWith('BLOCKED:')?msg:'BLOCKED: scoped staging step failed; private backup and current revision require readback');
     process.exitCode=2;
   });
 }
