@@ -37,8 +37,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Require a configured staging-only identity
         env:
-          PROVIDER: \${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
-          SERVICE_ACCOUNT: \${{ vars.TV_STAGING_OPERATOR_SA }}
+          PROVIDER: ${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.TV_STAGING_OPERATOR_SA }}
         shell: bash
         run: |
           set -euo pipefail
@@ -49,13 +49,13 @@ jobs:
       - name: Authenticate with short-lived GitHub OIDC
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: \${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
-          service_account: \${{ vars.TV_STAGING_OPERATOR_SA }}
+          workload_identity_provider: ${{ vars.TV_STAGING_OPERATOR_WIF_PROVIDER }}
+          service_account: ${{ vars.TV_STAGING_OPERATOR_SA }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Validate staging target and execute selected bounded operation
         env:
-          EVENT_NAME: \${{ github.event_name }}
-          INPUT_MODE: \${{ inputs.mode }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ inputs.mode }}
         shell: bash
         run: |
           set -euo pipefail
