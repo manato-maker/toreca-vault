@@ -85,10 +85,59 @@ function verifiedStagingConfiguration({ apply }) {
     throw new Blocked('pause the existing staging Intake Scheduler job before scoped repair');
   }
   if (apply && (environment.TV2_ENABLE_WRITES !== 'true'
-    || environment.TV2_ENABLE_COMMAND_QUEUE !== 'true')) {
+    || environment.TV2_ENABLE_COMMAND_QUEUE !== 'true'
+    || environment.TV2_ENABLE_COMMAND_WORKER !== 'true')) {
     throw new Blocked('staging worker configuration unexpected');
   }
+  if (apply) {
+    let jobs;
+    try {
+      jobs = JSON.parse(cli('scheduler', 'jobs', 'list', '--project', PROJECT,
+        '--location', REGION, '--format=json'));
+    } catch {
+      throw new Blocked('staging Scheduler jobs cannot be safely enumerated');
+    }
+    assertCommandWorkerPaused(jobs, serviceUrl);
+  }
   return id;
+}
+
+/** The running command worker must not be able to claim the source request concurrently. */
+export function assertCommandWorkerPaused(jobs, serviceUrl) {
+  if (!Array.isArray(jobs) || !serviceUrl || typeof serviceUrl !== 'string') {
+    throw new Blocked('staging command Scheduler job list is unavailable');
+  }
+  const endpoint = serviceUrl + '/internal/worker/commands';
+  const matching = jobs.filter(job => job?.httpTarget?.uri === endpoint);
+  if (matching.length !== 1 || matching[0].state !== 'PAUSED'
+    || matching[0].httpTarget.httpMethod !== 'POST') {
+    throw new Blocked('exactly one authenticated staging command worker Scheduler must be PAUSED');
+  }
+}
+
+/** Read-only, privacy-preserving source-lot status for operator diagnosis. */
+export function classifyRepairSources({ canonical, purchaseRows, excludedPurchaseRow }) {
+  if (!canonical?.payload || !Array.isArray(canonical.payload.inventoryLots)
+    || !Number.isSafeInteger(canonical.revision)
+    || !Array.isArray(purchaseRows) || purchaseRows.length !== 2) {
+    throw new Blocked('canonical or target evidence unreadable');
+  }
+  const classify = row => {
+    const cmd = parseGoogleSheetsIntakeRow(row).command;
+    const id = `chat-purchase-${cmd.requestId}-lot`;
+    const lot = canonical.payload.inventoryLots.find(l => String(l.id || '') === id);
+    if (!lot) return 'missing';
+    const matches = lot.requestId === cmd.requestId
+      && lot.category === 'BOX'
+      && String(lot.store || '') === String(cmd.store || '')
+      && String(lot.acquiredAt || '') === String(cmd.date || '')
+      && Number(lot.unitCost) === Number(cmd.unitCost)
+      && Number(lot.quantity) === 1;
+    return matches ? 'present-and-matched' : 'present-but-mismatched';
+  };
+  return { revision: canonical.revision,
+    targets: purchaseRows.map(classify),
+    excluded: classify(excludedPurchaseRow) };
 }
 
 function privateBackup(canonical) {
@@ -142,6 +191,16 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     throw new Blocked('existing repair request is not an identical pending command');
   }
   const canonical = await store.read();
+  const sourceStatus = classifyRepairSources({ canonical, purchaseRows: sourceRows,
+    excludedPurchaseRow: excluded });
+  output('Canonical revision: ' + sourceStatus.revision);
+  output('Source lot 1: ' + sourceStatus.targets[0]);
+  output('Source lot 2: ' + sourceStatus.targets[1]);
+  output('Excluded sold-source lot: ' + sourceStatus.excluded);
+  if (!sourceStatus.targets.every(s => s === 'present-and-matched')
+    || sourceStatus.excluded === 'present-but-mismatched') {
+    throw new Blocked('source-lot discrepancy; no writes. Review historical FIFO sale provenance');
+  }
   const plan = planScopedBoxOpeningRepair({
     canonical, openingRow, purchaseRows: sourceRows,
     excludedRequestIds: [otherPurchase.requestId]
