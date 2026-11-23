@@ -72,7 +72,7 @@ test('dashboard never substitutes MSRP or purchase cost for buyback price and se
   const base = { schemaVersion: 2, inventoryLots: [lot], marketQuotes: [],
     transactions: [], lotteries: [] };
   const unpriced = renderDashboard(base, 1, '2026-11', NOW);
-  assert.match(unpriced, /参考買取評価額/);
+  assert.match(unpriced, /在庫の参考評価額/);
   assert.match(unpriced, /未算定/);
   assert.match(unpriced, /相場未取得/);
   assert.match(unpriced, /買取相場未取得/);
@@ -86,7 +86,7 @@ test('dashboard never substitutes MSRP or purchase cost for buyback price and se
   assert.match(msrp, /買取相場未取得/);
   assert.match(msrp, /未算定/);
   const priced = renderDashboard({ ...base, marketQuotes: [mimi] }, 1, '2026-11', NOW);
-  assert.match(priced, /参考買取価格/);
+  assert.match(priced, /18,500（出典確認済み）/);
   assert.match(priced, /18,200/);
   assert.match(priced, /36,400/);
   assert.match(priced, /22,000/); // (18,200 - 7,200) × 2
