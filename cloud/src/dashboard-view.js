@@ -1,5 +1,6 @@
 import { buybackForLot, buybackOffersForLot, buybackSourceUrl, buybackTimestamp } from './buyback-quotes.js';
 import { grokReportedOffersForLot } from './grok-buyback-reported.js';
+import { ownerSingleReportedOffersForLot } from './owner-single-buyback-reported.js';
 
 const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 const jstDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -71,7 +72,7 @@ function calendar(month, events, today) {
     '<div class="calendar-grid">' + ['日','月','火','水','木','金','土'].map((s,i) => '<span class="weekday w'+i+'">' + s + '</span>').join('') +
     grid.join('') + '</div>';
 }
-function inventoryCard(lot, picked, offers = [], grokOffers = []) {
+function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers = []) {
   const n = num(lot.quantity);
   const c = category(lot);
   const rawProductName = String(lot.product || lot.productKey || '商品名未設定');
@@ -79,16 +80,18 @@ function inventoryCard(lot, picked, offers = [], grokOffers = []) {
     && !/白箱|詰め合わせ|カートン/i.test(rawProductName)
     ? rawProductName + '（単品パッケージ）' : rawProductName;
   const active = picked.status === 'current';
-  // Grok user-provided prices can inform the indicative value, not verified market data.
   const usableGrok = grokOffers.filter(q => !q.priceCaveat);
   const topGrok = usableGrok.reduce((best, q) => !best || q.price > best.price ? q : best, null);
-  const priceLabel = active ? money(picked.price) : topGrok
+  const topSingle = singleOffers.reduce((best, q) => !best || q.price > best.price ? q : best, null);
+  const priceLabel = active ? money(picked.price) : topSingle
+    ? money(topSingle.price) + '（カード調査参考・未検証）' : topGrok
     ? money(topGrok.price) + '（Grok参考・未検証）' : '買取相場未取得';
   // Do not promote stale historical prices (such as legacy carton ¥42,000) to the main stock row.
   const shop = active && picked.quote ? String(picked.quote.sourceStore || picked.quote.source || '') : '';
   const quoteDate = active ? buybackTimestamp(picked.quote) : '';
   const sourceUrl = active ? buybackSourceUrl(picked.quote) : '';
   const source = active ? '出典確認済みの参考買取価格'
+    : topSingle ? 'チャット相場調査・元掲載未検証（買取保証なし）'
     : topGrok ? 'Grok報告・元投稿未検証（買取保証なし）' : '買取相場確認待ち';
   const evidence = shop ? ' · ' + esc(shop) + (quoteDate ? ' (' + esc(quoteDate) + ')' : '') : '';
   const link = sourceUrl ? ' <a class="quote-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">元投稿</a>' : '';
@@ -107,9 +110,15 @@ function inventoryCard(lot, picked, offers = [], grokOffers = []) {
       grokOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore) + ' ' +
         esc(money(q.price)) + (q.priceCaveat ? '（' + esc(q.priceCaveat) + '）' : '') + '</span>').join('') +
       '</div>' : '';
+  const singleLabel = singleOffers.length
+    ? '<div class="shop-offers" aria-label="チャット調査の未検証シングルカード買取額">' +
+      '<span class="minor">カード調査（元掲載未検証）</span>' +
+      singleOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore || '調査報告') + ' ' +
+        esc(money(q.price)) + (q.reportedDate ? '（' + esc(q.reportedDate) + '）' : '') + '</span>').join('') +
+      '</div>' : '';
   return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(displayProductName) +
     '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
-    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + grokLabel + '</div>' +
+    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + grokLabel + singleLabel + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
@@ -123,7 +132,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   let cost = 0, buybackTotal = 0, verifiedBuybackTotal = 0, verifiedPriceCount = 0, comparableBuyback = 0, comparableCost = 0, pricedCount = 0;
   let noPrice = 0, unknownCost = 0, comparableQuantity = 0;
   let grokReportedTotal = 0, grokReportedCount = 0;
-  const grokByLot = new Map();
+  let singleReportedTotal = 0, singleReportedCount = 0;
+  const grokByLot = new Map(), singleByLot = new Map();
   const categoryTotals = { 'BOX': 0, 'パック': 0, 'カード': 0 };
   const pickedByLot = new Map();
   const offersByLot = new Map();
@@ -137,6 +147,13 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
     const grokOffers = grokReportedOffersForLot(quotes, lot, now);
     grokByLot.set(lot, grokOffers);
+    const singleOffers = ownerSingleReportedOffersForLot(quotes,lot,now);
+    singleByLot.set(lot,singleOffers);
+    const maxSingle = singleOffers.length ? Math.max(...singleOffers.map(q => q.price)) : null;
+    if(maxSingle!==null){
+      singleReportedTotal += maxSingle * quantity;
+      singleReportedCount += quantity;
+    }
     const usableGrok = grokOffers.filter(q => !q.priceCaveat);
     const maxGrok = usableGrok.length ? Math.max(...usableGrok.map(q => q.price)) : null;
     if (maxGrok !== null) {
@@ -153,8 +170,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
         comparableCost += num(lot.unitCost) * quantity;
         comparableQuantity += quantity;
       }
-    } else if (maxGrok !== null) {
-      buybackTotal += maxGrok * quantity;
+    } else if (maxSingle !== null || maxGrok !== null) {
+      buybackTotal += (maxSingle ?? maxGrok) * quantity;
       pricedCount += quantity;
     } else noPrice += quantity;
   }
@@ -203,7 +220,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     const anchor = g.key === 'BOX' ? 'box' : g.key === 'パック' ? 'pack' : 'card';
     return '<section class="stock-category" id="stock-' + anchor + '">' +
       '<h3>' + esc(g.label) + '<small>' + esc(g.amount) + '点 · ' + esc(g.items.length) + 'ロット</small></h3>' +
-      (g.items.length ? g.items.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l), grokByLot.get(l))).join('')
+      (g.items.length ? g.items.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l), grokByLot.get(l), singleByLot.get(l))).join('')
         : '<p class="empty">このカテゴリーの在庫はありません。</p>') +
       '</section>';
   }).join('');
@@ -269,7 +286,7 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 <main id="top"><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
 <p class="meta">更新 ${esc(today)} · V2 revision ${esc(revision)}</p></section>
 <div class="metrics">
-${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考買取価格（うちGrok報告 ' + (pricedCount - verifiedPriceCount) + '点・元投稿未検証）' + (partiallyPriced ? '・一部未取得' : ''))}
+${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考買取価格（うち未検証報告 ' + (pricedCount - verifiedPriceCount) + '点）' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('出典確認済み買取額',verifiedPriceCount ? money(verifiedBuybackTotal) : '未取得',verifiedPriceCount + '点の確認済み価格のみ・Grok未検証分を除く')}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
 ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
@@ -277,8 +294,9 @@ ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.lengt
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
 ${metric('Grok報告参考額',grokReportedCount ? money(grokReportedTotal) : '未取得',grokReportedCount + '点分・元投稿未検証・確認済み評価と別枠')}
+${metric('カード調査参考額',singleReportedCount ? money(singleReportedTotal) : '未取得',singleReportedCount + '枚分・元掲載未検証・7日以内の調査報告')}
 </div>
-<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額には、出典確認済みの買取価格に加え、Grokユーザー提供の未検証報告も含まれます。Grok報告は売却保証額ではありません。出典確認済み買取額とは別に確認できます。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
+<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額には、出典確認済みの買取価格に加え、ユーザー提供のGrok報告とチャット調査の未検証価格も含まれます。いずれも売却保証額ではありません。出典確認済み買取額とは別に確認できます。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
 ${rows.length ? stockFilters + stockCategoryRows : '<p class="empty">在庫がありません。</p>'}
 </section>
