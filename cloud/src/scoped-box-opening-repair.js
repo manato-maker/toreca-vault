@@ -112,6 +112,12 @@ export function planScopedBoxOpeningRepair({ canonical, openingRow, purchaseRows
     || !Number.isSafeInteger(opening.quantity) || opening.quantity !== purchaseRows.length) {
     fail('opening quantity or command type differs from source evidence');
   }
+  const openingMutationId = `chat:open-box:${opening.requestId}`;
+  if (canonical.payload.lastMutationId === openingMutationId
+    || canonical.payload.auditLog.some(audit => audit.mutationId === openingMutationId)
+    || canonical.payload.transactions.some(tx => tx.id === `chat-opening-${opening.requestId}`)) {
+    fail('original opening request already applied; reconcile receipt instead of resubmitting');
+  }
   const openingMemo = norm(opening.memo);
   const seen = new Set();
   const sources = [];
