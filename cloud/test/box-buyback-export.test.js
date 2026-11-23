@@ -63,6 +63,9 @@ test('only current positive quantity BOX lots, not purchases, sales, packs or ca
   assert.match(text,/13:00/);
   assert.match(text,/ポケモン 30th CELEBRATION｜3BOX｜シュリンクあり/);
   assert.match(text,/神の支配 OP-18｜2BOX｜テープ未カット/);
+  assert.match(text,/状態未確認BOX.*参考価格を調査する候補/);
+  assert.match(text,/状態未確認BOXについても商品名で投稿を検索/);
+  assert.match(text,/所有者による確認なしに数量を統合しない/);
   assert.doesNotMatch(text,/SECRET PRIVATE|SECRET_REQUEST|SECRET MEMO|高額カード|売却済みBOX/);
 });
 test('mixed or invalid quantity and malformed canonical block without export',()=>{
