@@ -85,7 +85,12 @@ async function dataRead({store,queue,openingRequestId}={}) {
   const opening=matches(OPENING_HASH,canonical.payload.transactions);
   if(openingRequestId && opening.requestId!==openingRequestId)blocked('opening request changed');
   const queueRow=await queue.inspect(opening.requestId);
-  return validateRepairedCanonicalAndQueue(canonical,queueRow);
+  const verified=validateRepairedCanonicalAndQueue(canonical,queueRow);
+  const queueUpdatedAtMs=queueRow?.updatedAtMs;
+  if(!Number.isSafeInteger(queueUpdatedAtMs) || queueUpdatedAtMs < 1) {
+    blocked('original queue completion timestamp unavailable; cannot safely finalize receipt');
+  }
+  return {...verified,queueUpdatedAtMs};
 }
 export async function run({action,store,queue,readJobs,resumeJob,output=console.log}={}) {
   if(!['--status','--resume-intake','--resume-commands'].includes(action)) {
@@ -98,6 +103,7 @@ export async function run({action,store,queue,readJobs,resumeJob,output=console.
   output('Opening 2 BOX, Mint sale attribution and ¥11520 purchase cost: verified');
   output('Original queue: done / v2-applied');
   output('Original Intake receipt correlation: '+initial.receiptState);
+  output('Original queue updatedAtMs: '+initial.queueUpdatedAtMs);
   output('Staging intake Scheduler: '+workers.intake.state);
   output('Staging command Scheduler: '+workers.commands.state);
   if(action==='--status'){
