@@ -84,6 +84,16 @@ test('the batch is idempotent and blocks any quantity mismatch or contradictory 
   const noShrink=state();noShrink.inventoryLots[4].condition='シュリンクなし';
   const unchanged=previewGrokReportedPrices(noShrink,privateInput).state;
   assert.equal(unchanged.inventoryLots[4].condition,'シュリンクなし');
+  // Legacy "not applicable" refers to shrink packaging for non-booster
+  // sealed goods, not a confirmed opening; owner attested unopened status.
+  const legacy=state();
+  for(const i of [2,3,4,5,6])legacy.inventoryLots[i].condition='対象外';
+  const reconciled=previewGrokReportedPrices(legacy,privateInput);
+  assert.equal(reconciled.state.inventoryLots.filter(x=>x.condition==='未開封').length,5);
+  assert.equal(reconciled.state.inventoryLots.filter(x=>x.condition==='あり').length,2);
+  assert.equal(reconciled.state.marketQuotes.length,15);
+  const legacyShrink=state();legacyShrink.inventoryLots[0].condition='対象外';
+  assert.throws(()=>previewGrokReportedPrices(legacyShrink,privateInput),/shrink condition conflicts/);
   const carton=state();carton.inventoryLots[2].product='MEGA スタートデッキ100 バトルコレクション 白箱';
   assert.throws(()=>previewGrokReportedPrices(carton,privateInput),/BOX count differs/);
 });
