@@ -153,3 +153,41 @@ test('a failed first CAS may retry after verifying identical private prewrite ba
     assert.match(log.join('\n'),/reusing it/);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
+
+test('mobile inventory groups categories and prioritizes Grok provisional reference over a stale legacy 42k',()=>{
+  const imported=previewGrokReportedPrices(state(),privateInput).state;
+  imported.inventoryLots.push(
+    {id:'pack-extra',product:'テストパック',productKey:'テストパック',category:'パック',condition:'',
+      quantity:3,unitCost:200,acquiredAt:'2026-04-01'},
+    {id:'card-extra',product:'テストカード',productKey:'テストカード',category:'カード',condition:'',
+      quantity:1,unitCost:300,acquiredAt:'2026-04-01'}
+  );
+  const retailLot=imported.inventoryLots.find(l=>l.product==='MEGA スタートデッキ100 バトルコレクション');
+  imported.marketQuotes.push({
+    lotId:retailLot.id,productKey:retailLot.productKey,category:'BOX',condition:retailLot.condition,
+    unit:'box',productIdentity:'starter-deck-100-retail-single',price:42000,buybackYen:42000,
+    sourceStore:'買取ミミ',source:'X',status:'verified',
+    postedAt:'2026-03-01T10:00:00+09:00',postUrl:'https://x.com/mimi_kaitori/status/123456789'
+  });
+  const html=renderDashboard(imported,imported.revision,'2026-04',date);
+  assert.match(html, /href="#stock-box"/);
+  assert.match(html, /href="#stock-pack"/);
+  assert.match(html, /href="#stock-card"/);
+  assert.match(html, /id="stock-box"/);
+  assert.match(html, /id="stock-pack"/);
+  assert.match(html, /id="stock-card"/);
+  assert.match(html, /BOX 8点/);
+  assert.match(html, /パック 3点/);
+  assert.match(html, /カード 1点/);
+  assert.match(html, /参考買取評価額<\/div><strong>[¥￥]700<\/strong>/);
+  assert.match(html, /出典確認済み買取額<\/div><strong>未取得<\/strong>/);
+  assert.match(html, /Grok参考・未検証/);
+  assert.match(html, /カードショップアリウム/);
+  assert.match(html, /AMTAF日本橋/);
+  assert.doesNotMatch(html, /42,000/);
+  assert.doesNotMatch(html, /旧価格/);
+  const expired=renderDashboard(imported,imported.revision,'2026-04',new Date('2026-04-10T06:00:00Z'));
+  assert.doesNotMatch(expired, /42,000/);
+  assert.doesNotMatch(expired, /Grok参考・未検証/);
+  assert.match(expired, /買取相場未取得/);
+});
