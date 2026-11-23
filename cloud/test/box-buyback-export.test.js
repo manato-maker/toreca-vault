@@ -20,8 +20,8 @@ test('known shrink and intact-tape states are eligible for price matching',()=>{
     ['シュリンク付き','シュリンクあり'],
     ['シュリンク無し','シュリンクなし'],
     ['シュリンクなし','シュリンクなし'],
-    ['テープ付き','テープ付き（未カット）'],
-    ['テープ未カット','テープ付き（未カット）']
+    ['テープ未カット','テープ未カット'],
+    ['テープ未切断','テープ未カット']
   ];
   for(const [value,label] of cases) {
     const x=classifyBoxCondition(value);
@@ -33,7 +33,7 @@ test('opened and tape-cut boxes are excluded, unknown and contradictory are not 
   for(const condition of ['開封済み','開封用','テープカット','シュリンクなし パックのみ','バラパック']) {
     assert.equal(classifyBoxCondition(condition).group,'excluded');
   }
-  for(const condition of ['', '未開封', 'テープなし', 'シュリンクあり シュリンクなし']) {
+  for(const condition of ['', '未開封', 'テープ付き', 'テープなし', 'シュリンクあり シュリンクなし']) {
     assert.equal(classifyBoxCondition(condition).group,'review');
   }
 });
@@ -42,10 +42,10 @@ test('only current positive quantity BOX lots, not purchases, sales, packs or ca
     lot('ポケモン 30th CELEBRATION',2,'シュリンク付き'),
     lot('ポケモン 30th CELEBRATION',1,'シュリンクあり'),
     lot('ポケモン 30th CELEBRATION',1,'シュリンクなし'),
-    lot('神の支配 OP-18',2,'テープ付き'),
+    lot('神の支配 OP-18',2,'テープ未カット'),
     lot('神の支配 OP-18',1,'テープカット'),
     lot('未確認のBOX',1,''),
-    lot('神の支配 OP-18',4,'テープ付き','パック'),
+    lot('神の支配 OP-18',4,'テープ未カット','パック'),
     lot('高額カード',5,'シュリンクあり','カード'),
     lot('売却済みBOX',0,'シュリンクあり')
   ]);
@@ -62,7 +62,7 @@ test('only current positive quantity BOX lots, not purchases, sales, packs or ca
   const text=formatBoxBuybackExport(v,new Date('2026-11-23T04:00:00Z'));
   assert.match(text,/13:00/);
   assert.match(text,/ポケモン 30th CELEBRATION｜3BOX｜シュリンクあり/);
-  assert.match(text,/神の支配 OP-18｜2BOX｜テープ付き/);
+  assert.match(text,/神の支配 OP-18｜2BOX｜テープ未カット/);
   assert.doesNotMatch(text,/SECRET PRIVATE|SECRET_REQUEST|SECRET MEMO|高額カード|売却済みBOX/);
 });
 test('mixed or invalid quantity and malformed canonical block without export',()=>{
@@ -77,7 +77,7 @@ test('mixed or invalid quantity and malformed canonical block without export',()
 });
 test('local export is only a private text file; no Firestore or Sheets writes',async()=>{
   let writes=0;
-  const x=canonical([lot('神の支配 OP-18',1,'テープ付き')]);
+  const x=canonical([lot('神の支配 OP-18',1,'テープ未カット')]);
   const options=[];
   const output=[];
   const store={read:async()=>structuredClone(x),save:async()=>{writes++}};
