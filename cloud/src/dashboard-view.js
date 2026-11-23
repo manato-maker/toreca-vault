@@ -85,14 +85,14 @@ function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers =
   const topSingle = singleOffers.reduce((best, q) => !best || q.price > best.price ? q : best, null);
   const priceLabel = active ? money(picked.price) : topSingle
     ? money(topSingle.price) + '（カード調査参考・未検証）' : topGrok
-    ? money(topGrok.price) + '（Grok参考・未検証）' : '買取相場未取得';
+    ? money(topGrok.price) + '（参考価格・未確認）' : '買取相場未取得';
   // Do not promote stale historical prices (such as legacy carton ¥42,000) to the main stock row.
   const shop = active && picked.quote ? String(picked.quote.sourceStore || picked.quote.source || '') : '';
   const quoteDate = active ? buybackTimestamp(picked.quote) : '';
   const sourceUrl = active ? buybackSourceUrl(picked.quote) : '';
   const source = active ? '出典確認済みの参考買取価格'
     : topSingle ? 'チャット相場調査・元掲載未検証（買取保証なし）'
-    : topGrok ? 'Grok報告・元投稿未検証（買取保証なし）' : '買取相場確認待ち';
+    : topGrok ? '参考価格・元掲載未確認（買取保証なし）' : '買取相場確認待ち';
   const evidence = shop ? ' · ' + esc(shop) + (quoteDate ? ' (' + esc(quoteDate) + ')' : '') : '';
   const link = sourceUrl ? ' <a class="quote-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">元投稿</a>' : '';
   const shopOffers = offers.length
@@ -105,8 +105,8 @@ function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers =
         return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
       }).join('') + '</div>' : '';
   const grokLabel = grokOffers.length
-    ? '<div class="shop-offers" aria-label="Grokユーザー提供の未検証買取価格">' +
-      '<span class="minor">Grok報告（元投稿未検証）</span>' +
+    ? '<div class="shop-offers" aria-label="未確認の参考買取価格">' +
+      '<span class="minor">参考買取価格（元掲載未確認）</span>' +
       grokOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore) + ' ' +
         esc(money(q.price)) + (q.priceCaveat ? '（' + esc(q.priceCaveat) + '）' : '') + '</span>').join('') +
       '</div>' : '';
@@ -286,17 +286,14 @@ footer{padding:30px 0;color:var(--muted);font-size:11px;text-align:center}.btn{b
 <main id="top"><section class="intro"><div class="kicker">ASSET DASHBOARD</div><h1>資産ダッシュボード</h1>
 <p class="meta">更新 ${esc(today)} · V2 revision ${esc(revision)}</p></section>
 <div class="metrics">
-${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考買取価格（うち未検証報告 ' + (pricedCount - verifiedPriceCount) + '点）' + (partiallyPriced ? '・一部未取得' : ''))}
-${metric('出典確認済み買取額',verifiedPriceCount ? money(verifiedBuybackTotal) : '未取得',verifiedPriceCount + '点の確認済み価格のみ・Grok未検証分を除く')}
+${metric('在庫の参考評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考価格を合算（未確認の参考価格を含む）' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
 ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
-${metric('Grok報告参考額',grokReportedCount ? money(grokReportedTotal) : '未取得',grokReportedCount + '点分・元投稿未検証・確認済み評価と別枠')}
-${metric('カード調査参考額',singleReportedCount ? money(singleReportedTotal) : '未取得',singleReportedCount + '枚分・元掲載未検証・7日以内の調査報告')}
 </div>
-<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額には、出典確認済みの買取価格に加え、ユーザー提供のGrok報告とチャット調査の未検証価格も含まれます。いずれも売却保証額ではありません。出典確認済み買取額とは別に確認できます。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
+<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。在庫の参考評価には、出典確認済み価格と未確認の参考価格が含まれます。いずれも売却保証額ではありません。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>
 <section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
 ${rows.length ? stockFilters + stockCategoryRows : '<p class="empty">在庫がありません。</p>'}
 </section>
