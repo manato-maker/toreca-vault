@@ -191,14 +191,70 @@ function applyBoxOpening(state, command, requestId, mutationId) {
     throw new Error('opening ID exists without its mutation record; manual review required');
   }
 
-  // An opening report consumes matching sealed BOX stock in FIFO order. It does
-  // not require purchase IDs or preserve which store/purchase each opened box came from.
   let candidates = state.inventoryLots.filter((lot) =>
     qty(lot) > 0 && lot.category === 'BOX'
       && norm(lot.productKey || lot.product) === norm(product));
   if (condition) candidates = candidates.filter((lot) => String(lot.condition || '') === condition);
   if (store) candidates = candidates.filter((lot) => norm(lot.store) === norm(store));
   if (!candidates.length) throw new Error('box inventory was not found');
+
+  // Multi-lot opening must never use FIFO across unrelated purchase sources.
+  // A privileged reconciler can provide exact, independently read-back lot
+  // assertions without changing the original Intake requestId or Sheet row.
+  const bound = Object.hasOwn(command, 'sourceLots');
+  let sourceLots = null;
+  if (bound) {
+    sourceLots = command.sourceLots;
+    if (!Array.isArray(sourceLots) || sourceLots.length < 1 || sourceLots.length > 20
+      || sourceLots.length !== quantity || !Number.isSafeInteger(command.expectedRevision)
+      || command.expectedRevision < 0) {
+      throw new TypeError('exact box source assertions and expectedRevision are required');
+    }
+    if (state.revision !== command.expectedRevision) {
+      const conflict = new Error('box opening canonical revision changed');
+      conflict.name = 'RevisionConflict';
+      throw conflict;
+    }
+    const lotIds = new Set();
+    const purchaseIds = new Set();
+    const selected = [];
+    for (const assertion of sourceLots) {
+      const lotId = String(assertion?.lotId || '').trim();
+      const purchaseRequestId = String(assertion?.purchaseRequestId || '').trim();
+      const sourceStore = String(assertion?.store || '').trim();
+      const acquiredAt = String(assertion?.acquiredAt || '');
+      const unitCost = assertion?.unitCost;
+      if (!lotId || !purchaseRequestId || !sourceStore || !isoDate(acquiredAt)
+        || !Number.isSafeInteger(unitCost) || unitCost < 0
+        || assertion.quantity !== 1 || lotIds.has(lotId) || purchaseIds.has(purchaseRequestId)) {
+        throw new TypeError('invalid or duplicated box source assertion');
+      }
+      lotIds.add(lotId);
+      purchaseIds.add(purchaseRequestId);
+      const lot = candidates.find((row) => String(row.id) === lotId);
+      if (!lot || String(lot.requestId || '') !== purchaseRequestId
+        || String(lot.sourceTransactionId || '') !== `chat-purchase-${purchaseRequestId}`
+        || String(lot.store || '') !== sourceStore
+        || String(lot.acquiredAt || '') !== acquiredAt
+        || Number(lot.unitCost) !== unitCost || qty(lot) !== 1
+        || acquiredAt > date) {
+        throw new Error('exact box source lot not found or differs from expected evidence');
+      }
+      const purchase = state.transactions.find((row) => row.id === lot.sourceTransactionId);
+      if (!purchase || purchase.type !== 'purchase' || purchase.category !== 'BOX'
+        || norm(purchase.productKey || purchase.product) !== norm(product)
+        || String(purchase.requestId || '') !== purchaseRequestId
+        || String(purchase.store || '') !== sourceStore
+        || String(purchase.date || '') !== acquiredAt
+        || Number(purchase.price) !== unitCost || Number(purchase.quantity) < 1) {
+        throw new Error('source lot and original purchase transaction do not match');
+      }
+      selected.push(lot);
+    }
+    candidates = selected;
+  } else if (candidates.length !== 1) {
+    throw new Error('box source lots are ambiguous; explicit sourceLots and expectedRevision required');
+  }
 
   const next = clone(state);
   const candidateIds = new Set(candidates.map((lot) => lot.id));
@@ -208,7 +264,11 @@ function applyBoxOpening(state, command, requestId, mutationId) {
     id, type: 'opening', product, productKey: product, category: 'BOX',
     condition: '開封済み', quantity, price: 0, total: 0, date,
     store, source: 'chat', requestId, acquisitionCost,
-    memo: String(command.memo || `BOX開封｜${product}`)
+    memo: String(command.memo || `BOX開封｜${product}`),
+    ...(sourceLots ? {
+      sourceLotIds: sourceLots.map((lot) => lot.lotId),
+      sourcePurchaseRequestIds: sourceLots.map((lot) => lot.purchaseRequestId)
+    } : {})
   };
   next.transactions.push(opening);
   finishMutation(next, mutationId, [id]);
