@@ -26,6 +26,8 @@ jobs:
     # An exact-title issue from the repository owner is the only Chat trigger.
     if: >-
       github.repository == 'manato-maker/toreca-vault' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'manato-maker' &&
       (github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'issues' &&
          (github.event.issue.title == '[Toreca Vault] Staging intake retry' ||
@@ -60,6 +62,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ inputs.mode }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
+          TV_STAGING_OPERATOR_RETRY_ENABLED: ${{ vars.TV_STAGING_OPERATOR_RETRY_ENABLED }}
         shell: bash
         run: |
           set -euo pipefail
