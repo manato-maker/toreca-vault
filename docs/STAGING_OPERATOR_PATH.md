@@ -101,41 +101,30 @@ Cloud Run migration PR. For the first connection test select GitHub Actions
 sanitised step logs. Without authorized GCP IAM and these GitHub environment
 variables, the workflow must fail closed.
 
-### Initial target: 11/22 OP-18 two opened BOXes
+### Bounded repair contract — private transaction facts stay private
 
-Live Intake readback (2026-11-23): these rows already exist. Never append
-again, overwrite, or replay:
+Do not include real transaction details, product names, store names, quantities,
+costs, request IDs or Intake row numbers in public GitHub Issues, PRs,
+documentation, commits or workflow logs. Refer to the private Toreca Vault
+common handoff in Google Drive for current case-specific context.
 
-| Row | Existing requestId | Type | Status |
-| --- | --- | --- | --- |
-| 62 | normalchat:2026-11-22:torecabomb:op18-singles-aggregate-sale | sale-aggregate | new |
-| 63 | normalchat:2026-11-22:kaitori-mimi:pokemon-ar-aggregate-sale | sale-aggregate | new |
-| 64 | normalchat:2026-11-23:op18:furuichi-biccamera:open-box-2 | open-box | new |
+The separate PR #105 development branch implements open-box and sale-aggregate
+commands, but their deployment to the currently serving staging revision is
+unverified. A generic open-box implementation that consumes matching BOX
+inventory FIFO may choose the wrong purchase lot when several stock lots exist.
+Therefore, before invoking any queued transaction or repair:
 
-The PR #105 development branch implements applyBoxOpening and
-applyAggregateSale, but deployment to the currently serving staging
-revision is NOT proven. Its open-box code consumes matching product BOX
-inventory FIFO, NOT exact store-specific purchase lots. This is unsafe
-for a blind retry if the canonical stock also contains a separate MINT
-GAMES OP-18 lot. Inspect actual revision, all OP-18 inventory lots and
-original purchases BEFORE any write. Do not blindly enable retry.
+1. Privately inspect the existing request IDs, command/worker receipts, source
+   purchase lot IDs, exact acquisition store and quantity, canonical revision
+   and audit history; do not append, edit or replay existing Intake rows.
+2. Require an exactly targeted, idempotent mutation with expected revision
+   compare-and-swap. Preserve original purchase costs and unrelated lot history.
+3. If the existing command lacks adequate lot-level targeting, STOP and
+   implement/test a constrained exact-lot command rather than enabling retry.
+4. Verify the canonical readback, sale/opening histories, inventory changes,
+   financial results and Android UI before reporting completion.
+5. Never modify legacy V2, production data, old queues, or unrelated sales.
 
-Expected outcome after separately authorized bounded repair:
-
-- Purchase history and original cost stay fixed: 11/22 ふるいち久宝寺店
-  1BOX + ビックカメラ アリオ八尾店 1BOX, total 11,520 yen.
-- Opening transaction: 2 BOX from those exact purchases, inventory reduced
-  by exactly 2 BOX, no new loose packs or singles.
-- Separate MINT GAMES BOX already sold to 買取ミミ remains untouched.
-- Opened OP-18 single-card aggregate sale 4,600 yen from row 62.
-- Pokémon AR 30-card aggregate sale 6,000 yen from row 63 is independent.
-- Read exact lot IDs, original request IDs, Firestore canonical revision,
-  queue audit and Intake receipts; apply only an audited idempotent repair
-  with expected-revision compare-and-swap and immutable mutation key;
-  readback canonical inventory, purchase/opening/sale histories, finances
-  and the Android dashboard.
-
-The safe path is to first inspect and/or implement an exact-source-lot
-open-box command. Do not use unrestricted Firestore edit, reset cursors,
-or resubmit original rows. Do not touch old V2, the old queue, production,
-or eight historically pending sales.
+The GitHub operator can only check metadata and potentially request a bounded
+staging Scheduler invocation after explicit authorization. It is not a
+general-purpose Firestore editor or inventory correction endpoint.
