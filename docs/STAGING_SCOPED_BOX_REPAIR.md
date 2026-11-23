@@ -32,8 +32,10 @@ The current one-shot operator reads the existing opening row 64, the two already
    node cloud/scripts/staging-scoped-opening-once.js --inspect
    ```
 
-3. The read-only command prints the current revision, quantity and expected acquisition cost only. **Stop if any check is blocked or the revision/quantity/cost differs from the intended report.**
-4. Before any write, independently verify the read-only result against the staging dashboard and ensure there is no conflicting active worker. Pause only the known staging Intake job, not any production job, then inspect the exact staging commands Scheduler job name and pause it as well:
+3. If ordinary Cloud Shell ADC gets Google Sheets HTTP 403, `--inspect` can now try a short-lived `spreadsheets.readonly` token for the **existing verified staging Cloud Run runtime service account**, via IAM Credentials. It requests a 600-second token, never prints it, and neither adds a Sheets share nor grants IAM rights. This works only when the signed-in Cloud Shell operator already has `iam.serviceAccounts.getAccessToken` on that existing account. If the result says impersonation permission denied, stop; do not grant `Service Account Token Creator` project-wide. This fallback is disabled for `--apply` and never enables `retry`.
+
+4. The read-only command prints the current revision, quantity and expected acquisition cost only. **Stop if any check is blocked or the revision/quantity/cost differs from the intended report.**
+5. Before any write, independently verify the read-only result against the staging dashboard and ensure there is no conflicting active worker. Pause only the known staging Intake job, not any production job, then inspect the exact staging commands Scheduler job name and pause it as well:
 
    ```bash
    gcloud scheduler jobs pause toreca-vault-staging-intake --project=project-8ff0bbc4-675d-4596-a8a --location=asia-northeast1
@@ -42,7 +44,7 @@ The current one-shot operator reads the existing opening row 64, the two already
 
    Only the staging command job that targets the exact `toreca-vault-staging` service `/internal/worker/commands` may be paused. Do not pause unrelated jobs. If the job cannot be uniquely verified, stop. Never enable the PR #108 `retry` mode.
 
-5. Only after a reviewed inspection, the target-specific command worker is paused, and the canonical readback is consistent, enter the exact current revision `R` reported by `--inspect` (never substitute the previous UI revision):
+6. Only after a reviewed inspection, the target-specific command worker is paused, and the canonical readback is consistent, enter the exact current revision `R` reported by `--inspect` (never substitute the previous UI revision):
 
    ```bash
    TV_STAGING_REPAIR_APPROVED=true node cloud/scripts/staging-scoped-opening-once.js --apply --expected-revision R
@@ -50,7 +52,7 @@ The current one-shot operator reads the existing opening row 64, the two already
 
    If `--inspect` states `Historical sale provenance correction planned: true`, STOP until that plan and original Mint-sale evidence have been reviewed. The special repair additionally requires `TV_STAGING_PROVENANCE_REPAIR_APPROVED=true` as a one-command environment variable; do not enable it automatically.
 
-6. Verify the canonical opening, its exact source IDs and quantity, existing purchase costs, queue receipt and Android inventory/history UI. Restore the staging Intake Scheduler only after its existing 500/503 failures and remaining pending command compatibility have been assessed. Never enable PR #108's broad `retry` gate as a shortcut.
+7. Verify the canonical opening, its exact source IDs and quantity, existing purchase costs, queue receipt and Android inventory/history UI. Restore the staging Intake Scheduler only after its existing 500/503 failures and remaining pending command compatibility have been assessed. Never enable PR #108's broad `retry` gate as a shortcut.
 
 ## Limits
 
