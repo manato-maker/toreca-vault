@@ -25,7 +25,8 @@ function make(){
   for(const command of [...PURCHASES,SALE])state=applyChatCommand(state,command).state;
   const canonicalBefore={revision:state.revision,lastMutationId:state.lastMutationId,payload:state};
   const {plan,opening}=buildCanonicalOnlyOpeningPlan(canonicalBefore);
-  const canonical={revision:plan.payload.revision,lastMutationId:plan.mutationId,payload:plan.payload};
+  const canonical={revision:2971,lastMutationId:plan.mutationId,payload:structuredClone(plan.payload)};
+  canonical.payload.revision=2971;
   const queueRow={requestId:opening.requestId,command:opening,status:'done',resultCode:'v2-applied',
     intakeReceipt:{spreadsheetIdHash:SHEET_HASH,rowNumber:64,state:'queued'}};
   return {canonical,queueRow,opening};
@@ -65,10 +66,12 @@ function harness({receipt='queued',intake='PAUSED',commands='PAUSED'}={}){
 test('completed opening includes exactly 2 source IDs and provenance after one CAS',()=>{
   const {canonical,queueRow}=make();
   const value=validateRepairedCanonicalAndQueue(canonical,queueRow);
-  assert.deepEqual(value,{revision:5,requestId:queueRow.requestId,receiptState:'queued'});
+  assert.deepEqual(value,{revision:2971,requestId:queueRow.requestId,receiptState:'queued'});
 });
 test('the actual staging revision must match 2971; test fixture confirms guard rejects earlier snapshots',()=>{
   const {canonical,queueRow}=make();
+  canonical.revision=5;
+  canonical.payload.revision=5;
   assert.throws(()=>validateRepairedCanonicalAndQueue(canonical,queueRow),/BLOCKED/);
 });
 test('strict original receipt, sale and opening mismatch guards refuse resuming',()=>{
@@ -92,8 +95,28 @@ test('resume stage requires original receipt final before activating the command
   assert.equal(decideResume({kind:'commands',workers:w,verified:{revision:2971,receiptState:'final'}}),'commands');
   assert.throws(()=>decideResume({kind:'intake',workers:w,verified:{revision:2971}}),/BLOCKED/);
 });
-test('post-repair resume scripts are blocked until they inspect actual revision 2971',async()=>{
+test('post-repair status reads only canonical and queue and does not modify staging jobs',async()=>{
   const h=harness();const lines=[];
-  await assert.rejects(()=>run({...h,action:'--status',output:s=>lines.push(s)}),/BLOCKED/);
+  const result=await run({...h,action:'--status',output:s=>lines.push(s)});
+  assert.equal(result.status,'inspect-only');
+  assert.deepEqual(h.resumes,[]);
+  assert.match(lines.join('\n'),/READ ONLY/);
+  assert.doesNotMatch(lines.join('\n'),/normalchat:|Sheet ID/);
+});
+test('only staging Intake resumes first; command resumes after final receipt evidence',async()=>{
+  const h=harness();
+  const first=await run({...h,action:'--resume-intake',output:()=>{}});
+  assert.equal(first.status,'resumed-intake');
+  assert.deepEqual(h.resumes,['toreca-vault-staging-intake']);
+  await assert.rejects(()=>run({...h,action:'--resume-commands',output:()=>{}}),/BLOCKED/);
+  assert.deepEqual(h.resumes,['toreca-vault-staging-intake']);
+  h.f.queueRow.intakeReceipt.state='final';
+  const second=await run({...h,action:'--resume-commands',output:()=>{}});
+  assert.equal(second.status,'resumed-commands');
+  assert.deepEqual(h.resumes,['toreca-vault-staging-intake','toreca-vault-staging-command-worker']);
+});
+test('no resume if canonical revision changed even though job metadata is fine',async()=>{
+  const h=harness();h.f.canonical.payload.revision=2972;h.f.canonical.revision=2972;
+  await assert.rejects(()=>run({...h,action:'--resume-intake',output:()=>{}}),/BLOCKED/);
   assert.deepEqual(h.resumes,[]);
 });
