@@ -23,6 +23,24 @@ function exactIdentity(text) {
   const m=/\b([A-Z0-9]{1,14})\s+(\d{1,4}\/(?:\d{1,4}|[A-Z0-9]{1,8}-P))\b/.exec(v);
   return m?m[1]+' '+m[2]:'';
 }
+function registeredCardIdentity(lot,sourcePurchase){
+  // Some legacy lots contain a bare number in lot.set, with the expansion
+  // explicitly written in product. A bare number cannot establish an
+  // expansion independently (e.g. gold foil 150/103).
+  const stored=norm(lot.set||sourcePurchase?.set||'');
+  const candidates=[exactIdentity(stored),exactIdentity(lot.product),exactIdentity(lot.productKey)].filter(Boolean);
+  if(new Set(candidates).size>1)blocked('conflicting set identity records; no quote assigned');
+  const chosen=candidates[0]||'';
+  if(!chosen)return '';
+  const number=chosen.split(' ')[1];
+  for(const value of [stored,lot.cardNumber,lot.cardNo,lot.collectorNumber]){
+    const explicit=norm(value);
+    if(/^\d{1,4}\/(?:\d{1,4}|[A-Z0-9]{1,8}-P)$/.test(explicit) && explicit!==number)
+      blocked('card number contradicts explicit expansion identity');
+  }
+  return chosen;
+}
+
 export function parseOwnerSinglePrices({priceSpec,reportDate,expectedLots,expectedCards}={}){
   if(!Number.isSafeInteger(expectedLots)||expectedLots<1||expectedLots>100 ||
     !Number.isSafeInteger(expectedCards)||expectedCards<expectedLots||expectedCards>500 ||
@@ -60,7 +78,7 @@ export function previewOwnerSinglePrices(snapshot,privateInput){
   for(const lot of all){
     // setCardIdentity() writes to lot.set; some older lots have it on the purchase.
     const source=snapshot.transactions.find(t=>t.id===lot.sourceTransactionId&&t.type==='purchase');
-    const stored=exactIdentity(lot.set||source?.set);
+    const stored=registeredCardIdentity(lot,source);
     if(!stored)continue;
     if(lookup.has(stored))blocked('two card lots share one set identity; do not guess');
     lookup.set(stored,lot);
@@ -69,7 +87,7 @@ export function previewOwnerSinglePrices(snapshot,privateInput){
   let pricedCards=0,reportedTotalYen=0,added=0;
   for(const [identity,item] of parsed.items){
     const original=lookup.get(identity);
-    if(!original)blocked('card number is absent from canonical; do not guess matching variant');
+    if(!original)blocked('card identity '+identity+' is not fully recorded in canonical; verify expansion, do not guess');
     if(original.identityNeedsReview===true)blocked('card is flagged for identity review');
     if(original.quantity!==item.expectedQty)blocked('card quantity differs from reported quantity');
     if(!Number.isSafeInteger(original.quantity)||original.quantity<1)blocked('invalid card quantity');
