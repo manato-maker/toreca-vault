@@ -82,7 +82,7 @@ function parseArgs(argv) {
   }
   throw new Blocked('usage: --inspect OR --apply --expected-revision <exact-current-revision>');
 }
-function verifiedStagingConfiguration({ apply }) {
+export function verifiedStagingConfiguration({ apply }) {
   if (cli('projects', 'describe', PROJECT, '--format=value(projectNumber)') !== NUMBER) {
     throw new Blocked('wrong GCP project number');
   }
@@ -229,7 +229,7 @@ export async function scopedReadOnlySheetsToken({ runtimeIdentity, cliFn = cli,
   return token;
 }
 
-function privateBackup(canonical) {
+export function privateBackup(canonical) {
   const home = process.env.HOME;
   if (typeof home !== 'string' || !home.startsWith('/')) {
     throw new Blocked('operator HOME unavailable for a private snapshot backup');
