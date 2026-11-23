@@ -200,8 +200,10 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     () => row(provider, EXCLUDED_PURCHASE_ROW));
   const excludedSale = await stageRead('Intake Sheets excluded sale read',
     () => row(provider, EXCLUDED_SALE_ROW));
-  const otherPurchase = parseGoogleSheetsIntakeRow(excluded).command;
-  const otherSale = parseGoogleSheetsIntakeRow(excludedSale).command;
+  const otherPurchase = await stageRead('Excluded purchase Intake validation',
+    () => parseGoogleSheetsIntakeRow(excluded).command);
+  const otherSale = await stageRead('Excluded sale Intake validation',
+    () => parseGoogleSheetsIntakeRow(excludedSale).command);
   if (String(excluded.values[3] || '') !== 'v2-applied'
     || String(excludedSale.values[3] || '') !== 'v2-applied'
     || otherPurchase.type !== 'purchase' || otherSale.type !== 'sale'
@@ -209,7 +211,8 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     || otherPurchase.quantity !== 1 || otherSale.quantity !== 1) {
     throw new Blocked('separate previously sold BOX evidence differs from verified Intake');
   }
-  const opening = originalOpening(openingRow);
+  const opening = await stageRead('Original opening Intake validation',
+    () => originalOpening(openingRow));
   const queueRow = await stageRead('Firestore command queue lookup',
     () => queue.inspect(opening.requestId));
   if (queueRow && (queueRow.status !== 'pending'
@@ -218,8 +221,9 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
   }
   const canonical = await stageRead('Firestore canonical snapshot read',
     () => store.read());
-  const sourceStatus = classifyRepairSources({ canonical, purchaseRows: sourceRows,
-    excludedPurchaseRow: excluded });
+  const sourceStatus = await stageRead('Canonical source-lot classification',
+    () => classifyRepairSources({ canonical, purchaseRows: sourceRows,
+      excludedPurchaseRow: excluded }));
   output('Canonical revision: ' + sourceStatus.revision);
   output('Source lot 1: ' + sourceStatus.targets[0]);
   output('Source lot 2: ' + sourceStatus.targets[1]);
@@ -232,11 +236,12 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
   if (!direct && !potentialOldFifo) {
     throw new Blocked('source-lot discrepancy; no writes. Manual provenance review required');
   }
-  const plan = planScopedBoxOpeningRepair({
-    canonical, openingRow, purchaseRows: sourceRows,
-    excludedRequestIds: [otherPurchase.requestId],
-    excludedPurchaseRow: excluded, excludedSaleRow: excludedSale
-  });
+  const plan = await stageRead('Scoped opening source-lot evidence verification',
+    () => planScopedBoxOpeningRepair({
+      canonical, openingRow, purchaseRows: sourceRows,
+      excludedRequestIds: [otherPurchase.requestId],
+      excludedPurchaseRow: excluded, excludedSaleRow: excludedSale
+    }));
   output('Historical sale provenance correction planned: ' + Boolean(plan.provenanceCorrection));
   output('PASS: original private Intake evidence and staging source lots match');
   output('Expected canonical revision: ' + plan.expectedRevision);
