@@ -1,7 +1,7 @@
 name: v2-ci
 on:
   push:
-    branches: [vault-v2-prep]
+    branches: [vault-v2-prep, build/cloudrun-firestore-foundation-20261103]
   pull_request:
     branches: [main]
 jobs:
