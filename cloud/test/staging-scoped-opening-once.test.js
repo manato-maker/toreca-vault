@@ -80,7 +80,8 @@ function fixtures() {
     },
     inspect() { return structuredClone(current); }
   };
-  return { store, queue, provider, spreadsheetId: sheetId, rows };
+  const backup = () => { queue.calls.push('backup'); };
+  return { store, queue, provider, spreadsheetId: sheetId, rows, backup };
 }
 
 test('staging repair inspect reads existing rows and never writes anything', async () => {
@@ -102,7 +103,7 @@ test('staging scoped repair keeps original Intake row, writes exactly once and v
     assert.equal(result.status, 'canonical-readback-verified');
     assert.equal(result.revision, 5);
     assert.equal(env.store.writes, 1);
-    assert.deepEqual(env.queue.calls, ['enqueue', 'claim', 'finish', 'final']);
+    assert.deepEqual(env.queue.calls, ['backup', 'enqueue', 'claim', 'finish', 'final']);
     assert.deepEqual(env.provider.writes.map(r => r.status), ['queued', 'v2-applied']);
     assert.equal(env.rows.get(64)[0].requestId, requestId);
     assert.equal(env.store.inspect().payload.transactions.filter(tx => tx.id === 'chat-opening-' + requestId).length, 1);
