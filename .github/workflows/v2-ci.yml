@@ -14,3 +14,5 @@ jobs:
           node-version: 22
       - run: npm test
       - run: npm run check
+      - name: Verify staging operator fail-closed guards
+        run: python3 -m unittest discover -s cloud/test -p test_staging_intake_operator.py -v
