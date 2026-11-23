@@ -7,7 +7,7 @@
  * - Uses latest current revision, idempotent audit marker and postwrite readback.
  */
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createFirestoreStore } from '../src/firestore-store.js';
@@ -42,7 +42,19 @@ export async function applyGrokReportedPrices({store,privateInput,mode='inspect'
   }
   if(typeof store.save!=='function')blocked('staging canonical save unavailable');
   const backup=join(home,'toreca-staging-before-grok-rev'+before.revision+'-'+privateInput.reportDate+'.json');
-  write(backup,JSON.stringify(before.payload),{encoding:'utf8',mode:0o600,flag:'wx'});
+  // A previous attempt can fail after creating the backup but before CAS.
+  // Reuse it only if its exact payload equals the still-current canonical;
+  // never overwrite an existing unrelated backup.
+  try {
+    write(backup,JSON.stringify(before.payload),{encoding:'utf8',mode:0o600,flag:'wx'});
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    let existing;
+    try { existing=JSON.parse(readFileSync(backup,'utf8')); }
+    catch {blocked('existing private backup unreadable; no retry');}
+    if(!eq(existing,before.payload))blocked('existing private backup differs from current canonical');
+    display('PASS: exact matching private snapshot backup already exists; reusing it');
+  }
   await store.save({expectedRevision:before.revision,mutationId:result.mutationId,payload:result.state});
   const after=await store.read();
   if(!after?.payload || after.revision!==before.revision+1
@@ -77,8 +89,18 @@ async function main(){
 }
 if(import.meta.url===new URL('file://'+process.argv[1]).href) {
   main().catch(error=>{
-    const msg=String(error?.message||'');
-    console.error(msg.startsWith('BLOCKED:')?msg:'BLOCKED: Grok staging apply unavailable; no blind retries');
+    const message=String(error?.message||'');
+    const code=String(error?.code||'');
+    const result=message.startsWith('BLOCKED:')?message
+      :error?.name==='RevisionConflict'?'BLOCKED: staging canonical changed concurrently; inspect and review'
+      :/PERMISSION_DENIED|permission|403/i.test(code+' '+message)
+        ?'BLOCKED: Firestore staging write permission denied'
+      :/DEADLINE_EXCEEDED|UNAVAILABLE|deadline|timeout/i.test(code+' '+message)
+        ?'BLOCKED: Firestore service temporarily unavailable'
+      :code==='EEXIST'?'BLOCKED: private staging backup path already exists'
+      :error?.name==='StateTooLarge'?'BLOCKED: canonical snapshot exceeds safe Firestore write limit'
+      :'BLOCKED: unknown staging import failure; no blind retries';
+    console.error(result);
     process.exitCode=2;
   });
 }
