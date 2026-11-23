@@ -14,7 +14,7 @@ const requestId = 'open-existing';
 const original = { type: 'open-box', requestId, product, quantity: 2, date,
   memo: 'Shop AとShop Bで購入した各1BOXを開封' };
 const sale = { type: 'sale', requestId: 'sold-other', product, category: 'BOX',
-  quantity: 1, unitPrice: 9000, date, store: 'Buyer' };
+  quantity: 1, unitPrice: 9000, date, store: 'Buyer', memo: 'Mint Games source sold' };
 
 function fixtures() {
   let state = emptyV2();
@@ -158,10 +158,77 @@ test('read-only diagnosis identifies historically wrong FIFO sale provenance wit
   assert.deepEqual(diag.targets, ['missing', 'present-and-matched']);
   assert.equal(diag.excluded, 'present-and-matched');
   const log = [];
-  await assert.rejects(() => run({ ...env, apply: false, output: line => log.push(line) }), /source-lot discrepancy/);
+  const inspected = await run({ ...env, apply: false, output: line => log.push(line) });
+  assert.equal(inspected.status, 'inspect-only');
   assert.match(log.join('\n'), /Source lot 1: missing/);
+  assert.match(log.join('\n'), /Historical sale provenance correction planned: true/);
   assert.doesNotMatch(log.join('\n'), /Shop A|Shop B|Mint/);
   assert.equal(env.store.writes, 0);
   assert.equal(env.provider.writes.length, 0);
   assert.deepEqual(env.queue.calls, []);
+});
+
+test('historical FIFO source correction needs an independent authorization', async () => {
+  const env = fixtures();
+  let state = emptyV2();
+  for (const cmd of [p('mint', 'Mint'), p('a', 'Shop A'), p('b', 'Shop B'), sale]) {
+    state = applyChatCommand(state, cmd).state;
+  }
+  env.store.read = async () => structuredClone({ payload: state, revision: state.revision,
+    lastMutationId: state.lastMutationId });
+  const approved = process.env.TV_STAGING_REPAIR_APPROVED;
+  const provenance = process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
+  process.env.TV_STAGING_REPAIR_APPROVED = 'true';
+  delete process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
+  try {
+    await assert.rejects(() => run({ ...env, apply: true, expectedRevision: state.revision,
+      output: () => {} }), /separate historical sale provenance repair approval/);
+    assert.equal(env.store.writes, 0);
+    assert.deepEqual(env.queue.calls, []);
+    assert.equal(env.provider.writes.length, 0);
+  } finally {
+    if (approved === undefined) delete process.env.TV_STAGING_REPAIR_APPROVED;
+    else process.env.TV_STAGING_REPAIR_APPROVED = approved;
+    if (provenance === undefined) delete process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
+    else process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED = provenance;
+  }
+});
+
+test('historical FIFO correction moves sold-source attribution and opens only the target boxes', async () => {
+  const env = fixtures();
+  let state = emptyV2();
+  for (const cmd of [p('mint', 'Mint'), p('a', 'Shop A'), p('b', 'Shop B'), sale]) {
+    state = applyChatCommand(state, cmd).state;
+  }
+  const originalPurchases = state.transactions.filter(tx => tx.type === 'purchase').map(tx => structuredClone(tx));
+  let current = { payload: state, revision: state.revision, lastMutationId: state.lastMutationId };
+  env.store.read = async () => structuredClone(current);
+  env.store.save = async ({ expectedRevision, mutationId, payload }) => {
+    assert.equal(expectedRevision, current.revision);
+    env.store.writes += 1;
+    current = { payload: structuredClone(payload), revision: payload.revision, lastMutationId: mutationId };
+    return { ...structuredClone(current), duplicate: false };
+  };
+  const approved = process.env.TV_STAGING_REPAIR_APPROVED;
+  const provenance = process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
+  process.env.TV_STAGING_REPAIR_APPROVED = 'true';
+  process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED = 'true';
+  try {
+    const result = await run({ ...env, apply: true, expectedRevision: 4, output: () => {} });
+    assert.equal(result.status, 'canonical-readback-verified');
+    assert.equal(env.store.writes, 1);
+    assert.equal(current.payload.inventoryLots.length, 0);
+    assert.deepEqual(current.payload.transactions.filter(tx => tx.type === 'purchase'), originalPurchases);
+    assert.equal(current.payload.transactions.find(tx => tx.id === 'chat-sale-sold-other').sourcePurchaseRequestId, 'mint');
+    const opening = current.payload.transactions.find(tx => tx.id === 'chat-opening-open-existing');
+    assert.equal(opening.acquisitionCost, 11520);
+    assert.deepEqual(opening.sourcePurchaseRequestIds, ['a','b']);
+    assert.equal(opening.reconciledSoldPurchaseRequestId, 'mint');
+    assert.equal(env.provider.writes.at(-1).status, 'v2-applied');
+  } finally {
+    if (approved === undefined) delete process.env.TV_STAGING_REPAIR_APPROVED;
+    else process.env.TV_STAGING_REPAIR_APPROVED = approved;
+    if (provenance === undefined) delete process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
+    else process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED = provenance;
+  }
 });
