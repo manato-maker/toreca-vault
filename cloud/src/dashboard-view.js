@@ -83,16 +83,15 @@ function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers =
   const usableGrok = grokOffers.filter(q => !q.priceCaveat);
   const topGrok = usableGrok.reduce((best, q) => !best || q.price > best.price ? q : best, null);
   const topSingle = singleOffers.reduce((best, q) => !best || q.price > best.price ? q : best, null);
-  const priceLabel = active ? money(picked.price) : topSingle
-    ? money(topSingle.price) + '（カード調査参考・未検証）' : topGrok
-    ? money(topGrok.price) + '（参考価格・未確認）' : '買取相場未取得';
+  const unverifiedPrice = topSingle?.price ?? topGrok?.price ?? null;
+  const priceLabel = active ? money(picked.price) + '（出典確認済み）'
+    : unverifiedPrice !== null ? money(unverifiedPrice) + '（参考価格）' : '買取相場未取得';
   // Do not promote stale historical prices (such as legacy carton ¥42,000) to the main stock row.
   const shop = active && picked.quote ? String(picked.quote.sourceStore || picked.quote.source || '') : '';
   const quoteDate = active ? buybackTimestamp(picked.quote) : '';
   const sourceUrl = active ? buybackSourceUrl(picked.quote) : '';
-  const source = active ? '出典確認済みの参考買取価格'
-    : topSingle ? 'チャット相場調査・元掲載未検証（買取保証なし）'
-    : topGrok ? '参考価格・元掲載未確認（買取保証なし）' : '買取相場確認待ち';
+  const source = active ? '出典確認済みの買取価格'
+    : unverifiedPrice !== null ? '参考価格・出典未確認（買取保証なし）' : '買取相場確認待ち';
   const evidence = shop ? ' · ' + esc(shop) + (quoteDate ? ' (' + esc(quoteDate) + ')' : '') : '';
   const link = sourceUrl ? ' <a class="quote-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">元投稿</a>' : '';
   const shopOffers = offers.length
@@ -104,21 +103,9 @@ function inventoryCard(lot, picked, offers = [], grokOffers = [], singleOffers =
         const reference = url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">出典</a>' : '';
         return '<span class="shop-offer">' + shopName + ' ' + value + reference + '</span>';
       }).join('') + '</div>' : '';
-  const grokLabel = grokOffers.length
-    ? '<div class="shop-offers" aria-label="未確認の参考買取価格">' +
-      '<span class="minor">参考買取価格（元掲載未確認）</span>' +
-      grokOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore) + ' ' +
-        esc(money(q.price)) + (q.priceCaveat ? '（' + esc(q.priceCaveat) + '）' : '') + '</span>').join('') +
-      '</div>' : '';
-  const singleLabel = singleOffers.length
-    ? '<div class="shop-offers" aria-label="チャット調査の未検証シングルカード買取額">' +
-      '<span class="minor">カード調査（元掲載未検証）</span>' +
-      singleOffers.map(q => '<span class="shop-offer">' + esc(q.sourceStore || '調査報告') + ' ' +
-        esc(money(q.price)) + (q.claimedFinish && q.claimedFinish !== '通常・加工未指定' ? ' · ' + esc(q.claimedFinish) : '') + (q.reportedDate ? '（' + esc(q.reportedDate) + '）' : '') + '</span>').join('') +
-      '</div>' : '';
   return '<div class="stock-row"><div class="stock-main"><div class="stock-name">' + esc(displayProductName) +
     '</div><div class="stock-meta"><span class="pill">' + esc(c) + '</span>' + (lot.condition ? '<span>' + esc(lot.condition) + '</span>' : '') +
-    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + grokLabel + singleLabel + '</div>' +
+    (lot.acquiredAt ? '<span>' + esc(date(lot.acquiredAt)) + '</span>' : '') + '</div>' + shopOffers + '</div>' +
     '<div class="stock-money"><b>' + esc(n) + '点</b><span>' + esc(priceLabel) + ' / 点</span><small>' + source + evidence + link +
     (known(lot.unitCost) ? ' · 原価 ' + esc(money(lot.unitCost)) : ' · 原価未設定') + '</small></div></div>';
 }
