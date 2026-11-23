@@ -1,6 +1,7 @@
 """Offline staging operator target-guard tests; no gcloud calls."""
 import importlib.util
 import pathlib
+import re
 import unittest
 from unittest import mock
 
@@ -19,6 +20,16 @@ JOB = {'state': 'ENABLED', 'httpTarget': {
 
 
 class OperatorContract(unittest.TestCase):
+    def test_gcp_wif_display_names_fit_provider_limit(self):
+        script = (SCRIPT.parent / 'bootstrap-staging-operator-wif.sh').read_text()
+        for command in (
+            'gcloud iam workload-identity-pools create',
+            'gcloud iam workload-identity-pools providers create-oidc',
+        ):
+            match = re.search(re.escape(command) + r'[\\s\\S]*?--display-name="([^"]+)"', script)
+            self.assertIsNotNone(match, command)
+            self.assertLessEqual(len(match.group(1)), 32, command)
+
     def test_exact_staging_is_allowed(self):
         self.assertEqual(mod.validate_target(mod.PROJECT_NUMBER, SERVICE, JOB),
                          'toreca-vault-staging-123')
