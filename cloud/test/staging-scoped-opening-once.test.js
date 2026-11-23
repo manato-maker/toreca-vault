@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { emptyV2 } from '../../v2/core.js';
 import { applyChatCommand } from '../src/v2-command.js';
-import { run, assertCommandWorkerPaused, classifyRepairSources, stageRead } from '../scripts/staging-scoped-opening-once.js';
+import { run, assertCommandWorkerPaused, classifyRepairSources, stageRead, scopedReadOnlySheetsToken } from '../scripts/staging-scoped-opening-once.js';
 
 const product = 'Example Card BOX';
 const date = '2026-11-22';
@@ -304,4 +304,51 @@ test('Sheets HTTP 403 from the real adapter is shown as sanitized permission fai
     assert.doesNotMatch(error.message, /private sheet details|synthetic-private-token/);
     return true;
   });
+});
+
+test('inspect-only runtime service token asks only for 10-minute Sheets read-only scope', async () => {
+  const cliCalls = [], calls = [];
+  const runtimeIdentity = 'runtime@project-123.iam.gserviceaccount.com';
+  const token = await scopedReadOnlySheetsToken({
+    runtimeIdentity,
+    cliFn: (...args) => {
+      cliCalls.push(args);
+      return 'operator-token-example-fake-123456789012';
+    },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ accessToken: 'short-lived-scoped-example-123456789012' }),
+        { status: 200 });
+    }
+  });
+  assert.equal(token, 'short-lived-scoped-example-123456789012');
+  assert.deepEqual(cliCalls, [['auth', 'print-access-token']]);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /iamcredentials.googleapis.com\/v1\/projects\/-\/serviceAccounts\//);
+  assert.equal(calls[0].init.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    scope: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    lifetime: '600s'
+  });
+  assert.doesNotMatch(calls[0].init.body, /cloud-platform|datastore|spreadsheets"\]/);
+});
+
+test('short-lived Sheets fallback fails closed without user impersonation rights or private response bodies', async () => {
+  const params = {
+    runtimeIdentity: 'runtime@project-123.iam.gserviceaccount.com',
+    cliFn: () => 'operator-token-example-fake-123456789012'
+  };
+  await assert.rejects(() => scopedReadOnlySheetsToken({
+    ...params,
+    fetchImpl: async () => new Response('SECRET-PRIVATE-SHEET-IDENTITY', { status: 403 })
+  }), error => {
+    assert.match(error.message, /permission denied/);
+    assert.doesNotMatch(error.message, /SECRET-PRIVATE/);
+    return true;
+  });
+  await assert.rejects(() => scopedReadOnlySheetsToken({
+    ...params,
+    runtimeIdentity: 'wrong/improper@project-123.iam.gserviceaccount.com',
+    fetchImpl: async () => { throw new Error('should not call'); }
+  }), /unverified/);
 });
