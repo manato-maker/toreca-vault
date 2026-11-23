@@ -65,7 +65,11 @@ function conditionUpdate(original,target){
     if(['なし','シュリンクなし','対象外'].includes(value))block('shrink condition conflicts with owner report');
     return 'あり';
   }
-  if(value==='対象外')block('unopened condition conflicts with inventory');
+  // 「対象外」 is a legacy shrink applicability marker for non-booster
+  // sealed products, not evidence that the product has been opened.
+  // The owner explicitly attested these selected products are unopened.
+  // Restrict this normalization to the caller's explicit "u" stock spec;
+  // shrink-required items above still fail closed on 「対象外」.
   return ['あり','なし','シュリンクなし'].includes(value)?value:'未開封';
 }
 export function previewGrokReportedPrices(snapshot,privateInput){
