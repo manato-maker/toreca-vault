@@ -103,13 +103,34 @@ export async function reconcilePromoAndExportSingles({
   return {changed,revision:current.revision,scopeCorrect:preview.alreadyCorrect||changed,
     cardLots:exportData.lots,cardQuantity:exportData.quantity};
 }
+/**
+ * Export a fresh read-only staging snapshot, independently of any cost correction
+ * and with no need to supply private price/inventory write parameters again.
+ */
+export async function exportSingleCardsOnly({store,now=new Date(),write=writeFileSync,
+  chmod=chmodSync,home=homedir(),say=console.log}={}){
+  if(!store||typeof store.read!=='function')blocked('staging canonical read unavailable');
+  let current;
+  try{current=await store.read();}catch(e){throw stepError('card export read',e);}
+  const report=singleCardResearchList(current,now);
+  const file=join(home,'toreca-single-cards-for-market.txt');
+  try{write(file,report.text,{encoding:'utf8',mode:0o600});chmod(file,0o600);}
+  catch(e){throw stepError('private card export file write',e);}
+  say('PASS: read-only staging card inventory refreshed; canonical remains unchanged');
+  say('Canonical revision: '+current.revision);
+  say('Card inventory: '+report.lots+' lots / '+report.quantity+' cards');
+  say('--- COPY RECONCILED CARD IDENTITIES ---');
+  say(report.text);
+  return {revision:current.revision,lots:report.lots,quantity:report.quantity};
+}
 async function main(args=process.argv.slice(2)){
-  if(args.length!==1||!['--inspect','--apply'].includes(args[0]))blocked('use --inspect or --apply');
+  if(args.length!==1||!['--inspect','--apply','--export'].includes(args[0]))blocked('use --inspect, --apply or --export');
   if(args[0]==='--apply'&&process.env.TV_STAGING_COST_CORRECTION_APPROVED!=='YES')
     blocked('explicit staging cost correction authorization required');
   checkProject();
   const {Firestore}=await import('@google-cloud/firestore');
   const store=createFirestoreStore(new Firestore({projectId:PROJECT}),DOC);
+  if(args[0]==='--export')return exportSingleCardsOnly({store});
   const parsePositive=value=>/^(0|[1-9]\d*)$/.test(String(value||''))?Number(value):NaN;
   const privateInput={
     productName:process.env.TV_STAGING_COST_PRODUCT,
