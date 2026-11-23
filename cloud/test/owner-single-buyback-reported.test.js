@@ -138,6 +138,15 @@ test('contradictory legacy number and product identity fail closed before CAS',(
     /card number contradicts explicit expansion identity/);
 });
 
+test('owner-reported single quote accepts Haretuya2 and Furuichi source labels',()=>{
+  const input={...privateInput,
+    priceSpec:'AA_001/100=1,200,20260403,h,m;BB_002/100=2,450,20260402,u,l'};
+  const result=previewOwnerSinglePrices(sample(),input);
+  assert.equal(result.state.marketQuotes[0].sourceStore,'晴れる屋2（チャット調査報告）');
+  assert.equal(result.state.marketQuotes[1].sourceStore,'ふるいち（チャット調査報告）');
+  assert.equal(result.state.marketQuotes[0].evidenceVerified,false);
+  assert.equal(result.state.marketQuotes[1].status,'review');
+});
 test('read-only status reports no owner quotes after failed Firestore write',async()=>{
   const store=fakeStore(),logs=[];
   const result=await inspectOwnerSinglePersistence({store,out:x=>logs.push(x)});
