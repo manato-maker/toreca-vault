@@ -55,15 +55,17 @@ test('provisional owner singles import is strict by registered card set and does
   assert.equal(ownerSingleReportedOffersForLot(result.state.marketQuotes,result.state.inventoryLots[0],now).length,1);
   assert.equal(ownerSingleReportedOffersForLot(result.state.marketQuotes,result.state.inventoryLots[2],now).length,0);
   const html=renderDashboard(result.state,46,'2026-04',now);
-  assert.match(html,/カード調査参考額/);
-  assert.match(html,/カード調査参考・未検証/);
-  assert.match(html,/カード調査（元掲載未検証）/);
-  assert.match(html,/マスターボールミラー|カードラッシュ参照/);
-  assert.match(html,/参考買取評価額<\/div><strong>[¥￥]1,100<\/strong>/);
-  assert.match(html,/出典確認済み買取額<\/div><strong>未取得<\/strong>/);
+  assert.doesNotMatch(html,/カード調査参考額/);
+  assert.match(html,/参考価格・出典未確認/);
+  assert.match(html,/[¥￥]200/);
+  assert.match(html,/[¥￥]450/);
+  assert.match(html,/テストカードA/);
+  assert.match(html,/テストカードB/);
+  assert.match(html,/在庫の参考評価額<\/div><strong>[¥￥]1,100<\/strong>/);
+  assert.doesNotMatch(html,/出典確認済み買取額/);
   assert.match(html,/相場未取得<\/div><strong>1点<\/strong>/);
   const old=renderDashboard(result.state,46,'2026-04',new Date('2026-04-12T03:00:00Z'));
-  assert.doesNotMatch(old,/カード調査参考・未検証/);
+  assert.doesNotMatch(old,/カード調査参考額/);
   assert.match(old,/買取相場未取得/);
 });
 test('idempotent import; mismatched quantity, edition or dates fail closed',()=>{
