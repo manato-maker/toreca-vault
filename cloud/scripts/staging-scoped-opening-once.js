@@ -103,7 +103,7 @@ function privateBackup(canonical) {
   const fd = openSync(file, 'wx', 0o600);
   try {
     writeFileSync(fd, JSON.stringify({ project: PROJECT, document: DOCUMENT,
-      capturedAt: new Date().toISOString(), snapshot: canonical }) + '\\n', 'utf8');
+      capturedAt: new Date().toISOString(), snapshot: canonical }) + '\n', 'utf8');
     fsyncSync(fd);
   } finally { closeSync(fd); }
   return file;
