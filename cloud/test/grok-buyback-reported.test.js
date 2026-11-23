@@ -181,7 +181,7 @@ test('mobile inventory groups categories and prioritizes Grok provisional refere
   assert.match(html, /パック 3点/);
   assert.match(html, /カード 1点/);
   assert.match(html, /在庫の参考評価額<\/div><strong>[¥￥]700<\/strong>/);
-  assert.match(html, /出典確認済み買取額<\/div><strong>未取得<\/strong>/);
+  assert.doesNotMatch(html, /出典確認済み買取額/);
   assert.match(html, /参考価格・出典未確認/);
   assert.doesNotMatch(html, /Grok報告参考額/);
   assert.doesNotMatch(html, /Grok参考額/);
