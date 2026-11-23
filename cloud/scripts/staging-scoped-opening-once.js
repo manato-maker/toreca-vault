@@ -158,7 +158,10 @@ export async function run({ apply, expectedRevision, store, queue, provider, spr
     || expectedRevision !== plan.expectedRevision) {
     throw new Blocked('explicit approval and matching expected revision required');
   }
-  // Snapshot backup is a hard prerequisite to any queue, sheet or Firestore change.\n  backup(canonical);\n  output('PASS: private local staging snapshot backup written before mutation');\n  const spreadsheetIdHash = createHash('sha256').update(spreadsheetId).digest('hex');
+  // Snapshot backup is a hard prerequisite to any queue, sheet or Firestore change. 
+  backup(canonical);
+  output('PASS: private local staging snapshot backup written before mutation');
+  const spreadsheetIdHash = createHash('sha256').update(spreadsheetId).digest('hex');
   const queued = await queue.enqueue({
     requestId: opening.requestId, command: opening,
     intakeReceipt: { spreadsheetIdHash, rowNumber: OPENING_ROW }
