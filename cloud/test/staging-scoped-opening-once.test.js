@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { emptyV2 } from '../../v2/core.js';
 import { applyChatCommand } from '../src/v2-command.js';
-import { run, assertCommandWorkerPaused, classifyRepairSources } from '../scripts/staging-scoped-opening-once.js';
+import { run, assertCommandWorkerPaused, classifyRepairSources, stageRead } from '../scripts/staging-scoped-opening-once.js';
 
 const product = 'Example Card BOX';
 const date = '2026-11-22';
@@ -230,5 +230,46 @@ test('historical FIFO correction moves sold-source attribution and opens only th
     else process.env.TV_STAGING_REPAIR_APPROVED = approved;
     if (provenance === undefined) delete process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED;
     else process.env.TV_STAGING_PROVENANCE_REPAIR_APPROVED = provenance;
+  }
+});
+
+test('diagnostic stages identify IAM and auth problems but never leak private exception text', async () => {
+  for (const [code, expected] of [[401, 'unauthenticated'], [403, 'permission denied'],
+    [404, 'missing resource'], [429, 'quota'], [14, 'unavailable']]) {
+    await assert.rejects(() => stageRead('Firestore canonical snapshot read', () => {
+      const error = new Error('LEAK_PRIVATE_BEARER_TOKEN_AND_CUSTOMER_NAME');
+      error.code = code;
+      throw error;
+    }), error => {
+      assert.match(error.message, /Firestore canonical snapshot read/);
+      assert.match(error.message, new RegExp(expected));
+      assert.doesNotMatch(error.message, /LEAK_PRIVATE/);
+      return true;
+    });
+  }
+});
+
+test('read-only inspect reports Intake, queue and canonical failure locations safely', async () => {
+  for (const [stage, mutate] of [
+    ['Intake Sheets source-row read', env => {
+      env.provider.readRows = async () => { throw new Error('LEAK_PRIVATE_SHEET_ID'); };
+    }],
+    ['Firestore command queue lookup', env => {
+      env.queue.inspect = async () => { const e = new Error('LEAK_PRIVATE_QUEUE_KEY'); e.code=7; throw e; };
+    }],
+    ['Firestore canonical snapshot read', env => {
+      env.store.read = async () => { const e = new Error('LEAK_PRIVATE_CANONICAL'); e.code=16; throw e; };
+    }]
+  ]) {
+    const env = fixtures();
+    mutate(env);
+    await assert.rejects(() => run({ ...env, apply: false, output: () => {} }), error => {
+      assert.match(error.message, new RegExp(stage));
+      assert.doesNotMatch(error.message, /LEAK_PRIVATE/);
+      return true;
+    });
+    assert.equal(env.store.writes, 0);
+    assert.equal(env.provider.writes.length, 0);
+    assert.deepEqual(env.queue.calls, []);
   }
 });
