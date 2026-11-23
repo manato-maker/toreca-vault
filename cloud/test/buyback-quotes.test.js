@@ -93,13 +93,14 @@ test('dashboard never substitutes MSRP or purchase cost for buyback price and se
   assert.match(priced, /元投稿/);
 });
 
-test('stale quote may be shown for context but cannot be used as live asset valuation', () => {
+test('stale quote is hidden from current stock price and cannot be used in live valuation', () => {
   const sample = { schemaVersion: 2, inventoryLots: [lot],
     marketQuotes: [{ ...mimi, postedAt: '2026-11-13T02:00:00Z', validUntil: '2026-11-13' }],
     transactions: [], lotteries: [] };
   const html = renderDashboard(sample, 1, '2026-11', NOW);
-  assert.match(html, /旧価格/);
-  assert.match(html, /過去の買取提示額・要更新/);
+  assert.doesNotMatch(html, /旧価格/);
+  assert.doesNotMatch(html, /過去の買取提示額・要更新/);
+  assert.doesNotMatch(html, /18,200/);
   assert.match(html, /未算定/);
   assert.match(html, /相場未取得/);
   assert.doesNotMatch(html, /参考資産額は相場未取得/);
