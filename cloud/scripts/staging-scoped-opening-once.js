@@ -40,7 +40,15 @@ export async function stageRead(label, operation) {
     if (error instanceof Blocked) throw error;
     const code = String(error?.code ?? error?.status ?? error?.statusCode
       ?? error?.response?.status ?? '');
-    const category = ['401', '16', 'UNAUTHENTICATED'].includes(code)
+    // Match only well-known auth error phrases; never print the original text.
+    const knownAuthError = String(error?.message || '');
+    const missingAdc = /could not load the default credentials|application default credentials (are )?not available|could not find default credentials/i.test(knownAuthError);
+    const insufficientScope = /insufficient authentication scopes|insufficient_scope/i.test(knownAuthError);
+    const category = missingAdc
+      ? 'application-default credentials missing (gcloud login does not automatically configure ADC)'
+      : insufficientScope
+        ? 'OAuth scope insufficient (Sheets read-only scope required)'
+        : ['401', '16', 'UNAUTHENTICATED'].includes(code)
       ? 'unauthenticated (check Cloud Shell application-default credentials)'
       : ['403', '7', 'PERMISSION_DENIED'].includes(code)
         ? 'permission denied (check source identity and scopes)'
