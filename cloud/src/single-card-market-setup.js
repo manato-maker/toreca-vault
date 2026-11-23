@@ -79,14 +79,18 @@ export function singleCardResearchList(canonical, observedAt=new Date()) {
     '注意: サイトの販売価格は買取価格ではない。7日より古い価格は参考にも採用しない。',
     '一致条件: カード名、カード番号、収録弾、レアリティ、状態、買取価格、情報掲載日。',
     'カード番号未登録や同名異版は価格を推測せず「要確認」とする。',
+    'ポケモンカード以外の作品はアルテマ（ポケカチ）・カードラッシュ（ポケモン）の照合対象外。',
     '必要な出力: 行番号｜カード名｜買取価格｜出典サイト｜掲載日時｜カード固有ページURL｜照合済みカード番号',
     ''
   ];
   for(let i=0;i<lots.length;i++){
     const l=lots[i];
     const name=norm(l.product||l.productKey)||'名称未登録';
-    const number=norm(l.cardNumber||l.cardNo||l.collectorNumber||'')||'番号未記録';
-    const rarity=norm(l.rarity||'')||'レアリティ未記録';
+    const number=norm(l.cardNumber||l.cardNo||l.collectorNumber||'')
+      || name.match(/\b\d{1,4}\/\d{1,4}\b/)?.[0] || '番号未記録';
+    const rarity=norm(l.rarity||'')
+      || name.match(/(?:^|[\s（(])(?:MUR|SAR|CSR|CHR|SR|UR|HR|AR|RR)(?=$|[\s）)])/i)?.[0]?.trim()
+      || 'レアリティ未記録';
     const set=norm(l.setCode||l.expansion||'')||'収録弾未記録';
     const condition=norm(l.condition||'')||'状態未記録';
     lines.push(String(i+1)+'. '+name+'｜'+l.quantity+'枚｜'+number+'｜'+set+'｜'+rarity+'｜'+condition);
