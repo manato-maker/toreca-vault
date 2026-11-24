@@ -1,4 +1,6 @@
 import { buybackForLot, buybackOffersForLot, buybackSourceUrl, buybackTimestamp } from './buyback-quotes.js';
+import { grokReportedOffersForLot } from './grok-buyback-reported.js';
+import { ownerSingleReportedOffersForLot } from './owner-single-buyback-reported.js';
 
 const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 const jstDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -126,11 +128,19 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     const picked = buybackForLot(quotes, lot, now);
     pickedByLot.set(lot, picked);
     offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
-    if (picked.status === 'current') {
-      buybackTotal += picked.price * quantity;
+    const grokOffers = grokReportedOffersForLot(quotes, lot, now).filter(q => !q.priceCaveat);
+    const singleOffers = ownerSingleReportedOffersForLot(quotes, lot, now);
+    const referencePrices = [
+      ...(picked.status === 'current' ? [picked.price] : []),
+      ...grokOffers.map(q => q.price),
+      ...singleOffers.map(q => q.price)
+    ].filter(price => Number.isSafeInteger(price) && price > 0);
+    const referencePrice = referencePrices.length ? Math.max(...referencePrices) : null;
+    if (referencePrice !== null) {
+      buybackTotal += referencePrice * quantity;
       pricedCount += quantity;
       if (known(lot.unitCost)) {
-        comparableBuyback += picked.price * quantity;
+        comparableBuyback += referencePrice * quantity;
         comparableCost += num(lot.unitCost) * quantity;
         comparableQuantity += quantity;
       }
@@ -268,14 +278,14 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     '</dialog>';
   const pageContent = selectedView === 'assets'
     ? `<div class="metrics">
-${metric('参考買取評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の有効な買取提示額のみ' + (partiallyPriced ? '・一部未取得' : ''))}
+${metric('在庫の参考評価額',pricedCount ? money(buybackTotal) : '未算定',pricedCount + '/' + stockQty + '点の参考価格を合算（未確認の参考価格を含む）' + (partiallyPriced ? '・一部未取得' : ''))}
 ${metric('在庫原価',money(cost),unknownCost ? '原価不明 ' + unknownCost + '点' : '既知の取得原価合計')}
 ${metric('参考評価差額',comparableQuantity ? money(comparableBuyback - comparableCost) : '未算定','買取提示額の取得分のみ比較（原価不明・未取得分除外）')}
 ${metric('確定売却益',money(realized),knownSales.length + '/' + sales.length + '件の原価確認済み売却 · 売却履歴を見る','/app?view=history&month=' + month + '&type=sale#history')}
 ${metric('保有点数',stockQty + '点','BOX ' + categoryTotals.BOX + ' / パック ' + categoryTotals['パック'] + ' / カード ' + categoryTotals['カード'])}
 ${metric('相場未取得',noPrice + '点','古い買取提示額も未取得に含む')}
 </div>
-<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。参考買取評価額は、日付・店舗・商品状態・出典を確認できた買取提示額のみの部分合計です。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>`
+<div class="warning">この画面は新アプリのステージング環境です。本番V2とは独立しており、表示値はステージングの保存データに基づきます。在庫の参考評価額には、出典確認済み価格と未確認の参考価格が含まれます。定価・購入原価は買取価格に代用していません。価格のない商品がある場合は総資産額ではありません。</div>`
     : selectedView === 'inventory'
       ? `<section class="panel" id="inventory"><div class="panel-top"><h2>在庫一覧</h2><span class="minor">${lots.length}ロット</span></div>
 ${inventoryFilters}\n${rows.length ? rows.map(l => inventoryCard(l, pickedByLot.get(l), offersByLot.get(l))).join('') : '<p class="empty">在庫がありません。</p>'}\\n<p class="empty" id="inventory-filter-empty" hidden>この種類の在庫はありません。</p>
