@@ -1,19 +1,29 @@
 export const dashboardClientScript = `
 (() => {
-  // A full-page calendar navigation is intentional so the selected date is rendered
-  // from the read-only server snapshot. Re-align after Android browsers finish layout;
-  // the native fragment jump can happen before the fixed bottom bar/layout settles.
-  function alignSelectedCalendarDate() {
-    const selectedDate = new URLSearchParams(window.location.search).get('date') || '';
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate) || window.location.hash !== '#event-list') return;
-    const target = document.getElementById('event-list');
-    if (!target) return;
+  // Prevent mobile browsers from restoring a previous category's scroll offset.
+  // The dashboard is server-rendered per view, so each /app navigation starts at its
+  // requested section instead of inheriting the old page's position.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+  function alignAppNavigation() {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get('view') || (params.has('date') ? 'calendar'
+      : params.has('type') ? 'history'
+        : params.has('month') ? 'calendar' : 'assets');
+    const hashId = window.location.hash.slice(1);
+    const defaultTarget = params.get('date') && view === 'calendar'
+      ? 'event-list'
+      : view === 'calendar' ? 'calendar'
+        : view === 'history' ? 'history'
+          : 'top';
+    const target = document.getElementById(hashId) || document.getElementById(defaultTarget);
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      else window.scrollTo({ top: 0, behavior: 'auto' });
     }));
   }
-  window.addEventListener('pageshow', alignSelectedCalendarDate);
-  window.addEventListener('load', alignSelectedCalendarDate, { once: true });
+  window.addEventListener('pageshow', alignAppNavigation);
+  window.addEventListener('load', alignAppNavigation, { once: true });
 
   const dialog = document.getElementById('handoff-dialog');
   const openButton = document.querySelector('[data-open-handoff]');
