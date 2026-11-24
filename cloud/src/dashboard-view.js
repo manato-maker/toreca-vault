@@ -130,12 +130,12 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     offersByLot.set(lot, buybackOffersForLot(quotes, lot, now));
     const grokOffers = grokReportedOffersForLot(quotes, lot, now).filter(q => !q.priceCaveat);
     const singleOffers = ownerSingleReportedOffersForLot(quotes, lot, now);
-    const referencePrices = [
-      ...(picked.status === 'current' ? [picked.price] : []),
-      ...grokOffers.map(q => q.price),
-      ...singleOffers.map(q => q.price)
-    ].filter(price => Number.isSafeInteger(price) && price > 0);
-    const referencePrice = referencePrices.length ? Math.max(...referencePrices) : null;
+    const reportedPrices = [...grokOffers, ...singleOffers]
+      .map(q => q.price)
+      .filter(price => Number.isSafeInteger(price) && price > 0);
+    const referencePrice = picked.status === 'current'
+      ? picked.price
+      : reportedPrices.length ? Math.max(...reportedPrices) : null;
     if (referencePrice !== null) {
       buybackTotal += referencePrice * quantity;
       pricedCount += quantity;
