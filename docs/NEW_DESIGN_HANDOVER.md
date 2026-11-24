@@ -1433,3 +1433,11 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Cloud Shell confirms the latest dashboard-only staging deploy created revision `toreca-vault-ui-staging-00004-99m` with 100% traffic. It includes the visible-card fix from code commit `f3323e3e45f6b251119b8f9725446d32de165284`, which points the app's in-page download to the same shared Markdown endpoint as the direct link.
 - Android reload and behavior verification remain pending: in-page .md download, live handoff dialog, Chat/Work copy, date tap, complete sale history, and inventory filters. Deployment output does not prove UI behavior.
 - No Intake/API or canonical data was changed by this deploy. Intake HTTP 500/503 and normal Chat exactly-once path remain unresolved; no old V2 writes or pending-sale replays.
+
+## 2026-11-24 JST — ステージング画面遷移仕様を固定
+
+- 下部ナビの「資産」「在庫」「予定」「履歴」「引継ぎ」はそれぞれ独立した画面として表示する。各画面の本文に他カテゴリーのセクションを縦につなげず、下へスクロールしても別カテゴリーへ流れ込まない。
+- カレンダーの月移動は選択中の予定画面を保って対象月を表示する。日付を押すと、その日付の予定一覧へ移動し、月全体へ戻れる。
+- 画面切替ではブラウザーが前画面のスクロール位置を復元しないようにする。ハッシュ指定があれば該当位置へ、日付指定なら予定一覧へ、月移動ならカレンダーへ、それ以外のカテゴリー遷移は画面先頭へ合わせる。
+- **2026-11-24のステージング確認**: 日付 2026-11-23 の選択で当日予定へ移動、翌月操作で 2026-11 から 2026-12 へ移動。履歴画面には履歴のみ表示され、在庫/カレンダーのセクションは存在しないことを確認。
+- 上記仕様を画面変更時も維持する。画面コードは PR #107 の `cloud/src/dashboard-view.js` と `cloud/src/dashboard-client.js`。今回の表示修正はステージング用画面サービスのみへ配備し、本番V2・正本・Intakeデータには触れていない。
