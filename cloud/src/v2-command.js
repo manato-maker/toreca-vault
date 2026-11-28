@@ -139,6 +139,91 @@ function applyPurchase(state, command, requestId, mutationId) {
   return { state: next, duplicate: false, mutationId, transactionIds };
 }
 
+function countFingerprint(date, counts) {
+  const rows = counts.map((row) => [norm(row.productKey || row.product), Number(row.quantity)])
+    .sort((a, b) => a[0].localeCompare(b[0], 'ja'));
+  return JSON.stringify([date, rows]);
+}
+
+function applyInventoryCount(state, command, requestId, mutationId) {
+  const date = commandDate(command);
+  if (!Array.isArray(command.counts) || command.counts.length < 1 || command.counts.length > 100) {
+    throw new TypeError('inventory count must contain 1 to 100 products');
+  }
+  const counts = command.counts.map((row) => {
+    const product = String(row?.product || '').trim();
+    const category = String(row?.category || 'パック').trim();
+    const quantity = Number(row?.quantity);
+    if (!product || product.length > 180 || category !== 'パック'
+      || !Number.isSafeInteger(quantity) || quantity < 0) {
+      throw new TypeError('inventory counts require a product, category パック, and a non-negative integer');
+    }
+    return { product, productKey: norm(product), category, quantity };
+  });
+  if (new Set(counts.map((row) => row.productKey)).size !== counts.length) {
+    throw new TypeError('inventory count contains duplicate product names');
+  }
+
+  const fingerprint = countFingerprint(date, counts);
+  const priorReport = state.transactions.find((row) => row.type === 'inventory-count'
+    && String(row.date || '') === date && Array.isArray(row.counts)
+    && countFingerprint(date, row.counts) === fingerprint);
+  if (priorReport) return { state: clone(state), duplicate: true, mutationId, transactionIds: [priorReport.id] };
+
+  const id = `chat-inventory-count-${requestId}`;
+  if (transactionIdExists(state, id)
+    || state.inventoryLots.some((lot) => String(lot.id || '').startsWith(`${id}-lot-`))) {
+    throw new Error('partial duplicate inventory count detected; manual review required');
+  }
+
+  const next = clone(state);
+  const adjustments = [];
+  counts.forEach((row, index) => {
+    const matches = next.inventoryLots.filter((lot) => lot.category === 'パック'
+      && norm(lot.productKey || lot.product) === row.productKey);
+    const beforeQuantity = matches.reduce((sum, lot) => sum + qty(lot), 0);
+    let remaining = Math.abs(row.quantity - beforeQuantity);
+    if (row.quantity < beforeQuantity) {
+      const ordered = [...matches].sort((a, b) => {
+        const known = (lot) => lot.unitCost !== null && lot.unitCost !== undefined
+          && lot.unitCost !== '' && Number.isFinite(Number(lot.unitCost));
+        return Number(known(a)) - Number(known(b))
+          || String(b.acquiredAt || '').localeCompare(String(a.acquiredAt || ''))
+          || String(b.id || '').localeCompare(String(a.id || ''));
+      });
+      for (const lot of ordered) {
+        if (!remaining) break;
+        const take = Math.min(qty(lot), remaining);
+        lot.quantity = qty(lot) - take;
+        remaining -= take;
+      }
+      next.inventoryLots = next.inventoryLots.filter((lot) => qty(lot) > 0);
+    } else if (row.quantity > beforeQuantity) {
+      next.inventoryLots.push({
+        id: `${id}-lot-${index + 1}`, product: row.product, productKey: row.productKey,
+        category: 'パック', condition: '未開封', quantity: row.quantity - beforeQuantity,
+        unitCost: null, acquiredAt: date, store: '現物棚卸',
+        source: 'owner-inventory-count', requestId, memo: 'オーナー報告の現物数で補正。取得原価は未確認。'
+      });
+    }
+    adjustments.push({
+      product: row.product, productKey: row.productKey, category: 'パック',
+      quantity: row.quantity, beforeQuantity, delta: row.quantity - beforeQuantity
+    });
+  });
+
+  const totalQuantity = counts.reduce((sum, row) => sum + row.quantity, 0);
+  next.transactions.push({
+    id, type: 'inventory-count', product: '現物棚卸', productKey: '現物棚卸',
+    category: 'パック', condition: '未開封', quantity: totalQuantity,
+    price: null, total: null, date, store: '現物棚卸', source: 'owner-report',
+    requestId, counts: adjustments,
+    memo: String(command.memo || 'オーナー報告を優先した現物数の確定。数量は報告数に合わせ、原価は推測しない。')
+  });
+  finishMutation(next, mutationId, [id]);
+  return { state: next, duplicate: false, mutationId, transactionIds: [id] };
+}
+
 function applySale(state, command, requestId, mutationId) {
   const product = String(command.product || '').trim();
   const category = String(command.category || '').trim();
@@ -592,6 +677,7 @@ export function applyChatCommand(currentState, command, { now = Date.now() } = {
   if (priorMutation(currentState, mutationId)) return { state: clone(currentState), duplicate: true, mutationId };
   switch (type) {
     case 'purchase': return applyPurchase(currentState, command, requestId, mutationId);
+    case 'inventory-count': return applyInventoryCount(currentState, command, requestId, mutationId);
     case 'sale': return applySale(currentState, command, requestId, mutationId);
     case 'open-box': return applyBoxOpening(currentState, command, requestId, mutationId);
     case 'sale-aggregate': return applyAggregateSale(currentState, command, requestId, mutationId);

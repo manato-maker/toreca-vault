@@ -1714,3 +1714,13 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Lottery result and receipt matching now prefers the exact recorded result date to distinguish repeated applications. Ambiguous matches remain rejected. A repeat receipt with the same date is idempotent; a conflicting date is rejected for review.
 - Receipt only updates the lottery's receipt state; it does not add a purchase or inventory lot. No Intake rows, staging canonical data, old V2, pending sales, or production data were changed. No tests were run (not requested).
 - Source is committed to the staging API branch. The Cloud Run API has not yet been staged or promoted with this change; the guarded release script's automatic checks/tests and candidate review remain outstanding.
+
+
+## 2026-11-28 JST — Owner-reported inventory count is authoritative
+
+- Added an `inventory-count` command for an owner’s physical pack count. It sets each named pack product’s total quantity to the reported count, rather than adding the count on top of existing stock. An identical count for the same date is a no-op duplicate; corrected counts can replace totals without recording a purchase.
+- The adjustment preserves existing acquisition-cost lots where possible, removes unknown-cost/newer lots first when the reported total is lower, and gives any added quantity an unknown cost. The owner’s quantity is authoritative; no price, source purchase, or cost is inferred.
+- Added the command to the staging command queue and showed its history as “棚卸” with no money amount. This avoids displaying a count adjustment as a purchase or opening.
+- Report to prepare after deployment: 2026-11-28 physical counts — ハドウシーカー 27 packs, メガブレイブ 6, ストームエメラルダ 2, アビスアイ 2, ムニキスゼロ 6 (43 packs total). The existing review-only row must not be replayed; a fresh intake request is needed because the append-only cursor has passed it.
+- **Verification:** no local tests or test commands were run. The commit-triggered CI may report separately. This change is on the staging API branch only; it has not been deployed, no Intake row has been submitted, and no Firestore canonical inventory/UI readback has been performed. Production remains untouched.
+- **Next:** deploy the candidate using the guarded staging workflow; then submit one new owner-count intake row and verify mutation/revision and the 43-pack product totals in canonical state and the mobile dashboard. Only after that readback, mark the earlier review note as resolved/superseded if the Intake workflow supports an auditable terminal receipt.

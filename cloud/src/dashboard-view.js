@@ -176,7 +176,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
   const events = eventsFor(lotteries);
   const relevantEvents = events.filter(e => e.date.slice(0, 7) === month).slice(0, 30);
   // Keep the overview short; category-specific views must not hide older sales.
-  const types = ['all', 'purchase', 'sale', 'opening'];
+  const types = ['all', 'purchase', 'sale', 'opening', 'inventory-count'];
   const selectedType = types.includes(historyType) ? historyType : 'all';
   const sorted = [...transactions].sort((a,b) =>
     String(b.date || '').localeCompare(String(a.date || '')) ||
@@ -188,7 +188,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
     type, type === 'all' ? transactions.length : transactions.filter(t => t.type === type).length
   ]));
   const historyFilters = '<nav class="history-filters" aria-label="取引履歴の絞り込み">' +
-    [['all','すべて'], ['purchase','購入'], ['sale','売却'], ['opening','開封']]
+    [['all','すべて'], ['purchase','購入'], ['sale','売却'], ['opening','開封'], ['inventory-count','棚卸']]
       .map(([type,label]) => '<a class="history-filter' + (selectedType === type ? ' selected' : '') +
         '" href="/app?month=' + month + '&type=' + type + '#history"' +
         (selectedType === type ? ' aria-current="page"' : '') + '>' +
@@ -226,8 +226,8 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       const amount = Number(item?.amountYen);
       return name && Number.isSafeInteger(amount) && amount >= 0 ? name + ' ' + money(amount) : '';
     }).filter(Boolean).join(' · ') : '';
-    const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : '開封';
-    const amount = t.type === 'sale'
+    const kind = t.type === 'sale' ? '売却' : t.type === 'purchase' ? '購入' : t.type === 'opening' ? '開封' : '棚卸';
+    const amount = t.type === 'inventory-count' ? null : t.type === 'sale'
       ? num(t.price) * num(t.quantity) - num(t.fee)
       : known(t.total) ? num(t.total) : num(t.price) * num(t.quantity);
     const profit = t.type === 'sale' && known(t.acquisitionCost) ? amount - num(t.acquisitionCost) : null;
@@ -235,7 +235,7 @@ export function renderDashboard(snapshot, revision, monthOverride = '', now = ne
       '</b><small>' + esc(date(t.date) || '日付未設定') + ' · ' + esc(t.store || '') + '</small>' +
       (breakdown ? '<small>内訳: ' + esc(breakdown) + '</small>' : '') + '</div>' +
       '<div class="history-money"><span class="' + (t.type === 'sale' ? 'positive' : '') + '">' +
-      esc(kind) + ' · ' + esc(money(amount)) + '</span>' +
+      esc(kind) + (amount === null ? '' : ' · ' + esc(money(amount))) + '</span>' +
       (profit !== null ? '<small>確定利益 ' + esc(money(profit)) + '</small>' :
         t.type === 'sale' ? '<small>原価未確認</small>' : '') + '</div></div>';
   }).join('') : '<p class="empty">この種別の取引記録はありません。</p>';
