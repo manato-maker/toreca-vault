@@ -271,3 +271,20 @@ test('free-tier staging audit parses as Python without running cloud commands', 
   }
   assert.doesNotMatch(source, /subprocess\.run\(\s*\["gcloud",\s*"(?:run|firestore|scheduler)",\s*"(?:deploy|update|delete|create|jobs run)"/);
 });
+
+
+test('inventory count history is labeled as a non-monetary stock adjustment', () => {
+  const sample = {
+    ...SNAPSHOT,
+    transactions: [{
+      id: 'owner-count-1', type: 'inventory-count', product: '現物棚卸',
+      category: 'パック', quantity: 43, price: null, total: null,
+      date: '2026-11-28', store: '現物棚卸'
+    }]
+  };
+  const html = renderDashboard(sample, 12, '2026-11',
+    new Date('2026-11-28T04:00:00Z'), 'inventory-count');
+  const historyMoney = html.match(/<div class="history-money">([\s\S]*?)<\/div>/)?.[1] || '';
+  assert.match(historyMoney, /棚卸/);
+  assert.doesNotMatch(historyMoney, /[¥￥]/);
+});

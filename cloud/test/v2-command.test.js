@@ -296,3 +296,92 @@ test('invalid lottery quantity, reference prices and official URLs are rejected'
     assert.throws(() => run(emptyV2(), { ...common, ...extra }), /lottery|official product/);
   }
 });
+
+
+test('owner inventory count sets pack totals, preserves known costs, and deduplicates exact reports', () => {
+  let state = run(emptyV2(), {
+    type: 'purchase', requestId: 'count-source-hado', product: 'ハドウシーカー',
+    category: 'パック', quantity: 30, unitCost: 200, date: '2026-11-27', store: '店舗A'
+  }).state;
+  state = run(state, {
+    type: 'purchase', requestId: 'count-source-mega', product: 'メガブレイブ',
+    category: 'パック', quantity: 1, unitCost: 180, date: '2026-11-27', store: '店舗B'
+  }).state;
+  const counts = [
+    { product: 'ハドウシーカー', category: 'パック', quantity: 27 },
+    { product: 'メガブレイブ', category: 'パック', quantity: 6 },
+    { product: 'ストームエメラルダ', category: 'パック', quantity: 2 },
+    { product: 'アビスアイ', category: 'パック', quantity: 2 },
+    { product: 'ムニキスゼロ', category: 'パック', quantity: 6 }
+  ];
+  const command = {
+    type: 'inventory-count', requestId: 'owner-count-2026-11-28',
+    date: '2026-11-28', counts, memo: 'オーナー現物報告'
+  };
+  const applied = run(state, command);
+  state = applied.state;
+  assert.equal(applied.duplicate, false);
+  assert.equal(state.revision, 3);
+  for (const row of counts) {
+    assert.equal(state.inventoryLots.filter(l => l.category === 'パック'
+      && l.productKey === row.product).reduce((sum, l) => sum + l.quantity, 0), row.quantity);
+  }
+  const hadoLots = state.inventoryLots.filter(l => l.productKey === 'ハドウシーカー');
+  assert.equal(hadoLots.reduce((sum, l) => sum + l.quantity, 0), 27);
+  assert.equal(hadoLots.find(l => l.requestId === 'count-source-hado').quantity, 27);
+  assert.equal(hadoLots.find(l => l.requestId === 'count-source-hado').unitCost, 200);
+  const unpricedAdded = state.inventoryLots.filter(l => l.source === 'owner-inventory-count');
+  assert.equal(unpricedAdded.reduce((sum, l) => sum + l.quantity, 0), 15);
+  assert.ok(unpricedAdded.every(l => l.unitCost === null));
+  assert.equal(state.transactions.filter(t => t.type === 'purchase').length, 2);
+  assert.equal(state.transactions.at(-1).type, 'inventory-count');
+  assert.equal(state.transactions.at(-1).quantity, 43);
+  assert.equal(realizedProfit(state), 0);
+
+  const reordered = run(state, {
+    ...command, requestId: 'owner-count-repeat',
+    counts: [...counts].reverse()
+  });
+  assert.equal(reordered.duplicate, true);
+  assert.equal(reordered.state.revision, 3);
+  assert.equal(reordered.state.transactions.length, 3);
+  assert.equal(reordered.state.inventoryLots.reduce((sum, l) => sum + l.quantity, 0), 43);
+});
+
+test('a corrected owner inventory count replaces the prior absolute total', () => {
+  const firstCounts = [{ product: 'ハドウシーカー', quantity: 27 }];
+  let state = run(emptyV2(), {
+    type: 'inventory-count', requestId: 'owner-count-first',
+    date: '2026-11-28', counts: firstCounts
+  }).state;
+  state = run(state, {
+    type: 'inventory-count', requestId: 'owner-count-correction',
+    date: '2026-11-28', counts: [{ product: 'ハドウシーカー', quantity: 29 }]
+  }).state;
+  assert.equal(state.inventoryLots.reduce((sum, l) => sum + l.quantity, 0), 29);
+  assert.equal(state.transactions.filter(t => t.type === 'inventory-count').length, 2);
+  const before = structuredClone(state);
+  assert.equal(run(state, {
+    type: 'inventory-count', requestId: 'owner-count-correction-repeat',
+    date: '2026-11-28', counts: [{ product: 'ハドウシーカー', quantity: 29 }]
+  }).duplicate, true);
+  assert.deepEqual(state, before);
+});
+
+test('owner inventory count rejects duplicate normalized products and invalid quantities without mutation', () => {
+  const state = emptyV2();
+  for (const counts of [
+    [{ product: 'ハドウシーカー', quantity: 1 }, { product: ' ハドウシーカー ', quantity: 2 }],
+    [{ product: 'ハドウシーカー', quantity: -1 }],
+    [{ product: 'ハドウシーカー', quantity: 1.5 }],
+    [{ product: 'ハドウシーカー', category: 'BOX', quantity: 1 }]
+  ]) {
+    assert.throws(() => run(state, {
+      type: 'inventory-count', requestId: 'owner-count-invalid',
+      date: '2026-11-28', counts
+    }));
+    assert.equal(state.revision, 0);
+    assert.equal(state.inventoryLots.length, 0);
+    assert.equal(state.transactions.length, 0);
+  }
+});

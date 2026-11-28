@@ -64,9 +64,9 @@ function lottery(requestId, product = 'MEGA Dream ex') {
   return { requestId, type: 'lottery', product, retailer: 'store-a', roundId: 'round-2026-11' };
 }
 
-test('the queue accepts box-opening and aggregate-sale command types', async () => {
+test('the queue accepts box-opening, aggregate-sale, and owner inventory-count commands', async () => {
   const queue = createFirestoreCommandQueue(fakeFirestore());
-  for (const [type, requestId] of [['open-box', 'box-open-1'], ['sale-aggregate', 'sale-batch-1']]) {
+  for (const [type, requestId] of [['open-box', 'box-open-1'], ['sale-aggregate', 'sale-batch-1'], ['inventory-count', 'owner-count-1']]) {
     const command = { type, requestId };
     const result = await queue.enqueue({ requestId, command, now: 10 });
     assert.equal(result.accepted, true);

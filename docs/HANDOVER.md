@@ -1724,3 +1724,10 @@ CI follow-up — 2026-11-12 JST: v2-ci #840 (handover update) and #841 (PR/hando
 - Report to prepare after deployment: 2026-11-28 physical counts — ハドウシーカー 27 packs, メガブレイブ 6, ストームエメラルダ 2, アビスアイ 2, ムニキスゼロ 6 (43 packs total). The existing review-only row must not be replayed; a fresh intake request is needed because the append-only cursor has passed it.
 - **Verification:** no local tests or test commands were run. The commit-triggered CI may report separately. This change is on the staging API branch only; it has not been deployed, no Intake row has been submitted, and no Firestore canonical inventory/UI readback has been performed. Production remains untouched.
 - **Next:** deploy the candidate using the guarded staging workflow; then submit one new owner-count intake row and verify mutation/revision and the 43-pack product totals in canonical state and the mobile dashboard. Only after that readback, mark the earlier review note as resolved/superseded if the Intake workflow supports an auditable terminal receipt.
+
+
+## 2026-11-28 JST — Owner inventory-count regression coverage
+
+- Added focused cases for absolute pack totals, preservation of known acquisition costs, unknown cost on newly counted quantity, exact-report deduplication despite reordered products, corrected owner counts, invalid/duplicate product rows, queue acceptance, and non-monetary “棚卸” history display.
+- No local tests were run. The change is pushed to the PR branch so GitHub Actions can run the full test and Firestore Emulator workflows before any staging release.
+- No staging deployment or canonical inventory mutation was performed.
